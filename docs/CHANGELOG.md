@@ -31,6 +31,10 @@
   待真机验证第 24 条；并修正坑 22 里过时的西文系数（0.55 → 0.60）与「README 尚未写」条目。
 - §1 工程结构树里 `AppRuntime.ets` 的「跨分节导航请求」表述偏宽 —— 实际只有
   `requestFilesSection()` 一个、且仅通向文件分节，改为「跨分节跳转请求（当前仅文件分节）」。
+- 学习源工程 `dsh-companion` 的一线项目文档标准，落地 7 份文档：
+  `AGENTS.md`（工程宪法）、`docs/README.md`（索引）、`docs/STATUS.md`（当前状态）、
+  `docs/ARCHITECTURE.md`（架构）、`docs/RELEASE.md`（发版流程）、`docs/TESTING.md`（测试）、
+  `docs/SECURITY.md`（安全）；根 `README.md` 文档索引同步更新。
 
 ---
 

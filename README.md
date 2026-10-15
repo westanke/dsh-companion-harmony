@@ -74,9 +74,16 @@ dsh-companion-harmony/
 
 ## 文档
 
-- [移植对照与坑点](docs/PORT-MAP.md)
-- [变更日志](docs/CHANGELOG.md)
-- [上架文案（中英文）](docs/store-listing.md)
+- [AGENTS.md](AGENTS.md) — 工程宪法（命令、契约、铁律、坑位索引），每会话必读
+- [docs/README.md](docs/README.md) — 文档索引
+- [docs/STATUS.md](docs/STATUS.md) — 当前状态
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — 架构
+- [docs/RELEASE.md](docs/RELEASE.md) — 发版流程与签名
+- [docs/TESTING.md](docs/TESTING.md) — 测试记录
+- [docs/SECURITY.md](docs/SECURITY.md) — 安全
+- [docs/PORT-MAP.md](docs/PORT-MAP.md) — 移植对照与坑点
+- [docs/CHANGELOG.md](docs/CHANGELOG.md) — 变更日志
+- [docs/store-listing.md](docs/store-listing.md) — 上架文案（中英文）
 
 ## 开发约定
 

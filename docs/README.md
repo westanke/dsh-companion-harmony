@@ -11,6 +11,7 @@
 | `RELEASE.md` | 发版顺序与签名（`.hap` / `.app` 里外双签） |
 | `TESTING.md` | 测试口径与用例数演进 |
 | `SECURITY.md` | 签名、令牌、备份边界 |
+| `TECH-DEBT.md` | 债务台账（行数预算 800 行/文件，只许收紧） |
 | `store-listing.md` | 中英文上架文案 |
 | `screenshots/` | 上架截图（1080×1920，严格 9:16） |
 

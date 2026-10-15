@@ -77,6 +77,8 @@ java -jar "$DEVECO_SDK_HOME/default/openharmony/toolchains/lib/hap-sign-tool.jar
 
 ## 4. 架构纪律
 
+### 4.1 分层与依赖方向
+
 ```
 core/   ← 纯逻辑（可单测）：MarkdownLite / SecureConnectionStore / ChatPresentation ...
 ui/     ← 只消费 HarnessState，调 HarnessViewModel 动作；不持有协议或权限决策
@@ -86,6 +88,17 @@ ui/     ← 只消费 HarnessState，调 HarnessViewModel 动作；不持有协�
 - ArkUI 表现层**不得**自己发网络请求或直读偏好当状态。
 - 会话展示走 `ChatPresentation` 单一出口；`step/end`、`turn/end`、token 序列不渲染为聊天卡片。
 - **不使用 WebView**——聊天与 HTML 预览均为原生渲染，避免不可信文件取得执行权。
+
+### 4.2 债务台账（只许收紧）
+
+`ARCHITECTURE.md` 是散文，**不构成门禁**。本项目沿用源工程的「债务台账」制度：
+
+- 台账放 `docs/TECH-DEBT.md`，每条含：位置、为什么是债、清账阶段。
+- **只许收紧**：条目对应的债务消失，同一提交里删掉该条目（自证非空转）。
+- **上调必须带理由**：单文件超过行数预算时，只许带理由在同一提交里上调，且必须在下一阶段拆回。
+- 当前行数预算：**800 行/文件**。基线测量日 2026-10-15，**10 个文件在册**
+  （`HarnessViewModel.ts` 3 345 为最大一笔）。
+  > 这些是**已登记的债，不是许可**。新增超预算文件必须先入台账再写码。
 
 ---
 
@@ -129,7 +142,7 @@ ui/     ← 只消费 HarnessState，调 HarnessViewModel 动作；不持有协�
 | 借鉴项 | 本项目 |
 |---|---|
 | 工程宪法 + 文档路由表 | 保留，命令换为 hvigor / hap-sign-tool |
-| 债务台账（TECH-DEBT） | 暂未立账，按需引入 |
+| 债务台账（TECH-DEBT） | **已立账**：`docs/TECH-DEBT.md`，行数预算 800 行/文件，10 文件在册 |
 | 坑位索引 | 保留，内容为 HarmonyOS 特有坑 |
 | `@patch` 四要素 | 暂未引入 |
 

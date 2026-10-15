@@ -35,6 +35,9 @@
   `AGENTS.md`（工程宪法）、`docs/README.md`（索引）、`docs/STATUS.md`（当前状态）、
   `docs/ARCHITECTURE.md`（架构）、`docs/RELEASE.md`（发版流程）、`docs/TESTING.md`（测试）、
   `docs/SECURITY.md`（安全）；根 `README.md` 文档索引同步更新。
+- 引入债务台账制度：新增 `docs/TECH-DEBT.md`，行数预算 **800 行/文件**，按 2026-10-15
+  基线登记 **10 个超预算文件**（最大 `core/HarnessViewModel.ts` 3 345 行）与 2 条结构性债务；
+  `AGENTS.md` §4.2 立制、§8 同步，`docs/README.md` 挂索引。
 
 ---
 

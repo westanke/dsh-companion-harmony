@@ -46,16 +46,23 @@ const PANEL_GAP_VP: number = 6;
  */
 @Component
 export struct MentionSuggestions {
-  /** 输入框原文（用来算当前查询串）。 */
-  value: string = '';
+  /**
+   * 输入框原文（用来算当前查询串）。
+   *
+   * **必须是 `@Prop`，不能是普通成员**：面板所在的 `else` 分支在「没有提及」时本就存在，
+   * 实例在页面加载时就被创建了；父组件重绘时 ArkUI 只把**带 `@Prop` 的成员**写回子组件
+   * （编译产物里 `updateStateVars` 的参数只由 `@Prop` 收集，普通成员被跳过），
+   * 于是普通成员会永远停在首帧值 —— 面板看着"打不开"就是这个原因。
+   */
+  @Prop value: string = '';
   /** 会话工作目录的条目；`null` = 还没读到 / 读不到（与 `failed` 一起构成三态）。 */
-  entries: FileEntry[] | null = null;
+  @Prop entries: FileEntry[] | null = null;
   /** `entries === null` 时区分「读不到」与「还在读」。 */
-  failed: boolean = false;
+  @Prop failed: boolean = false;
   /** 会话工作目录**相对授权根**的形态（用于在条目路径里做前缀替换）。 */
-  cwd: string = '';
+  @Prop cwd: string = '';
   /** 会话工作目录**绝对**的形态（用于拼出真正能用的绝对路径）。 */
-  cwdAbsolute: string | null = null;
+  @Prop cwdAbsolute: string | null = null;
   /** 选中一条：回调收到的是**完整待插入文本**（含 `@` 前缀与结尾的 `/` 或空格）。 */
   onSelect: (inserted: string) => void = (): void => {};
 
@@ -163,10 +170,17 @@ export struct MentionSuggestions {
  */
 @Component
 export struct CommandSuggestions {
-  /** 输入框原文。 */
-  value: string = '';
-  /** 当前会话可用的命令清单（服务端给，顺序不重排）。 */
-  commands: CommandDescriptor[] = [];
+  /**
+   * 输入框原文。
+   *
+   * **必须是 `@Prop`**（理由同 `MentionSuggestions`）：空输入时 `mentioning()` 为 false，
+   * 这个面板所在的分支从一开始就存在、实例在页面加载时即被创建；普通成员不会被父组件的
+   * 重绘写回，`value` 会永远停在 `''`，`commandSuggestions('')` 恒为空 —— 表现就是
+   * 「打了 `/` 什么都带不出来」。
+   */
+  @Prop value: string = '';
+  /** 当前会话可用的命令清单（服务端给，顺序不重排）；同 `value`，必须 `@Prop` 才能随会话切换更新。 */
+  @Prop commands: CommandDescriptor[] = [];
   /** 选中一条：回调收到的是**整行待替换文本**（`/<名字> `）。 */
   onSelect: (inserted: string) => void = (): void => {};
 

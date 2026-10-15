@@ -20,7 +20,15 @@
 
 ## [未发布]
 
-（暂无。下一次改动从这里开始记。）
+### 文档
+
+- 纳入 git 管理：`git init` + 首笔提交，提交信息遵循
+  [Conventional Commits](https://www.conventionalcommits.org/zh-hans/v1.0.0/)；
+  `.gitignore` 保持 `signing/` 整体忽略（私钥绝不入库），`oh-package-lock.json` 改入版本库。
+- 新增 [README.md](../README.md)：项目简介、构建 / 签名 / 测试命令、工程结构、文档索引。
+- [PORT-MAP.md](./PORT-MAP.md) 补记本轮遗漏项：坑 23（表格列宽折断英文词）、收尾六
+  （正式发布与上架：`.hap` / `.app` 双签、发布签名材料、图标改造、上架材料、git 管理）、
+  待真机验证第 24 条；并修正坑 22 里过时的西文系数（0.55 → 0.60）与「README 尚未写」条目。
 
 ---
 

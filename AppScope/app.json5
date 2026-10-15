@@ -1,0 +1,12 @@
+{
+  "app": {
+    // 必须与 AGC 侧那个应用一致：调试 Profile 是 AGC 签过的 PKCS#7，改不了，
+    // `hap-sign-tool` 会校验 profile 里的 bundle-name 与这里是否相同，不一致直接签名失败。
+    "bundleName": "com.Deepseek_Harness_client.westanke",
+    "vendor": "hakunm",
+    "versionCode": 1000000,
+    "versionName": "1.0.0",
+    "icon": "$media:app_icon",
+    "label": "$string:app_name"
+  }
+}

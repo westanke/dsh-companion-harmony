@@ -1,0 +1,1436 @@
+{
+  "string": [
+    {
+      "name": "EntryAbility_desc",
+      "value": "DSH Companion"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "DSH Companion"
+    },
+    {
+      "name": "about",
+      "value": "About"
+    },
+    {
+      "name": "access_mode",
+      "value": "Access mode"
+    },
+    {
+      "name": "active",
+      "value": "Active"
+    },
+    {
+      "name": "add_attachment",
+      "value": "Add image or file"
+    },
+    {
+      "name": "add_custom_provider",
+      "value": "Add custom provider"
+    },
+    {
+      "name": "agent_change_before_first_message",
+      "value": "You can change the Agent preset before sending the first message."
+    },
+    {
+      "name": "agent_default_format",
+      "value": "%s (default)"
+    },
+    {
+      "name": "agent_locked_after_start",
+      "value": "DSH locks the Agent preset after the session starts. Models and reasoning effort remain selectable when supported."
+    },
+    {
+      "name": "agent_mode",
+      "value": "Agent mode"
+    },
+    {
+      "name": "agent_preset",
+      "value": "Agent preset"
+    },
+    {
+      "name": "agent_preset_locked",
+      "value": "Agent preset is locked and cannot be changed"
+    },
+    {
+      "name": "allow_once",
+      "value": "Allow once"
+    },
+    {
+      "name": "answer_submitting",
+      "value": "Submitting…"
+    },
+    {
+      "name": "answer_your_own",
+      "value": "Type your answer"
+    },
+    {
+      "name": "api_key",
+      "value": "API key"
+    },
+    {
+      "name": "api_key_optional",
+      "value": "API key (optional)"
+    },
+    {
+      "name": "app_name",
+      "value": "DeepSeek Harness"
+    },
+    {
+      "name": "approval_command_preview",
+      "value": "Redacted command preview"
+    },
+    {
+      "name": "approval_count",
+      "value": "%s · %d pending approvals"
+    },
+    {
+      "name": "approval_loading",
+      "value": "Loading pending approval"
+    },
+    {
+      "name": "approval_pending",
+      "value": "Waiting for approval"
+    },
+    {
+      "name": "approval_required",
+      "value": "Your approval is required"
+    },
+    {
+      "name": "archive",
+      "value": "Archive"
+    },
+    {
+      "name": "archive_session",
+      "value": "Archive chat"
+    },
+    {
+      "name": "archive_session_title",
+      "value": "Archive “%s”?"
+    },
+    {
+      "name": "archive_session_warning",
+      "value": "The chat disappears from the list; its history stays on your computer."
+    },
+    {
+      "name": "attachment_file_too_large",
+      "value": "The file is larger than %s and cannot be uploaded as a message attachment."
+    },
+    {
+      "name": "attachment_image_too_large",
+      "value": "The image is larger than %s and cannot be inlined. Compress or crop it first, or send it with “Send file”."
+    },
+    {
+      "name": "attachment_pick_file",
+      "value": "Choose file"
+    },
+    {
+      "name": "attachment_pick_image",
+      "value": "Choose image from gallery"
+    },
+    {
+      "name": "attachment_read_failed",
+      "value": "Could not read the selected file. Try another one."
+    },
+    {
+      "name": "attachment_remove",
+      "value": "Remove this attachment"
+    },
+    {
+      "name": "attachment_unavailable",
+      "value": "Image unavailable (it may have been cleaned up)"
+    },
+    {
+      "name": "attachment_undecodable",
+      "value": "This image cannot be displayed"
+    },
+    {
+      "name": "attachment_uploading",
+      "value": "Uploading…"
+    },
+    {
+      "name": "author",
+      "value": "Author"
+    },
+    {
+      "name": "author_value",
+      "value": "Original author Github@Hakunm\nMaintained here by Github@westanke"
+    },
+    {
+      "name": "authorized_root",
+      "value": "Authorized root"
+    },
+    {
+      "name": "awaiting_approval",
+      "value": "Awaiting approval"
+    },
+    {
+      "name": "back",
+      "value": "Back"
+    },
+    {
+      "name": "base_url",
+      "value": "Base URL"
+    },
+    {
+      "name": "binary_file",
+      "value": "Binary file — cannot open as text"
+    },
+    {
+      "name": "brand_subtitle",
+      "value": "Mobile developer workspace"
+    },
+    {
+      "name": "busy_send_mode",
+      "value": "Sending while the agent runs"
+    },
+    {
+      "name": "busy_send_mode_queue",
+      "value": "Queue"
+    },
+    {
+      "name": "busy_send_mode_queue_desc",
+      "value": "Handle it after the current turn finishes"
+    },
+    {
+      "name": "busy_send_mode_steer",
+      "value": "Steer"
+    },
+    {
+      "name": "busy_send_mode_steer_desc",
+      "value": "Send it as additional guidance into the running turn"
+    },
+    {
+      "name": "busy_send_mode_subtitle",
+      "value": "What Enter or the send key does while a run is in progress. The other behaviour is always available: press Ctrl/Cmd+Enter on a hardware keyboard, or tap the steer button next to it."
+    },
+    {
+      "name": "cancel",
+      "value": "Cancel"
+    },
+    {
+      "name": "cancel_run",
+      "value": "Cancel run"
+    },
+    {
+      "name": "chat",
+      "value": "Chat"
+    },
+    {
+      "name": "chat_write_required",
+      "value": "This device lacks chat.write — cannot create a chat"
+    },
+    {
+      "name": "chinese",
+      "value": "中文"
+    },
+    {
+      "name": "clipboard_empty",
+      "value": "Can't read the clipboard - long-press the field to paste"
+    },
+    {
+      "name": "close",
+      "value": "Close"
+    },
+    {
+      "name": "collapse",
+      "value": "Collapse"
+    },
+    {
+      "name": "confirm",
+      "value": "Confirm"
+    },
+    {
+      "name": "confirm_allow_once",
+      "value": "Confirm allow once"
+    },
+    {
+      "name": "confirm_full_access",
+      "value": "Confirm high-risk operation"
+    },
+    {
+      "name": "connect",
+      "value": "Pair and connect"
+    },
+    {
+      "name": "connect_subtitle",
+      "value": "Connect to a DSH workspace with remote access enabled"
+    },
+    {
+      "name": "connect_this_computer",
+      "value": "Connect"
+    },
+    {
+      "name": "connect_title",
+      "value": "Connect to DeepSeek Harness"
+    },
+    {
+      "name": "connected",
+      "value": "Connected"
+    },
+    {
+      "name": "connecting_endpoints",
+      "value": "Probing %d address(es)…"
+    },
+    {
+      "name": "connection",
+      "value": "Connection"
+    },
+    {
+      "name": "connection_ok",
+      "value": "Server connection is healthy"
+    },
+    {
+      "name": "context_injection",
+      "value": "Context injection"
+    },
+    {
+      "name": "copied",
+      "value": "Copied"
+    },
+    {
+      "name": "create",
+      "value": "Create"
+    },
+    {
+      "name": "create_provider",
+      "value": "Create provider"
+    },
+    {
+      "name": "create_session",
+      "value": "Create chat"
+    },
+    {
+      "name": "create_workspace_and_session",
+      "value": "Create workspace and chat"
+    },
+    {
+      "name": "credential_configured",
+      "value": "Credential configured"
+    },
+    {
+      "name": "credential_missing",
+      "value": "Credential not configured"
+    },
+    {
+      "name": "credential_reference",
+      "value": "Saved credential: %s (secret is not displayed)"
+    },
+    {
+      "name": "credentials_expired",
+      "value": "Credential expired — pair again or re-import the configuration"
+    },
+    {
+      "name": "current_tasks",
+      "value": "Current tasks"
+    },
+    {
+      "name": "custom_provider_subtitle",
+      "value": "Create the same custom model route supported by DSH WebUI."
+    },
+    {
+      "name": "delete",
+      "value": "Delete"
+    },
+    {
+      "name": "destination_path",
+      "value": "Destination relative path"
+    },
+    {
+      "name": "device",
+      "value": "Current device"
+    },
+    {
+      "name": "device_name",
+      "value": "Device name"
+    },
+    {
+      "name": "dhs_workspace",
+      "value": "DSH workspace"
+    },
+    {
+      "name": "disconnect",
+      "value": "Disconnect"
+    },
+    {
+      "name": "discover_models",
+      "value": "Discover models"
+    },
+    {
+      "name": "discovered_models",
+      "value": "Found %d models"
+    },
+    {
+      "name": "dismiss",
+      "value": "Got it"
+    },
+    {
+      "name": "download",
+      "value": "Download"
+    },
+    {
+      "name": "empty_directory",
+      "value": "This directory is empty"
+    },
+    {
+      "name": "enable_full_access",
+      "value": "Enable full access"
+    },
+    {
+      "name": "endpoint_count",
+      "value": "%d address(es)"
+    },
+    {
+      "name": "endpoint_diagnostics",
+      "value": "Address diagnostics"
+    },
+    {
+      "name": "endpoint_kind_lan",
+      "value": "LAN"
+    },
+    {
+      "name": "endpoint_kind_unknown",
+      "value": "Other"
+    },
+    {
+      "name": "endpoint_kind_virtual",
+      "value": "Virtual net"
+    },
+    {
+      "name": "endpoint_kind_wan",
+      "value": "WAN"
+    },
+    {
+      "name": "endpoint_reachable",
+      "value": "Reachable · %d ms"
+    },
+    {
+      "name": "endpoint_unreachable",
+      "value": "Unreachable"
+    },
+    {
+      "name": "english",
+      "value": "English"
+    },
+    {
+      "name": "enter_api_key",
+      "value": "Enter API key"
+    },
+    {
+      "name": "enter_app",
+      "value": "Enter app"
+    },
+    {
+      "name": "error",
+      "value": "Error"
+    },
+    {
+      "name": "etag_conflict",
+      "value": "The file changed elsewhere — refresh before editing"
+    },
+    {
+      "name": "existing_workspace",
+      "value": "Existing workspace"
+    },
+    {
+      "name": "expand",
+      "value": "Expand"
+    },
+    {
+      "name": "file_actions",
+      "value": "File actions"
+    },
+    {
+      "name": "file_kind_directory",
+      "value": "Folder"
+    },
+    {
+      "name": "file_kind_file",
+      "value": "File"
+    },
+    {
+      "name": "file_name",
+      "value": "Name"
+    },
+    {
+      "name": "file_too_large",
+      "value": "File too large to preview"
+    },
+    {
+      "name": "files",
+      "value": "Files"
+    },
+    {
+      "name": "fork",
+      "value": "Fork"
+    },
+    {
+      "name": "fork_session",
+      "value": "Fork chat"
+    },
+    {
+      "name": "fork_session_title",
+      "value": "Fork “%s”?"
+    },
+    {
+      "name": "fork_session_warning",
+      "value": "A copy is created on your computer; the original is untouched."
+    },
+    {
+      "name": "full_access",
+      "value": "Requests full system access"
+    },
+    {
+      "name": "full_access_ack",
+      "value": "I reviewed the command and understand the full-access risk"
+    },
+    {
+      "name": "full_access_warning",
+      "value": "This operation will run outside the DSH sandbox and may access server files, the network, and processes. Review the command above first. The App does not offer permanent approval."
+    },
+    {
+      "name": "gen_ui_debug_desc",
+      "value": "When on, each assistant message gets a small grey line explaining why a card did not render as a component."
+    },
+    {
+      "name": "gen_ui_debug_footnote",
+      "value": "Tap the grey line to expand it, long-press to copy. If you see a warning sign or “fences seen but not recognised”, send a screenshot."
+    },
+    {
+      "name": "gen_ui_debug_heading",
+      "value": "Debug"
+    },
+    {
+      "name": "gen_ui_debug_title",
+      "value": "dsh-ui card diagnostics"
+    },
+    {
+      "name": "go_up",
+      "value": "Up one level"
+    },
+    {
+      "name": "http_warning",
+      "value": "HTTP sends the device token and content in clear text. Use it only on a trusted network, VPN, or tunnel."
+    },
+    {
+      "name": "import_and_connect",
+      "value": "Import and connect"
+    },
+    {
+      "name": "import_entry_hint",
+      "value": "Generate the text on your computer, send it to yourself, then paste it here"
+    },
+    {
+      "name": "import_explanation",
+      "value": "Built for when you are already away and cannot see the computer screen: generate a short configuration text on the computer (send it to yourself or keep it in a private note), then paste it here. No QR code and no camera needed."
+    },
+    {
+      "name": "import_from_computer",
+      "value": "Import configuration from computer"
+    },
+    {
+      "name": "import_hint",
+      "value": "Paste the configuration text starting with DSH1:"
+    },
+    {
+      "name": "import_invalid",
+      "value": "This configuration text is not recognized — check that the copy is complete"
+    },
+    {
+      "name": "import_security_note",
+      "value": "This text is effectively a key. Send it only to yourself — never to a group chat or a public place."
+    },
+    {
+      "name": "inherited_model_ids_hint",
+      "value": "Currently inherited from the DSH model catalog; leaving it unchanged will not create a fixed override"
+    },
+    {
+      "name": "jump_to_latest",
+      "value": "Jump to latest"
+    },
+    {
+      "name": "keep_existing_secret",
+      "value": "Leave blank to keep the saved key"
+    },
+    {
+      "name": "language",
+      "value": "Language"
+    },
+    {
+      "name": "link_anchor_unsupported",
+      "value": "In-page anchors are not supported yet"
+    },
+    {
+      "name": "link_open_failed",
+      "value": "No app can open this link"
+    },
+    {
+      "name": "link_relative_path",
+      "value": "This is a relative path, so the file cannot be located. Open it from the session files list instead"
+    },
+    {
+      "name": "link_scheme_unsupported",
+      "value": "This kind of link cannot be opened yet"
+    },
+    {
+      "name": "load_more",
+      "value": "Load more"
+    },
+    {
+      "name": "loading_saved_computers",
+      "value": "Loading saved computers…"
+    },
+    {
+      "name": "loading_sessions",
+      "value": "Loading chats…"
+    },
+    {
+      "name": "manage_workspaces",
+      "value": "Manage workspaces"
+    },
+    {
+      "name": "manage_workspaces_subtitle",
+      "value": "Manage the workspaces registered in DSH WebUI that this device may access."
+    },
+    {
+      "name": "manual_pairing",
+      "value": "Manual pairing (one-time code)"
+    },
+    {
+      "name": "manual_pairing_hint",
+      "value": "The pairing code must be generated on the computer, so this suits the case where you are still next to it."
+    },
+    {
+      "name": "markdown_preview",
+      "value": "Markdown preview"
+    },
+    {
+      "name": "markdown_source",
+      "value": "Markdown source"
+    },
+    {
+      "name": "message_hint",
+      "value": "Describe what you want to build"
+    },
+    {
+      "name": "message_hint_running_queue",
+      "value": "Running… sends as queue"
+    },
+    {
+      "name": "message_hint_running_steer",
+      "value": "Running… sends as steer"
+    },
+    {
+      "name": "model",
+      "value": "Model"
+    },
+    {
+      "name": "model_ids",
+      "value": "Model IDs"
+    },
+    {
+      "name": "model_ids_hint",
+      "value": "Enter one model ID per line"
+    },
+    {
+      "name": "model_ids_required_hint",
+      "value": "Enter one model ID per line; at least one is required"
+    },
+    {
+      "name": "model_providers",
+      "value": "Model providers"
+    },
+    {
+      "name": "models",
+      "value": "Models"
+    },
+    {
+      "name": "models_subtitle",
+      "value": "Configure model providers, credentials, and available models"
+    },
+    {
+      "name": "module_desc",
+      "value": "DSH Companion entry module"
+    },
+    {
+      "name": "more_actions",
+      "value": "More actions"
+    },
+    {
+      "name": "move_to_trash",
+      "value": "Move to trash"
+    },
+    {
+      "name": "name",
+      "value": "Name"
+    },
+    {
+      "name": "navigation",
+      "value": "Navigation"
+    },
+    {
+      "name": "new_file",
+      "value": "New file"
+    },
+    {
+      "name": "new_folder",
+      "value": "New folder"
+    },
+    {
+      "name": "new_session",
+      "value": "New chat"
+    },
+    {
+      "name": "new_workspace",
+      "value": "New workspace"
+    },
+    {
+      "name": "no_chat_workspaces",
+      "value": "No workspace yet"
+    },
+    {
+      "name": "no_credentials",
+      "value": "No credential saved"
+    },
+    {
+      "name": "no_hosts_yet",
+      "value": "No computer saved yet. Add one below."
+    },
+    {
+      "name": "no_readable_messages",
+      "value": "No readable message content"
+    },
+    {
+      "name": "no_roots",
+      "value": "No authorized root"
+    },
+    {
+      "name": "no_sessions",
+      "value": "No chat yet"
+    },
+    {
+      "name": "no_sessions_yet",
+      "value": "No chat yet. Create one from the top right."
+    },
+    {
+      "name": "no_subdirectories",
+      "value": "No subdirectories"
+    },
+    {
+      "name": "no_trash",
+      "value": "Trash is empty"
+    },
+    {
+      "name": "offline",
+      "value": "Offline"
+    },
+    {
+      "name": "older_messages",
+      "value": "Load earlier messages"
+    },
+    {
+      "name": "online",
+      "value": "Online"
+    },
+    {
+      "name": "pairing_code",
+      "value": "One-time pairing code"
+    },
+    {
+      "name": "paste_from_clipboard",
+      "value": "Paste"
+    },
+    {
+      "name": "permission_custom",
+      "value": "Custom"
+    },
+    {
+      "name": "permission_full_access",
+      "value": "Full access"
+    },
+    {
+      "name": "permission_full_access_ack",
+      "value": "I understand that full access bypasses workspace limits and approvals"
+    },
+    {
+      "name": "permission_full_access_title",
+      "value": "Enable full access?"
+    },
+    {
+      "name": "permission_full_access_warning",
+      "value": "Full access disables the DSH sandbox and per-action approvals. The Agent can access files, network, and processes on the server. Enable it only for a task you trust."
+    },
+    {
+      "name": "permission_read_only",
+      "value": "Read Only"
+    },
+    {
+      "name": "permission_workspace_write",
+      "value": "Workspace Write"
+    },
+    {
+      "name": "pick_workspace",
+      "value": "Pick a workspace"
+    },
+    {
+      "name": "platform_self_check",
+      "value": "Platform self-check"
+    },
+    {
+      "name": "platform_self_check_desc",
+      "value": "Results of three synchronous round-trips: preferences, encryption, and the host store. The platform layer is the only part that cannot be unit-tested offline, so it really runs on the device."
+    },
+    {
+      "name": "platform_self_check_none",
+      "value": "Not run yet"
+    },
+    {
+      "name": "platform_self_check_run",
+      "value": "Run again"
+    },
+    {
+      "name": "plugins",
+      "value": "Plugins"
+    },
+    {
+      "name": "plugins_check_updates",
+      "value": "Check for updates"
+    },
+    {
+      "name": "plugins_declared",
+      "value": "Declared %s"
+    },
+    {
+      "name": "plugins_empty",
+      "value": "No plugin is installed in this profile."
+    },
+    {
+      "name": "plugins_homepage",
+      "value": "Homepage"
+    },
+    {
+      "name": "plugins_installed_version",
+      "value": "Installed %s"
+    },
+    {
+      "name": "plugins_list_title",
+      "value": "Plugin inventory"
+    },
+    {
+      "name": "plugins_loaded_stat",
+      "value": "Loaded"
+    },
+    {
+      "name": "plugins_official",
+      "value": "Official"
+    },
+    {
+      "name": "plugins_permission_required",
+      "value": "This device does not have the settings.read scope, so the plugin inventory cannot be shown. Enable settings read for this device in the DSH WebUI workspace settings."
+    },
+    {
+      "name": "plugins_problem_banner",
+      "value": "%d plugin(s) need attention: some are declared but missing (their features will not work), others are installed but not loaded."
+    },
+    {
+      "name": "plugins_problem_stat",
+      "value": "Needs attention"
+    },
+    {
+      "name": "plugins_profile",
+      "value": "Plugin profile: %s"
+    },
+    {
+      "name": "plugins_restart_hint",
+      "value": "This writes DSH's startup bundle list, so it takes effect after DSH restarts. Until then the plugin keeps running in its previous state."
+    },
+    {
+      "name": "plugins_state_declared_missing",
+      "value": "Declared but missing"
+    },
+    {
+      "name": "plugins_state_installed_not_loaded",
+      "value": "Installed, not loaded"
+    },
+    {
+      "name": "plugins_state_loaded",
+      "value": "Loaded"
+    },
+    {
+      "name": "plugins_state_runtime_provided",
+      "value": "Bundled with DSH"
+    },
+    {
+      "name": "plugins_state_unknown",
+      "value": "Unknown state"
+    },
+    {
+      "name": "plugins_subtitle",
+      "value": "See which plugins are installed in the current profile and which ones are loaded."
+    },
+    {
+      "name": "plugins_toggle_confirm_disable",
+      "value": "Disabling removes whatever this plugin provides. The change is written to the plugin list on your computer, with a backup of the original file. It takes effect after DSH restarts."
+    },
+    {
+      "name": "plugins_toggle_confirm_enable",
+      "value": "Enabling restores whatever this plugin provides. The change is written to the plugin list on your computer, with a backup of the original file. It takes effect after DSH restarts."
+    },
+    {
+      "name": "plugins_toggle_confirm_title",
+      "value": "%s \\\"%s\\\"?"
+    },
+    {
+      "name": "plugins_toggle_disable",
+      "value": "Disable"
+    },
+    {
+      "name": "plugins_toggle_enable",
+      "value": "Enable"
+    },
+    {
+      "name": "plugins_toggle_missing_locked",
+      "value": "Declared for loading but not found on the computer. Install it there first."
+    },
+    {
+      "name": "plugins_toggle_not_installed_locked",
+      "value": "This package is not installed on the computer, so it cannot be toggled."
+    },
+    {
+      "name": "plugins_toggle_official_locked",
+      "value": "An official DSH plugin shipped with the runtime; it cannot be toggled."
+    },
+    {
+      "name": "plugins_unavailable_generic",
+      "value": "The server cannot provide the plugin inventory right now (%s)."
+    },
+    {
+      "name": "plugins_unavailable_manifest_unreadable",
+      "value": "The server cannot read the plugin manifest: package.json may be corrupt, missing, or unreadable."
+    },
+    {
+      "name": "plugins_unavailable_profile_unknown",
+      "value": "The server cannot tell which plugin profile is in use, so the inventory is unavailable. Make sure DSH is started as dsh web or dsh --profile web."
+    },
+    {
+      "name": "plugins_update_available",
+      "value": "Version %s available"
+    },
+    {
+      "name": "plugins_version_runtime_provided",
+      "value": "Provided by the DSH runtime"
+    },
+    {
+      "name": "plugins_version_unknown",
+      "value": "Version unknown"
+    },
+    {
+      "name": "preset_default",
+      "value": "Default"
+    },
+    {
+      "name": "preview_skipped_hint_download",
+      "value": "Download it and open it in another app."
+    },
+    {
+      "name": "preview_skipped_too_large",
+      "value": "File is %s — over the %s limit, so the preview was skipped."
+    },
+    {
+      "name": "provider_display_name",
+      "value": "Display name"
+    },
+    {
+      "name": "provider_id",
+      "value": "Provider ID"
+    },
+    {
+      "name": "provider_id_hint",
+      "value": "Start with a lowercase letter; digits and hyphens are allowed, for example acme-gateway"
+    },
+    {
+      "name": "provider_protocol",
+      "value": "API protocol"
+    },
+    {
+      "name": "provider_secret_note",
+      "value": "API keys are written only to the server credential store. The app cannot read or display saved keys."
+    },
+    {
+      "name": "question_answered",
+      "value": "Answered"
+    },
+    {
+      "name": "question_count",
+      "value": "%d questions"
+    },
+    {
+      "name": "question_waiting",
+      "value": "Your answer is needed"
+    },
+    {
+      "name": "rate_limited",
+      "value": "Too many requests — try again later"
+    },
+    {
+      "name": "reason_clipboard",
+      "value": "Paste the connection configuration text generated on your computer"
+    },
+    {
+      "name": "reason_internet",
+      "value": "Connect to the DSH workspace service on your computer"
+    },
+    {
+      "name": "reason_network_info",
+      "value": "Determine the current network type to pick the fastest endpoint"
+    },
+    {
+      "name": "reasoning_effort",
+      "value": "Reasoning effort"
+    },
+    {
+      "name": "refresh",
+      "value": "Refresh"
+    },
+    {
+      "name": "reject",
+      "value": "Reject"
+    },
+    {
+      "name": "remove_computer",
+      "value": "Remove this computer"
+    },
+    {
+      "name": "remove_computer_title",
+      "value": "Remove “%s”?"
+    },
+    {
+      "name": "remove_computer_warning",
+      "value": "Its addresses and device credential will be deleted. You will need to pair or import the configuration again."
+    },
+    {
+      "name": "remove_workspace",
+      "value": "Remove workspace"
+    },
+    {
+      "name": "remove_workspace_title",
+      "value": "Remove this workspace?"
+    },
+    {
+      "name": "remove_workspace_warning",
+      "value": "\\\"%s\\\" is only removed from the DSH WebUI workspace list. The server directory, files, and chat logs are kept."
+    },
+    {
+      "name": "rename",
+      "value": "Rename"
+    },
+    {
+      "name": "rename_move",
+      "value": "Rename or move"
+    },
+    {
+      "name": "rename_session",
+      "value": "Rename chat"
+    },
+    {
+      "name": "rename_session_title",
+      "value": "Rename chat"
+    },
+    {
+      "name": "rename_workspace",
+      "value": "Rename workspace"
+    },
+    {
+      "name": "replace_file",
+      "value": "Replace file"
+    },
+    {
+      "name": "reset_zoom",
+      "value": "Reset text zoom"
+    },
+    {
+      "name": "restore",
+      "value": "Restore"
+    },
+    {
+      "name": "root_directory",
+      "value": "Authorized root"
+    },
+    {
+      "name": "running",
+      "value": "Running"
+    },
+    {
+      "name": "save",
+      "value": "Save"
+    },
+    {
+      "name": "save_provider",
+      "value": "Save provider"
+    },
+    {
+      "name": "saved_computers",
+      "value": "Saved computers"
+    },
+    {
+      "name": "scope_chat_read",
+      "value": "Read chats"
+    },
+    {
+      "name": "scope_chat_write",
+      "value": "Send messages"
+    },
+    {
+      "name": "scope_files_delete",
+      "value": "Delete files"
+    },
+    {
+      "name": "scope_files_read",
+      "value": "Read files"
+    },
+    {
+      "name": "scope_files_write",
+      "value": "Write files"
+    },
+    {
+      "name": "scope_settings_read",
+      "value": "View settings"
+    },
+    {
+      "name": "scope_settings_write",
+      "value": "Change settings"
+    },
+    {
+      "name": "scroll_select_hint",
+      "value": "Double-tap to copy the whole message"
+    },
+    {
+      "name": "select_file",
+      "value": "Select a regular file"
+    },
+    {
+      "name": "select_session",
+      "value": "Select a chat"
+    },
+    {
+      "name": "send",
+      "value": "Send"
+    },
+    {
+      "name": "server_address",
+      "value": "Server address"
+    },
+    {
+      "name": "server_default",
+      "value": "Server default"
+    },
+    {
+      "name": "session_actions",
+      "value": "Chat actions"
+    },
+    {
+      "name": "session_configuration",
+      "value": "Session configuration"
+    },
+    {
+      "name": "session_configuration_subtitle",
+      "value": "View or change this session's Agent, model, and reasoning effort"
+    },
+    {
+      "name": "session_count",
+      "value": "%d chat(s)"
+    },
+    {
+      "name": "session_file_binary",
+      "value": "This file is not UTF-8 text, so it cannot be previewed."
+    },
+    {
+      "name": "session_file_count",
+      "value": "%d×"
+    },
+    {
+      "name": "session_file_detail",
+      "value": "File details"
+    },
+    {
+      "name": "session_file_directory",
+      "value": "This is a directory. The Files tab has been switched to it, so you can browse the contents there."
+    },
+    {
+      "name": "session_file_empty",
+      "value": "This file is empty."
+    },
+    {
+      "name": "session_file_failed",
+      "value": "Could not open: %s"
+    },
+    {
+      "name": "session_file_files_hint",
+      "value": "Full content and editing are in the Files tab."
+    },
+    {
+      "name": "session_file_open_directory",
+      "value": "Open this directory in the Files tab"
+    },
+    {
+      "name": "session_file_outside_roots",
+      "value": "This path is not inside any authorized root on the computer, or it is not a regular file, so the server refuses to resolve it and the phone cannot open it. Ask the agent to put it inside an authorized workspace directory."
+    },
+    {
+      "name": "session_file_partial",
+      "value": "Only files from the loaded part of the history are shown. Load older messages to see more."
+    },
+    {
+      "name": "session_file_pdf_unsupported",
+      "value": "PDFs cannot be rendered inline on this platform (ArkUI has no PDF component). The bytes are available; see the full content in the Files tab."
+    },
+    {
+      "name": "session_file_plugin_too_old",
+      "value": "The dsh-remote-bridge plugin on the server (formerly dsh-workspace) is too old and does not provide the path-resolving endpoint yet. Upgrade it to 2.0.4 or newer, then restart DSH."
+    },
+    {
+      "name": "session_file_too_large",
+      "value": "The file is larger than 2 MiB, so it is not previewed in this panel."
+    },
+    {
+      "name": "session_file_truncated",
+      "value": "Only the beginning is previewed here; the full content is in the Files tab."
+    },
+    {
+      "name": "session_files",
+      "value": "Files in this session"
+    },
+    {
+      "name": "session_files_empty",
+      "value": "This session has not mentioned any openable file path yet."
+    },
+    {
+      "name": "session_files_subtitle",
+      "value": "Files this session mentioned and that can be located. Only server-side absolute paths are listed; paths inside commands and relative paths are not parsed — better to list too few than to guess wrong."
+    },
+    {
+      "name": "session_idle",
+      "value": "Idle"
+    },
+    {
+      "name": "session_running",
+      "value": "Running"
+    },
+    {
+      "name": "sessions",
+      "value": "Chats"
+    },
+    {
+      "name": "settings",
+      "value": "Settings"
+    },
+    {
+      "name": "settings_permission_required",
+      "value": "This device does not have settings.read. Enable settings access for it in the DSH WebUI workspace settings; editing also requires settings.write."
+    },
+    {
+      "name": "settings_subtitle",
+      "value": "Manage connection, model providers, device permissions, and language"
+    },
+    {
+      "name": "show_context_desc",
+      "value": "Blocks the system pushes in every turn: runtime context, time context, background job notices. Hidden by default — they put a row of collapsed blocks between every message. Turn on when debugging."
+    },
+    {
+      "name": "show_context_title",
+      "value": "Show context injections"
+    },
+    {
+      "name": "steer",
+      "value": "Steer"
+    },
+    {
+      "name": "submit_answer",
+      "value": "Submit answer"
+    },
+    {
+      "name": "task_completed",
+      "value": "Completed"
+    },
+    {
+      "name": "task_in_progress",
+      "value": "In progress"
+    },
+    {
+      "name": "task_pending",
+      "value": "Pending"
+    },
+    {
+      "name": "task_progress",
+      "value": "%d of %d complete"
+    },
+    {
+      "name": "test_connection",
+      "value": "Test connection"
+    },
+    {
+      "name": "think",
+      "value": "Think"
+    },
+    {
+      "name": "tool_call",
+      "value": "Tool call"
+    },
+    {
+      "name": "tool_detail_copy",
+      "value": "Copy"
+    },
+    {
+      "name": "tool_detail_empty_result",
+      "value": "Empty result"
+    },
+    {
+      "name": "tool_detail_error",
+      "value": "Error"
+    },
+    {
+      "name": "tool_detail_failed",
+      "value": "Failed"
+    },
+    {
+      "name": "tool_detail_input",
+      "value": "Input"
+    },
+    {
+      "name": "tool_detail_no_args",
+      "value": "This tool took no arguments"
+    },
+    {
+      "name": "tool_detail_no_result",
+      "value": "No result yet"
+    },
+    {
+      "name": "tool_detail_ok",
+      "value": "OK"
+    },
+    {
+      "name": "tool_detail_output",
+      "value": "Output"
+    },
+    {
+      "name": "tool_detail_pending",
+      "value": "Running"
+    },
+    {
+      "name": "trash",
+      "value": "Trash"
+    },
+    {
+      "name": "turn_failed_title",
+      "value": "This turn failed"
+    },
+    {
+      "name": "turn_stopped_title",
+      "value": "Stopped"
+    },
+    {
+      "name": "upgrade_notice",
+      "value": "Your previously saved connection was migrated automatically; its address and credential are preserved."
+    },
+    {
+      "name": "upload",
+      "value": "Upload"
+    },
+    {
+      "name": "use_discovered_models",
+      "value": "Use discovered models"
+    },
+    {
+      "name": "version",
+      "value": "Current version"
+    },
+    {
+      "name": "web_chat_desc",
+      "value": "Off uses the native screen. On renders the chat page with the built-in web view, so Markdown, code blocks and cards look closer to the desktop."
+    },
+    {
+      "name": "web_chat_footnote",
+      "value": "Still a trial: streaming was wired up recently, and small differences from the native version remain. Switch it off any time."
+    },
+    {
+      "name": "web_chat_footnote_port",
+      "value": "This port renders the chat page natively in ArkUI and ships no web page, so this switch currently has no effect on the UI. It is kept only to stay consistent with the desktop settings."
+    },
+    {
+      "name": "web_chat_heading",
+      "value": "Chat implementation"
+    },
+    {
+      "name": "web_chat_title",
+      "value": "Use the web chat page"
+    },
+    {
+      "name": "workspace_directory",
+      "value": "Working directory"
+    },
+    {
+      "name": "workspace_root",
+      "value": "Root"
+    },
+    {
+      "name": "workspace_select_preset",
+      "value": "Pick an agent preset"
+    },
+    {
+      "name": "zoom_in",
+      "value": "Zoom text in"
+    },
+    {
+      "name": "zoom_out",
+      "value": "Zoom text out"
+    },
+    {
+      "name": "available_commands",
+      "value": "Available commands"
+    },
+    {
+      "name": "command_compact_description",
+      "value": "Compact older conversation history"
+    },
+    {
+      "name": "command_export_description",
+      "value": "Download this session log as a ZIP file"
+    },
+    {
+      "name": "command_feedback_description",
+      "value": "Record feedback about this session"
+    },
+    {
+      "name": "command_goal_description",
+      "value": "Set or view the long-running task goal"
+    },
+    {
+      "name": "command_input_hint",
+      "value": "Argument: %s"
+    },
+    {
+      "name": "command_permission_description",
+      "value": "Switch the permission preset (sandbox and approval policy)"
+    },
+    {
+      "name": "command_plan_description",
+      "value": "Enter or leave plan mode"
+    },
+    {
+      "name": "workspace_files",
+      "value": "Working directory files"
+    },
+    {
+      "name": "workspace_files_empty",
+      "value": "This directory is empty"
+    },
+    {
+      "name": "workspace_files_loading",
+      "value": "Reading the session's working directory…"
+    },
+    {
+      "name": "workspace_files_unavailable",
+      "value": "Can't read this session's working directory"
+    }
+  ]
+}

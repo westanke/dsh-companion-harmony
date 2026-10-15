@@ -1,0 +1,24 @@
+# 签名材料 —— 绝不进版本库（密钥口令等同密码，泄露即证书作废）
+signing/
+
+# 构建产物
+node_modules/
+oh_modules/
+.hvigor/
+**/build/
+dist/
+
+# 本地环境与缓存
+.DS_Store
+*.log
+oh-package-lock.json
+
+# IDE 本地配置
+.idea/
+.vscode/
+
+# 构建产物扩展名（虽已在 build/ 忽略，防止误放到根目录）
+*.hap
+*.app
+*.har
+*.hsp

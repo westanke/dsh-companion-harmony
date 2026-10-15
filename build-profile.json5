@@ -1,0 +1,67 @@
+{
+  "app": {
+    // ————————————————————————————————————————————————————————————————
+    // 签名配置：**保持为空**（2026-10-15 真机验证时确认的结论）。
+    //
+    // 材料齐全（都在 `signing/`，该目录已被 .gitignore 排除）：
+    //   dsh-companion-harmony.p12                私钥（口令见 signing/README.txt）
+    //   dsh-companion-harmony.cer                AGC 签发的证书链（调试证书：根+中间+叶子）
+    //   Deepseek_Harness_clientDebug.p7b         AGC 签发的调试 Profile（已绑定设备 UDID EC96…68DB7）
+    //
+    // **但 hvigor 的 SignHap 任务拒收明文口令**：
+    //   00303116 Configuration Error: The length of the storePassword or keyPassword
+    //   field in the signature configuration is less than 32.
+    //   它要求 DevEco Studio「Project Structure → Signing Configs」写入的加密串（≥32 字符）。
+    //   本机只装了命令行工具、没装 DevEco Studio，无法生成该加密串，
+    //   所以这里填明文只会让**构建直接失败**（把双闸门基线打掉）。
+    //
+    // 结论：签名改由 `scripts/package.sh` 用 SDK 自带的 `hap-sign-tool.jar` 手工完成
+    //   （`-keystorePwd/-keyPwd` 吃明文，是华为给 CI 的标准路子），
+    //   `hvigorw assembleHap` 仍产出未签名 HAP —— 日志里那条 `WARN: No signingConfig`
+    //   依旧是**预期输出**。
+    //   若将来装了 DevEco Studio，可把加密串填回来并在这里加 `"signingConfig": "default"`。
+    //
+    // ⚠️ 别把明文口令填进本文件：既构建失败，又会把密钥库口令写进会被提交的配置里。
+    // ————————————————————————————————————————————————————————————————
+    "signingConfigs": [],
+    "products": [
+      {
+        "name": "default",
+        // 光在 signingConfigs 里定义还不够，product 必须指名引用哪个配置，
+        // 否则构建日志里就是 `WARN: No signingConfig found for product default`，
+        // 产出的仍是 `-unsigned.hap`。
+        "signingConfig": "default",
+        "compatibleSdkVersion": "5.1.0(18)",
+        "runtimeOS": "HarmonyOS",
+        "buildOption": {
+          "strictMode": {
+            "caseSensitiveCheck": true,
+            "useNormalizedOHMUrl": true
+          }
+        }
+      }
+    ],
+    "buildModeSet": [
+      {
+        "name": "debug"
+      },
+      {
+        "name": "release"
+      }
+    ]
+  },
+  "modules": [
+    {
+      "name": "entry",
+      "srcPath": "./entry",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default"
+          ]
+        }
+      ]
+    }
+  ]
+}

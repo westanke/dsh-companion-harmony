@@ -1,0 +1,6 @@
+{
+  "name": "dsh-companion-harmony",
+  "private": true,
+  "type": "module",
+  "description": "供 node/tsx 判定 entry 下 .ts 源码的模块格式（ESM）。hvigor 构建读取的是 oh-package.json5，与本文件无关。"
+}

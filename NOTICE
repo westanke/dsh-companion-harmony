@@ -1,0 +1,67 @@
+dsh-companion-harmony —— DeepSeek Harness 的 HarmonyOS（鸿蒙）移植版
+========================================================================
+
+本工程是 DeepSeek Harness 移动端客户端的鸿蒙移植版：对照一个**只读**的上游 Android 工程
+（Kotlin + Jetpack Compose），逐模块重写为 ArkTS / ArkUI，运行平台由 Android 改为
+HarmonyOS（compatibleSdkVersion 5.1.0(18)，即鸿蒙 6 及以上）。
+
+逐模块的移植对照表、判据取舍与原工程差异，见 docs/PORT-MAP.md。
+
+
+一、归属（Attribution）
+------------------------------------------------------------------------
+
+- 上游原始项目：Hakunm/dsh-android-app
+  https://github.com/Hakunm/dsh-android-app
+  Android 原生客户端（Jetpack Compose + Material 3）。版权归原作者所有。
+
+- 本工程所对照移植的源工程：westanke/dsh-companion（上游的衍生版本 / fork）
+  https://github.com/westanke/dsh-companion
+
+- 本移植工程：dsh-companion-harmony
+  维护者：Github@westanke
+
+- 许可证：GNU Affero General Public License v3.0（见 LICENSE，与上游一致，未做改动）。
+
+- 修改声明：本工程是**修改版**（modified version）。相对上游所做的修改是平台级重写：
+  语言 Kotlin → ArkTS，界面框架 Jetpack Compose → ArkUI，平台能力 Android SDK → HarmonyOS SDK；
+  功能、判据与文案保持一致，差异处逐条记录在 docs/PORT-MAP.md。
+  移植起始日期：2026-10。
+
+
+二、上游 NOTICE（原样保留，未改动）
+------------------------------------------------------------------------
+
+DeepSeek Harness Android includes the DeepSeek fish/whale logo path from
+deepseek-ai/deepseek-harness apps/web/public/favicon.svg.
+
+Copyright (c) 2026 DeepSeek
+Licensed under the MIT License. See THIRD_PARTY_LICENSES/DEEPSEEK_HARNESS_LICENSE.
+
+Markdown rendering uses multiplatform-markdown-renderer by Mike Penz.
+Copyright 2025 Mike Penz. Licensed under the Apache License, Version 2.0.
+See THIRD_PARTY_LICENSES/MULTIPLATFORM_MARKDOWN_RENDERER_LICENSE.
+
+
+三、本移植版未引入上述第三方资源（故不附带 THIRD_PARTY_LICENSES 目录）
+------------------------------------------------------------------------
+
+上游 NOTICE 提到的两项第三方资源，本移植版**都没有打包**，因此对应的许可文件不适用：
+
+1. **DeepSeek 品牌图形不适用。** 本工程不含 DeepSeek logo 的 SVG 路径（全工程只有
+   `AppScope/resources/base/media/app_icon.png` 与 `entry/src/main/resources/base/media/app_icon.png`
+   两个自绘占位图标）。界面上的品牌标记由 `ui/Components.ets` 里的 `BrandMark` 绘制，
+   它是一个纯文字字形「DSH」的方块，不涉及第三方图形版权。
+
+2. **Markdown 渲染库不适用。** 上游用 multiplatform-markdown-renderer（Apache-2.0）；
+   ArkUI 没有对位的 Markdown 渲染器，本工程改为自研 `core/MarkdownLite.ts` 做**块级切分**、
+   再交给 ArkUI 文本组件渲染，**未使用任何第三方 Markdown 库**。
+
+若后续移植版引入了任何第三方资源或依赖，必须在此处与 THIRD_PARTY_LICENSES/ 下补齐对应条目。
+
+
+四、构建期依赖
+------------------------------------------------------------------------
+
+`test/package.json` 里的 `tsx` 与 `typescript` 仅用于**构建机上的离线单测**
+（跑 `entry/src/main/ets/core` 下的纯逻辑 `.ts` 源码），不进入 HAP 产物，不随应用分发。

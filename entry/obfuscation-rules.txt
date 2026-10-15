@@ -1,0 +1,2 @@
+# arkts 混淆规则（暂不启用）
+-keep-global-name

@@ -1,0 +1,1436 @@
+{
+  "string": [
+    {
+      "name": "EntryAbility_desc",
+      "value": "DeepSeek Harness 伴侣"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "DSH 伴侣"
+    },
+    {
+      "name": "about",
+      "value": "关于"
+    },
+    {
+      "name": "access_mode",
+      "value": "权限模式"
+    },
+    {
+      "name": "active",
+      "value": "使用中"
+    },
+    {
+      "name": "add_attachment",
+      "value": "添加图片或文件"
+    },
+    {
+      "name": "add_custom_provider",
+      "value": "添加自定义供应商"
+    },
+    {
+      "name": "agent_change_before_first_message",
+      "value": "发送第一条消息前可以切换 Agent 配置。"
+    },
+    {
+      "name": "agent_default_format",
+      "value": "%s（默认）"
+    },
+    {
+      "name": "agent_locked_after_start",
+      "value": "会话开始后 Agent 配置由 DSH 锁定；模型和思考强度仍可按宿主能力切换。"
+    },
+    {
+      "name": "agent_mode",
+      "value": "智能体模式"
+    },
+    {
+      "name": "agent_preset",
+      "value": "智能体预设"
+    },
+    {
+      "name": "agent_preset_locked",
+      "value": "智能体预设已被锁定，无法修改"
+    },
+    {
+      "name": "allow_once",
+      "value": "允许一次"
+    },
+    {
+      "name": "answer_submitting",
+      "value": "正在提交…"
+    },
+    {
+      "name": "answer_your_own",
+      "value": "填写你的回答"
+    },
+    {
+      "name": "api_key",
+      "value": "API 密钥"
+    },
+    {
+      "name": "api_key_optional",
+      "value": "API 密钥（可选）"
+    },
+    {
+      "name": "app_name",
+      "value": "DeepSeek Harness"
+    },
+    {
+      "name": "approval_command_preview",
+      "value": "脱敏命令预览"
+    },
+    {
+      "name": "approval_count",
+      "value": "%s · 共 %d 项待审批"
+    },
+    {
+      "name": "approval_loading",
+      "value": "正在读取待审批操作"
+    },
+    {
+      "name": "approval_pending",
+      "value": "等待审批"
+    },
+    {
+      "name": "approval_required",
+      "value": "需要你的审批"
+    },
+    {
+      "name": "archive",
+      "value": "归档"
+    },
+    {
+      "name": "archive_session",
+      "value": "归档会话"
+    },
+    {
+      "name": "archive_session_title",
+      "value": "归档「%s」？"
+    },
+    {
+      "name": "archive_session_warning",
+      "value": "归档后会话会从列表里消失，历史仍保留在电脑上。"
+    },
+    {
+      "name": "attachment_file_too_large",
+      "value": "文件超过 %s，没法作为消息附件上传。"
+    },
+    {
+      "name": "attachment_image_too_large",
+      "value": "图片超过 %s，没法内联发送。请先压缩或裁剪，或改用「发送文件」。"
+    },
+    {
+      "name": "attachment_pick_file",
+      "value": "选择文件"
+    },
+    {
+      "name": "attachment_pick_image",
+      "value": "从相册选图片"
+    },
+    {
+      "name": "attachment_read_failed",
+      "value": "读取所选文件失败，请换一个再试。"
+    },
+    {
+      "name": "attachment_remove",
+      "value": "移除这个附件"
+    },
+    {
+      "name": "attachment_unavailable",
+      "value": "图片已不可用（可能已被清理）"
+    },
+    {
+      "name": "attachment_undecodable",
+      "value": "这张图片无法显示"
+    },
+    {
+      "name": "attachment_uploading",
+      "value": "正在上传…"
+    },
+    {
+      "name": "author",
+      "value": "作者"
+    },
+    {
+      "name": "author_value",
+      "value": "原作者 Github@Hakunm\n本仓库维护 Github@westanke"
+    },
+    {
+      "name": "authorized_root",
+      "value": "授权根"
+    },
+    {
+      "name": "awaiting_approval",
+      "value": "等待审批"
+    },
+    {
+      "name": "back",
+      "value": "返回"
+    },
+    {
+      "name": "base_url",
+      "value": "接口地址（Base URL）"
+    },
+    {
+      "name": "binary_file",
+      "value": "这是二进制文件，无法以文本打开"
+    },
+    {
+      "name": "brand_subtitle",
+      "value": "移动开发工作台"
+    },
+    {
+      "name": "busy_send_mode",
+      "value": "智能体运行时的发送方式"
+    },
+    {
+      "name": "busy_send_mode_queue",
+      "value": "排队发送"
+    },
+    {
+      "name": "busy_send_mode_queue_desc",
+      "value": "等当前这一轮结束后再处理"
+    },
+    {
+      "name": "busy_send_mode_steer",
+      "value": "插话发送"
+    },
+    {
+      "name": "busy_send_mode_steer_desc",
+      "value": "作为追加引导送进正在运行的那一轮"
+    },
+    {
+      "name": "busy_send_mode_subtitle",
+      "value": "运行中按回车或发送键时的默认行为。另一种行为随时可用：外接键盘按 Ctrl/Cmd+回车，或点旁边的插话键。"
+    },
+    {
+      "name": "cancel",
+      "value": "取消"
+    },
+    {
+      "name": "cancel_run",
+      "value": "取消运行"
+    },
+    {
+      "name": "chat",
+      "value": "会话"
+    },
+    {
+      "name": "chat_write_required",
+      "value": "当前设备没有 chat.write 权限，无法新建会话"
+    },
+    {
+      "name": "chinese",
+      "value": "中文"
+    },
+    {
+      "name": "clipboard_empty",
+      "value": "剪贴板里没有文本"
+    },
+    {
+      "name": "close",
+      "value": "关闭"
+    },
+    {
+      "name": "collapse",
+      "value": "收起"
+    },
+    {
+      "name": "confirm",
+      "value": "确认"
+    },
+    {
+      "name": "confirm_allow_once",
+      "value": "确认允许一次"
+    },
+    {
+      "name": "confirm_full_access",
+      "value": "确认高风险操作"
+    },
+    {
+      "name": "connect",
+      "value": "配对并连接"
+    },
+    {
+      "name": "connect_subtitle",
+      "value": "连接已启用远程访问的 DSH 工作区"
+    },
+    {
+      "name": "connect_this_computer",
+      "value": "连接"
+    },
+    {
+      "name": "connect_title",
+      "value": "连接 DeepSeek Harness"
+    },
+    {
+      "name": "connected",
+      "value": "已连接"
+    },
+    {
+      "name": "connecting_endpoints",
+      "value": "正在探测 %d 个地址…"
+    },
+    {
+      "name": "connection",
+      "value": "连接"
+    },
+    {
+      "name": "connection_ok",
+      "value": "服务器连接正常"
+    },
+    {
+      "name": "context_injection",
+      "value": "上下文注入"
+    },
+    {
+      "name": "copied",
+      "value": "已复制"
+    },
+    {
+      "name": "create",
+      "value": "创建"
+    },
+    {
+      "name": "create_provider",
+      "value": "创建供应商"
+    },
+    {
+      "name": "create_session",
+      "value": "创建会话"
+    },
+    {
+      "name": "create_workspace_and_session",
+      "value": "创建工作区并建会话"
+    },
+    {
+      "name": "credential_configured",
+      "value": "凭据已配置"
+    },
+    {
+      "name": "credential_missing",
+      "value": "尚未配置凭据"
+    },
+    {
+      "name": "credential_reference",
+      "value": "已保存凭据：%s（密钥不回显）"
+    },
+    {
+      "name": "credentials_expired",
+      "value": "登录凭据已过期，需要重新配对或重新导入配置"
+    },
+    {
+      "name": "current_tasks",
+      "value": "当前任务"
+    },
+    {
+      "name": "custom_provider_subtitle",
+      "value": "创建与 DSH WebUI 相同的自定义模型路由。"
+    },
+    {
+      "name": "delete",
+      "value": "删除"
+    },
+    {
+      "name": "destination_path",
+      "value": "目标相对路径"
+    },
+    {
+      "name": "device",
+      "value": "当前设备"
+    },
+    {
+      "name": "device_name",
+      "value": "设备名称"
+    },
+    {
+      "name": "dhs_workspace",
+      "value": "DSH 工作区"
+    },
+    {
+      "name": "disconnect",
+      "value": "断开连接"
+    },
+    {
+      "name": "discover_models",
+      "value": "发现模型"
+    },
+    {
+      "name": "discovered_models",
+      "value": "已发现 %d 个模型"
+    },
+    {
+      "name": "dismiss",
+      "value": "知道了"
+    },
+    {
+      "name": "download",
+      "value": "下载"
+    },
+    {
+      "name": "empty_directory",
+      "value": "这个目录是空的"
+    },
+    {
+      "name": "enable_full_access",
+      "value": "启用完整访问"
+    },
+    {
+      "name": "endpoint_count",
+      "value": "%d 个地址"
+    },
+    {
+      "name": "endpoint_diagnostics",
+      "value": "地址诊断"
+    },
+    {
+      "name": "endpoint_kind_lan",
+      "value": "局域网"
+    },
+    {
+      "name": "endpoint_kind_unknown",
+      "value": "其他"
+    },
+    {
+      "name": "endpoint_kind_virtual",
+      "value": "虚拟网"
+    },
+    {
+      "name": "endpoint_kind_wan",
+      "value": "公网"
+    },
+    {
+      "name": "endpoint_reachable",
+      "value": "可达 · %d ms"
+    },
+    {
+      "name": "endpoint_unreachable",
+      "value": "不可达"
+    },
+    {
+      "name": "english",
+      "value": "English"
+    },
+    {
+      "name": "enter_api_key",
+      "value": "输入 API 密钥"
+    },
+    {
+      "name": "enter_app",
+      "value": "进入应用"
+    },
+    {
+      "name": "error",
+      "value": "错误"
+    },
+    {
+      "name": "etag_conflict",
+      "value": "文件在别处已被改动，请刷新后再改"
+    },
+    {
+      "name": "existing_workspace",
+      "value": "已有工作区"
+    },
+    {
+      "name": "expand",
+      "value": "展开"
+    },
+    {
+      "name": "file_actions",
+      "value": "文件操作"
+    },
+    {
+      "name": "file_kind_directory",
+      "value": "文件夹"
+    },
+    {
+      "name": "file_kind_file",
+      "value": "文件"
+    },
+    {
+      "name": "file_name",
+      "value": "名称"
+    },
+    {
+      "name": "file_too_large",
+      "value": "文件过大，移动编辑器仅打开不超过 2 MiB 的文本。"
+    },
+    {
+      "name": "files",
+      "value": "文件"
+    },
+    {
+      "name": "fork",
+      "value": "分支"
+    },
+    {
+      "name": "fork_session",
+      "value": "分支会话"
+    },
+    {
+      "name": "fork_session_title",
+      "value": "从「%s」分支？"
+    },
+    {
+      "name": "fork_session_warning",
+      "value": "会在电脑上复制出一份新会话，原会话不受影响。"
+    },
+    {
+      "name": "full_access",
+      "value": "请求完整系统访问权限"
+    },
+    {
+      "name": "full_access_ack",
+      "value": "我已检查命令并了解完整访问风险"
+    },
+    {
+      "name": "full_access_warning",
+      "value": "此操作将脱离 DSH 沙箱运行，可能访问服务器上的文件、网络和进程。请先检查上方命令；App 不提供永久允许。"
+    },
+    {
+      "name": "gen_ui_debug_desc",
+      "value": "打开后，每条助手消息下方会多一行小灰字，说明卡片为什么没渲染成组件。"
+    },
+    {
+      "name": "gen_ui_debug_footnote",
+      "value": "点那行灰字可展开全文，长按可复制。看到「⚠」或「见到围栏但未识别」，截图发反馈即可。"
+    },
+    {
+      "name": "gen_ui_debug_heading",
+      "value": "调试"
+    },
+    {
+      "name": "gen_ui_debug_title",
+      "value": "dsh-ui 卡片诊断"
+    },
+    {
+      "name": "go_up",
+      "value": "上一层"
+    },
+    {
+      "name": "http_warning",
+      "value": "HTTP 会明文传输设备令牌和内容，仅建议在可信网络、VPN 或隧道中使用。"
+    },
+    {
+      "name": "import_and_connect",
+      "value": "导入并连接"
+    },
+    {
+      "name": "import_entry_hint",
+      "value": "在电脑上生成配置文本，发给自己后在这里粘贴"
+    },
+    {
+      "name": "import_explanation",
+      "value": "适合人已经出门在外、看不到电脑屏幕的情况：在电脑上生成一段配置文本（微信发给自己或存进私密笔记），到了外面粘贴到这里即可，不需要扫码，也不需要摄像头。"
+    },
+    {
+      "name": "import_from_computer",
+      "value": "从电脑导入配置"
+    },
+    {
+      "name": "import_hint",
+      "value": "粘贴以 DSH1: 开头的配置文本"
+    },
+    {
+      "name": "import_invalid",
+      "value": "这段配置文本无法识别，请确认复制完整"
+    },
+    {
+      "name": "import_security_note",
+      "value": "这段文本等同于一把钥匙，只发给你自己，不要发到群聊或公开场合。"
+    },
+    {
+      "name": "inherited_model_ids_hint",
+      "value": "当前来自 DSH 模型目录；不修改时不会写成固定覆盖"
+    },
+    {
+      "name": "jump_to_latest",
+      "value": "跳到最新"
+    },
+    {
+      "name": "keep_existing_secret",
+      "value": "留空以保留现有密钥"
+    },
+    {
+      "name": "language",
+      "value": "语言"
+    },
+    {
+      "name": "link_anchor_unsupported",
+      "value": "页内跳转暂不支持"
+    },
+    {
+      "name": "link_open_failed",
+      "value": "没有能打开这个链接的应用"
+    },
+    {
+      "name": "link_relative_path",
+      "value": "这是相对路径，无法定位文件。可以到「本会话的文件」列表里打开"
+    },
+    {
+      "name": "link_scheme_unsupported",
+      "value": "这类链接暂不支持打开"
+    },
+    {
+      "name": "load_more",
+      "value": "加载更多"
+    },
+    {
+      "name": "loading_saved_computers",
+      "value": "正在读取已保存的电脑…"
+    },
+    {
+      "name": "loading_sessions",
+      "value": "正在读取会话…"
+    },
+    {
+      "name": "manage_workspaces",
+      "value": "管理工作区"
+    },
+    {
+      "name": "manage_workspaces_subtitle",
+      "value": "管理 DSH WebUI 中已登记且当前设备有权访问的工作区。"
+    },
+    {
+      "name": "manual_pairing",
+      "value": "手动配对（一次性配对码）"
+    },
+    {
+      "name": "manual_pairing_hint",
+      "value": "配对码需要在电脑上生成，因此适合你人还在电脑旁的场合。"
+    },
+    {
+      "name": "markdown_preview",
+      "value": "Markdown 预览"
+    },
+    {
+      "name": "markdown_source",
+      "value": "Markdown 源码"
+    },
+    {
+      "name": "message_hint",
+      "value": "描述你想要构建的内容"
+    },
+    {
+      "name": "message_hint_running_queue",
+      "value": "运行中… 发送即排队"
+    },
+    {
+      "name": "message_hint_running_steer",
+      "value": "运行中… 发送即插话"
+    },
+    {
+      "name": "model",
+      "value": "模型"
+    },
+    {
+      "name": "model_ids",
+      "value": "模型 ID"
+    },
+    {
+      "name": "model_ids_hint",
+      "value": "每行填写一个模型 ID"
+    },
+    {
+      "name": "model_ids_required_hint",
+      "value": "每行一个模型 ID，至少填写一个"
+    },
+    {
+      "name": "model_providers",
+      "value": "模型供应商"
+    },
+    {
+      "name": "models",
+      "value": "模型"
+    },
+    {
+      "name": "models_subtitle",
+      "value": "配置模型供应商、API 密钥与可用模型"
+    },
+    {
+      "name": "module_desc",
+      "value": "DeepSeek Harness 伴侣主模块"
+    },
+    {
+      "name": "more_actions",
+      "value": "更多操作"
+    },
+    {
+      "name": "move_to_trash",
+      "value": "移入回收站"
+    },
+    {
+      "name": "name",
+      "value": "名称"
+    },
+    {
+      "name": "navigation",
+      "value": "导航"
+    },
+    {
+      "name": "new_file",
+      "value": "新建文件"
+    },
+    {
+      "name": "new_folder",
+      "value": "新建文件夹"
+    },
+    {
+      "name": "new_session",
+      "value": "新建会话"
+    },
+    {
+      "name": "new_workspace",
+      "value": "新建工作区"
+    },
+    {
+      "name": "no_chat_workspaces",
+      "value": "还没有工作区"
+    },
+    {
+      "name": "no_credentials",
+      "value": "未保存凭据"
+    },
+    {
+      "name": "no_hosts_yet",
+      "value": "还没有保存的电脑。用下面的方式添加一台。"
+    },
+    {
+      "name": "no_readable_messages",
+      "value": "暂无可显示的正文"
+    },
+    {
+      "name": "no_roots",
+      "value": "没有授权根"
+    },
+    {
+      "name": "no_sessions",
+      "value": "还没有会话"
+    },
+    {
+      "name": "no_sessions_yet",
+      "value": "还没有会话。点右上角新建一个。"
+    },
+    {
+      "name": "no_subdirectories",
+      "value": "没有子目录"
+    },
+    {
+      "name": "no_trash",
+      "value": "回收站为空"
+    },
+    {
+      "name": "offline",
+      "value": "离线"
+    },
+    {
+      "name": "older_messages",
+      "value": "加载更早消息"
+    },
+    {
+      "name": "online",
+      "value": "在线"
+    },
+    {
+      "name": "pairing_code",
+      "value": "一次性配对码"
+    },
+    {
+      "name": "paste_from_clipboard",
+      "value": "粘贴"
+    },
+    {
+      "name": "permission_custom",
+      "value": "自定义"
+    },
+    {
+      "name": "permission_full_access",
+      "value": "完整访问"
+    },
+    {
+      "name": "permission_full_access_ack",
+      "value": "我了解完整访问会绕过工作区限制和审批"
+    },
+    {
+      "name": "permission_full_access_title",
+      "value": "启用完整访问？"
+    },
+    {
+      "name": "permission_full_access_warning",
+      "value": "完整访问将关闭 DSH 沙箱和逐次审批，Agent 可访问服务器上的文件、网络和进程。只应在你信任当前任务时启用。"
+    },
+    {
+      "name": "permission_read_only",
+      "value": "只读"
+    },
+    {
+      "name": "permission_workspace_write",
+      "value": "工作区写入"
+    },
+    {
+      "name": "pick_workspace",
+      "value": "选择工作区"
+    },
+    {
+      "name": "platform_self_check",
+      "value": "平台层自检"
+    },
+    {
+      "name": "platform_self_check_desc",
+      "value": "偏好读写、加密往返、主机库往返三项同步自检的结论。平台层是唯一无法离线单测的一层，所以在真机上真跑一遍。"
+    },
+    {
+      "name": "platform_self_check_none",
+      "value": "尚未运行"
+    },
+    {
+      "name": "platform_self_check_run",
+      "value": "重新自检"
+    },
+    {
+      "name": "plugins",
+      "value": "插件"
+    },
+    {
+      "name": "plugins_check_updates",
+      "value": "检查更新"
+    },
+    {
+      "name": "plugins_declared",
+      "value": "声明 %s"
+    },
+    {
+      "name": "plugins_empty",
+      "value": "这个档案里没有装任何插件。"
+    },
+    {
+      "name": "plugins_homepage",
+      "value": "主页"
+    },
+    {
+      "name": "plugins_installed_version",
+      "value": "实际版本 %s"
+    },
+    {
+      "name": "plugins_list_title",
+      "value": "插件清单"
+    },
+    {
+      "name": "plugins_loaded_stat",
+      "value": "已加载"
+    },
+    {
+      "name": "plugins_official",
+      "value": "官方"
+    },
+    {
+      "name": "plugins_permission_required",
+      "value": "当前设备没有 settings.read 权限，无法查看插件清单。请在 DSH WebUI 的工作区设置中为此设备启用设置读取权限。"
+    },
+    {
+      "name": "plugins_problem_banner",
+      "value": "有 %d 个插件需要留意：可能是声明加载却缺失（对应功能会不可用），也可能是装了但没启用。"
+    },
+    {
+      "name": "plugins_problem_stat",
+      "value": "待处理"
+    },
+    {
+      "name": "plugins_profile",
+      "value": "插件档案：%s"
+    },
+    {
+      "name": "plugins_restart_hint",
+      "value": "改动写入的是 DSH 的启动清单，重启 DSH 后生效。重启前插件仍按旧状态运行。"
+    },
+    {
+      "name": "plugins_state_declared_missing",
+      "value": "声明缺失"
+    },
+    {
+      "name": "plugins_state_installed_not_loaded",
+      "value": "已安装未启用"
+    },
+    {
+      "name": "plugins_state_loaded",
+      "value": "已加载"
+    },
+    {
+      "name": "plugins_state_runtime_provided",
+      "value": "运行时自带"
+    },
+    {
+      "name": "plugins_state_unknown",
+      "value": "状态未知"
+    },
+    {
+      "name": "plugins_subtitle",
+      "value": "查看当前 profile 里装了什么插件、哪些已经加载。"
+    },
+    {
+      "name": "plugins_toggle_confirm_disable",
+      "value": "停用后，这个插件提供的功能会消失。改动会写进电脑上的插件清单，并自动备份原文件。重启 DSH 后生效。"
+    },
+    {
+      "name": "plugins_toggle_confirm_enable",
+      "value": "启用后，这个插件提供的功能会恢复。改动会写进电脑上的插件清单，并自动备份原文件。重启 DSH 后生效。"
+    },
+    {
+      "name": "plugins_toggle_confirm_title",
+      "value": "确认%s「%s」？"
+    },
+    {
+      "name": "plugins_toggle_disable",
+      "value": "停用"
+    },
+    {
+      "name": "plugins_toggle_enable",
+      "value": "启用"
+    },
+    {
+      "name": "plugins_toggle_missing_locked",
+      "value": "声明要加载但电脑上找不到这个包，请先在电脑上安装。"
+    },
+    {
+      "name": "plugins_toggle_not_installed_locked",
+      "value": "电脑上没有装这个包，无法启停。"
+    },
+    {
+      "name": "plugins_toggle_official_locked",
+      "value": "DSH 官方插件，随运行时提供，无法启停。"
+    },
+    {
+      "name": "plugins_unavailable_generic",
+      "value": "服务器暂时无法提供插件清单（%s）。"
+    },
+    {
+      "name": "plugins_unavailable_manifest_unreadable",
+      "value": "服务器读不出插件清单：package.json 可能损坏、缺失或没有读取权限。"
+    },
+    {
+      "name": "plugins_unavailable_profile_unknown",
+      "value": "服务器判定不出当前使用的插件档案，暂时读不到插件清单。请确认 DSH 以 dsh web 或 dsh --profile web 启动。"
+    },
+    {
+      "name": "plugins_update_available",
+      "value": "有新版本 %s"
+    },
+    {
+      "name": "plugins_version_runtime_provided",
+      "value": "随 DSH 运行时提供"
+    },
+    {
+      "name": "plugins_version_unknown",
+      "value": "版本未知"
+    },
+    {
+      "name": "preset_default",
+      "value": "默认"
+    },
+    {
+      "name": "preview_skipped_hint_download",
+      "value": "可以下载后用其他应用打开。"
+    },
+    {
+      "name": "preview_skipped_too_large",
+      "value": "文件 %s，超过 %s 的上限，已跳过预览。"
+    },
+    {
+      "name": "provider_display_name",
+      "value": "显示名称"
+    },
+    {
+      "name": "provider_id",
+      "value": "供应商 ID"
+    },
+    {
+      "name": "provider_id_hint",
+      "value": "小写字母开头，可包含数字和连字符，例如 acme-gateway"
+    },
+    {
+      "name": "provider_protocol",
+      "value": "接口协议"
+    },
+    {
+      "name": "provider_secret_note",
+      "value": "API 密钥只写入服务器凭据库，App 不会读取或显示已保存的密钥。"
+    },
+    {
+      "name": "question_answered",
+      "value": "已回答"
+    },
+    {
+      "name": "question_count",
+      "value": "共 %d 道题"
+    },
+    {
+      "name": "question_waiting",
+      "value": "需要你的回答"
+    },
+    {
+      "name": "rate_limited",
+      "value": "请求过于频繁，稍后再试"
+    },
+    {
+      "name": "reason_clipboard",
+      "value": "用于从剪贴板粘贴电脑上生成的连接配置文本"
+    },
+    {
+      "name": "reason_internet",
+      "value": "用于连接你电脑上的 DSH 工作区服务"
+    },
+    {
+      "name": "reason_network_info",
+      "value": "用于判断当前网络类型以选择最快的接入地址"
+    },
+    {
+      "name": "reasoning_effort",
+      "value": "思考强度"
+    },
+    {
+      "name": "refresh",
+      "value": "刷新"
+    },
+    {
+      "name": "reject",
+      "value": "拒绝"
+    },
+    {
+      "name": "remove_computer",
+      "value": "删除这台电脑"
+    },
+    {
+      "name": "remove_computer_title",
+      "value": "删除「%s」？"
+    },
+    {
+      "name": "remove_computer_warning",
+      "value": "该电脑的地址与设备令牌都会被删除，下次使用需要重新配对或重新导入配置。"
+    },
+    {
+      "name": "remove_workspace",
+      "value": "移除工作区"
+    },
+    {
+      "name": "remove_workspace_title",
+      "value": "移除这个工作区？"
+    },
+    {
+      "name": "remove_workspace_warning",
+      "value": "「%s」只会从 DSH WebUI 的工作区列表中移除。服务器目录、文件和会话日志都会保留。"
+    },
+    {
+      "name": "rename",
+      "value": "重命名"
+    },
+    {
+      "name": "rename_move",
+      "value": "重命名或移动"
+    },
+    {
+      "name": "rename_session",
+      "value": "重命名会话"
+    },
+    {
+      "name": "rename_session_title",
+      "value": "重命名会话"
+    },
+    {
+      "name": "rename_workspace",
+      "value": "重命名工作区"
+    },
+    {
+      "name": "replace_file",
+      "value": "替换文件"
+    },
+    {
+      "name": "reset_zoom",
+      "value": "重置文字缩放"
+    },
+    {
+      "name": "restore",
+      "value": "恢复"
+    },
+    {
+      "name": "root_directory",
+      "value": "授权根目录"
+    },
+    {
+      "name": "running",
+      "value": "运行中"
+    },
+    {
+      "name": "save",
+      "value": "保存"
+    },
+    {
+      "name": "save_provider",
+      "value": "保存供应商"
+    },
+    {
+      "name": "saved_computers",
+      "value": "已保存的电脑"
+    },
+    {
+      "name": "scope_chat_read",
+      "value": "读取聊天"
+    },
+    {
+      "name": "scope_chat_write",
+      "value": "发送消息"
+    },
+    {
+      "name": "scope_files_delete",
+      "value": "删除文件"
+    },
+    {
+      "name": "scope_files_read",
+      "value": "读取文件"
+    },
+    {
+      "name": "scope_files_write",
+      "value": "写入文件"
+    },
+    {
+      "name": "scope_settings_read",
+      "value": "查看设置"
+    },
+    {
+      "name": "scope_settings_write",
+      "value": "修改设置"
+    },
+    {
+      "name": "scroll_select_hint",
+      "value": "双击复制整条"
+    },
+    {
+      "name": "select_file",
+      "value": "选择一个普通文件"
+    },
+    {
+      "name": "select_session",
+      "value": "选择一个会话"
+    },
+    {
+      "name": "send",
+      "value": "发送"
+    },
+    {
+      "name": "server_address",
+      "value": "服务器地址"
+    },
+    {
+      "name": "server_default",
+      "value": "服务端默认"
+    },
+    {
+      "name": "session_actions",
+      "value": "会话操作"
+    },
+    {
+      "name": "session_configuration",
+      "value": "会话配置"
+    },
+    {
+      "name": "session_configuration_subtitle",
+      "value": "查看或切换当前会话的 Agent、模型与思考强度"
+    },
+    {
+      "name": "session_count",
+      "value": "共 %d 个会话"
+    },
+    {
+      "name": "session_file_binary",
+      "value": "该文件不是 UTF-8 文本，无法预览。"
+    },
+    {
+      "name": "session_file_count",
+      "value": "%d 次"
+    },
+    {
+      "name": "session_file_detail",
+      "value": "文件详情"
+    },
+    {
+      "name": "session_file_directory",
+      "value": "这是一个目录。已把「文件」页切到该目录，可以在那里浏览里面的内容。"
+    },
+    {
+      "name": "session_file_empty",
+      "value": "这是一个空文件。"
+    },
+    {
+      "name": "session_file_failed",
+      "value": "打开失败：%s"
+    },
+    {
+      "name": "session_file_files_hint",
+      "value": "完整内容与编辑在「文件」页。"
+    },
+    {
+      "name": "session_file_open_directory",
+      "value": "在「文件」页打开这个目录"
+    },
+    {
+      "name": "session_file_outside_roots",
+      "value": "这个路径不在本机的授权根内，或不是普通文件，服务端拒绝解析，所以手机上打不开。可以让 agent 把它放进授权的工作区目录。"
+    },
+    {
+      "name": "session_file_partial",
+      "value": "只有已载入的这段时间里出现过文件；更早的历史还没拉回来，可以下拉加载后再看。"
+    },
+    {
+      "name": "session_file_pdf_unsupported",
+      "value": "PDF 在手机上没法内嵌渲染（ArkUI 没有 PDF 组件）。字节已经取到了，完整内容与下载在「文件」页。"
+    },
+    {
+      "name": "session_file_plugin_too_old",
+      "value": "服务端的 dsh-remote-bridge 插件（旧名 dsh-workspace）版本过旧，还没有提供路径解析接口。请在电脑上把插件升级到 2.0.4 或更高，然后重启 DSH。"
+    },
+    {
+      "name": "session_file_too_large",
+      "value": "文件超过 2 MiB，不在面板里预览。"
+    },
+    {
+      "name": "session_file_truncated",
+      "value": "这里只预览了开头部分，完整内容在「文件」页。"
+    },
+    {
+      "name": "session_files",
+      "value": "本会话的文件"
+    },
+    {
+      "name": "session_files_empty",
+      "value": "本会话还没有提到可打开的文件路径。"
+    },
+    {
+      "name": "session_files_subtitle",
+      "value": "会话里出现过、又能定位到的文件。只列服务器绝对路径；命令里的路径与相对路径不参与解析，宁可少列也不猜错。"
+    },
+    {
+      "name": "session_idle",
+      "value": "空闲"
+    },
+    {
+      "name": "session_running",
+      "value": "运行中"
+    },
+    {
+      "name": "sessions",
+      "value": "会话"
+    },
+    {
+      "name": "settings",
+      "value": "设置"
+    },
+    {
+      "name": "settings_permission_required",
+      "value": "当前设备没有 settings.read 权限。请在 DSH WebUI 的工作区设置中为此设备启用设置读取权限；修改供应商还需要 settings.write。"
+    },
+    {
+      "name": "settings_subtitle",
+      "value": "管理连接、模型供应商、设备权限和语言"
+    },
+    {
+      "name": "show_context_desc",
+      "value": "运行上下文、时间上下文、后台任务通知等系统每轮塞进来的块。默认不显示——它们会在每条消息之间插一排折叠块。排查问题时再打开。"
+    },
+    {
+      "name": "show_context_title",
+      "value": "显示上下文注入"
+    },
+    {
+      "name": "steer",
+      "value": "追加引导"
+    },
+    {
+      "name": "submit_answer",
+      "value": "提交回答"
+    },
+    {
+      "name": "task_completed",
+      "value": "已完成"
+    },
+    {
+      "name": "task_in_progress",
+      "value": "进行中"
+    },
+    {
+      "name": "task_pending",
+      "value": "待处理"
+    },
+    {
+      "name": "task_progress",
+      "value": "已完成 %d/%d"
+    },
+    {
+      "name": "test_connection",
+      "value": "测试连接"
+    },
+    {
+      "name": "think",
+      "value": "思考"
+    },
+    {
+      "name": "tool_call",
+      "value": "工具调用"
+    },
+    {
+      "name": "tool_detail_copy",
+      "value": "复制"
+    },
+    {
+      "name": "tool_detail_empty_result",
+      "value": "结果为空"
+    },
+    {
+      "name": "tool_detail_error",
+      "value": "错误"
+    },
+    {
+      "name": "tool_detail_failed",
+      "value": "失败"
+    },
+    {
+      "name": "tool_detail_input",
+      "value": "输入"
+    },
+    {
+      "name": "tool_detail_no_args",
+      "value": "这个工具没有参数"
+    },
+    {
+      "name": "tool_detail_no_result",
+      "value": "还没有结果"
+    },
+    {
+      "name": "tool_detail_ok",
+      "value": "成功"
+    },
+    {
+      "name": "tool_detail_output",
+      "value": "输出"
+    },
+    {
+      "name": "tool_detail_pending",
+      "value": "运行中"
+    },
+    {
+      "name": "trash",
+      "value": "回收站"
+    },
+    {
+      "name": "turn_failed_title",
+      "value": "本轮运行失败"
+    },
+    {
+      "name": "turn_stopped_title",
+      "value": "任务已停止"
+    },
+    {
+      "name": "upgrade_notice",
+      "value": "已从旧版本自动迁移你之前保存的连接，地址与凭据都保留着。"
+    },
+    {
+      "name": "upload",
+      "value": "上传"
+    },
+    {
+      "name": "use_discovered_models",
+      "value": "使用发现结果"
+    },
+    {
+      "name": "version",
+      "value": "当前版本"
+    },
+    {
+      "name": "web_chat_desc",
+      "value": "关闭时用原生界面；打开后聊天页改由 App 内置的网页渲染，Markdown、代码块与卡片显示更接近电脑端。"
+    },
+    {
+      "name": "web_chat_footnote",
+      "value": "网页版尚在试用：流式输出刚接上，可能仍有细节与原生版不同。遇到问题随时可以关回原生。"
+    },
+    {
+      "name": "web_chat_footnote_port",
+      "value": "本移植版的聊天页由 ArkUI 原生实现，没有内置网页版，所以这个开关当前不影响界面。保留它只为与电脑端设置保持一致。"
+    },
+    {
+      "name": "web_chat_heading",
+      "value": "聊天页实现"
+    },
+    {
+      "name": "web_chat_title",
+      "value": "用网页版聊天页"
+    },
+    {
+      "name": "workspace_directory",
+      "value": "工作目录"
+    },
+    {
+      "name": "workspace_root",
+      "value": "根目录"
+    },
+    {
+      "name": "workspace_select_preset",
+      "value": "选择智能体预设"
+    },
+    {
+      "name": "zoom_in",
+      "value": "放大文字"
+    },
+    {
+      "name": "zoom_out",
+      "value": "缩小文字"
+    },
+    {
+      "name": "available_commands",
+      "value": "可用命令"
+    },
+    {
+      "name": "command_compact_description",
+      "value": "压缩较早的会话历史"
+    },
+    {
+      "name": "command_export_description",
+      "value": "将当前会话日志下载为 ZIP 文件"
+    },
+    {
+      "name": "command_feedback_description",
+      "value": "记录当前会话的反馈"
+    },
+    {
+      "name": "command_goal_description",
+      "value": "设置或查看长期任务目标"
+    },
+    {
+      "name": "command_input_hint",
+      "value": "参数：%s"
+    },
+    {
+      "name": "command_permission_description",
+      "value": "切换权限预设（沙箱与审批策略）"
+    },
+    {
+      "name": "command_plan_description",
+      "value": "进入或退出计划模式"
+    },
+    {
+      "name": "workspace_files",
+      "value": "工作目录文件"
+    },
+    {
+      "name": "workspace_files_empty",
+      "value": "这个目录还是空的"
+    },
+    {
+      "name": "workspace_files_loading",
+      "value": "正在读取会话工作目录…"
+    },
+    {
+      "name": "workspace_files_unavailable",
+      "value": "读不到这个会话的工作目录"
+    }
+  ]
+}

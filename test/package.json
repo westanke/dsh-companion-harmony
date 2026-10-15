@@ -1,0 +1,14 @@
+{
+  "name": "dsh-companion-harmony-tests",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "纯逻辑层单测（node:test + tsx），直接复用 entry/src/main/ets/core 下的 .ts 源码",
+  "scripts": {
+    "test": "node --import tsx --test cases/*.test.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}

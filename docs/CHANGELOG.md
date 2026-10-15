@@ -20,17 +20,50 @@
 
 ## [未发布]
 
+### 修复
+
+- **会话页输入 `/` 带不出 dsh 命令**（源工程 Android 版正常）：`CommandSuggestions` 的
+  `value` / `commands` 原为**普通成员**。命令面板所在分支在空输入时（`mentioning()` 为 false）
+  就已存在、实例首帧即创建；ArkUI 重绘时**只回写带装饰器的成员**，普通成员永远停在首帧值 →
+  `commandSuggestions('')` 恒为空 → 面板永不出现。`@` 面板能用纯属"切换分支时新建实例"的偶然。
+  修法：两个补全面板的下行数据成员一律改 `@Prop`（函数成员 `onSelect` 保持普通成员）。
+  机制级证据取自编译产物 `updateStateVars` 只收 `@Prop`，与既有坑 21 同源。详见 PORT-MAP 坑 24。
+- `MentionSuggestions` 收 `FileEntry[]` 时 `entry.isDirectory()` 在 `@Prop` 深拷贝后仍可用
+  （运行时 `deepCopyObjectInternal` 走 `Object.setPrototypeOf` 保原型）—— 顺带确证并写入文档。
+
+### 变更
+
+- **按域拆分 7 个超长文件至「约 900 行/文件」**（原预算 1 000 行，本轮用户要求收紧到 900；
+  对外接口与行为**完全不变**，仅做移动与机械改写 `private`→`protected`、`self` 类型标注）：
+  - `core/Models.ts`(1542) → `Models.ts`(barrel) + `ModelsWire` / `ModelsFiles` / `ModelsChat` /
+    `ModelsConfig` / `ModelsEvents`
+  - `core/ChatPresentation.ts`(1456) → `ChatPresentation.ts`(barrel) + `ChatPresentationTypes` /
+    `ChatJson` / `ChatEventParsers` / `ChatItemBuilders` / `ChatToolItems` / `ChatToolFormat`
+  - `core/HarnessViewModel.ts`(3345) → 9 文件**继承链**（`HarnessTypes` / `HarnessHelpers` /
+    `ViewModelBase` / `Catalog` / `Files` / `Sessions` / `Composer` / `Connection` / barrel 空壳）——
+    ArkTS 跨文件共享私有状态**只有继承一条路且继承单向**，故必须按依赖排成一条链；
+    构造末尾改用可覆盖钩子 `startRestore()` 打断最底层反向依赖，避免成环。
+  - `ui/ChatMessage.ets`(1099) → `ChatMessage.ets` + `MarkdownView.ets` + `MessageParts.ets`
+  - `ui/FilesScreen.ets`(1440) → `FilesLayout.ts` + `FileBrowser.ets` + `EditorPane.ets` + `FilesScreen.ets`
+  - `ui/ChatScreen.ets`(1125) → `SessionRow.ets` + `SessionSheets.ets` + `ChatScreen.ets`
+  - `ui/ChatDetail.ets`(1939) → `ChatDetailPanels.ets`（问答/审批/附件缩略图）+ 头部与输入区分拆
+    （`ChatHeader.ets` / `ChatComposer.ets`，本轮完成）
+- `@Prop` 深拷贝会在**保留原型**的前提下递归拷贝自有可枚举属性，故传类实例数组安全；
+  而函数成员若被 `@Prop` 会连闭包一起拷坏 —— `ComposerSuggestions` 的修法据此只对数据成员加装饰器。
+
 ### 文档
 
 - 纳入 git 管理：`git init` + 首笔提交，提交信息遵循
   [Conventional Commits](https://www.conventionalcommits.org/zh-hans/v1.0.0/)；
   `.gitignore` 保持 `signing/` 整体忽略（私钥绝不入库），`oh-package-lock.json` 改入版本库。
 - 新增 [README.md](../README.md)：项目简介、构建 / 签名 / 测试命令、工程结构、文档索引。
-- [PORT-MAP.md](./PORT-MAP.md) 补记本轮遗漏项：坑 23（表格列宽折断英文词）、收尾六
+- [PORT-MAP.md](./PORT-MAP.md) 补记本轮遗漏项：坑 23（表格列宽折断英文词）、**坑 24（`/` 命令
+  面板根因：普通成员不被回写 + `@Prop` 保原型）**、收尾六
   （正式发布与上架：`.hap` / `.app` 双签、发布签名材料、图标改造、上架材料、git 管理）、
-  待真机验证第 24 条；并修正坑 22 里过时的西文系数（0.55 → 0.60）与「README 尚未写」条目。
+  待真机验证第 24 / 25 条；并修正坑 22 里过时的西文系数（0.55 → 0.60）与「README 尚未写」条目。
 - §1 工程结构树里 `AppRuntime.ets` 的「跨分节导航请求」表述偏宽 —— 实际只有
-  `requestFilesSection()` 一个、且仅通向文件分节，改为「跨分节跳转请求（当前仅文件分节）」。
+  `requestFilesSection()` 一个、且仅通向文件分节，改为「跨分节跳转请求（当前仅文件分节）」；
+  结构树同步反映本轮拆分后的新文件清单。
 - 学习源工程 `dsh-companion` 的一线项目文档标准，落地 7 份文档：
   `AGENTS.md`（工程宪法）、`docs/README.md`（索引）、`docs/STATUS.md`（当前状态）、
   `docs/ARCHITECTURE.md`（架构）、`docs/RELEASE.md`（发版流程）、`docs/TESTING.md`（测试）、
@@ -40,6 +73,8 @@
   `AGENTS.md` §4.2 立制、§8 同步，`docs/README.md` 挂索引。
 - 行数预算由 800 **上调至 1 000**（理由：ArkTS 样板多于 Kotlin），在册文件 **10 → 7**；
   退出的 3 个文件（`GenUiCard` / `ModelsScreen` / `DshClient`）转入新增的 `DEBT-003` 继续跟踪。
+- **行数预算再由 1 000 收紧至 900**（用户本轮要求「按照 900 行左右拆分」）；7 个在册文件本轮
+  **全部拆到达标并退出台账**（当前实测最大 897 行 `GenUiCard.ets`）。
 - 补齐源工程文档体系的其余四类：
   - `docs/PARITY.md` 能力对等矩阵（✅/🟡/🔵/⛔ 四态，20 项已验 / 22 项待验 / 4 项有意差异）
   - `docs/ROADMAP.md` 任务台账（阶段、进行中、1.0.1 / 1.1.0 拆债、待办池）

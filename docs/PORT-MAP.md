@@ -29,16 +29,22 @@ dsh-companion-harmony/
 ├── AppScope/  entry/  build-profile.json5  hvigorfile.ts  oh-package.json5  hvigor/
 ├── package.json     ← 只为 node/tsx 声明 "type": "module"（见 §1b 第四个坑），hvigor 不读它
 ├── entry/src/main/ets/
-│   ├── core/        ← ★纯逻辑层（原 data/ 包）：全部写成 .ts，不 import 任何 @ohos（已 30 个模块）
+│   ├── core/        ← ★纯逻辑层（原 data/ 包）：全部写成 .ts，不 import 任何 @ohos（已 49 个模块）
 │   │   ├── JsonAccess.ts  EndpointUrl.ts  ConnectionModels.ts  Codec.ts
-│   │   ├── HostStore.ts  ConnectionShare.ts  Models.ts  DshClient.ts  ChatContentParts.ts
+│   │   ├── HostStore.ts  ConnectionShare.ts  DshClient.ts  ChatContentParts.ts
 │   │   ├── ConnectionCoordinator.ts  TextPredicates.ts  ErrorMessages.ts  ComposerSendPolicy.ts
 │   │   ├── MentionQuery.ts  ChatLinkTarget.ts  ConnectionStorage.ts  AppPreferences.ts
-│   │   ├── ChatPresentation.ts  PreviewKind.ts  HtmlPreview.ts  SessionFileRefs.ts
-│   │   ├── GenUiBlocks.ts  HarnessViewModel.ts  NetworkFailureMapping.ts
-│   │   ├── ChatThinkBar.ts  ComposerPill.ts  FileFormat.ts  QuestionAnswers.ts
+│   │   ├── PreviewKind.ts  HtmlPreview.ts  SessionFileRefs.ts  NetworkFailureMapping.ts
+│   │   ├── GenUiBlocks.ts  ChatThinkBar.ts  ComposerPill.ts  FileFormat.ts  QuestionAnswers.ts
 │   │   └── MarkdownLite.ts  ComposerSuggestions.ts  ← 后两只是本工程特有（源工程无此文件：
 │   │      ArkUI 无 Markdown 渲染器，自备块级切分；补全面板判据要单测，故从 UI 抽出）
+│   │   ── 以下为**按域拆分后的模块族**（barrel 转发导出，保对外名字不变；每文件 ≤ 900 行）：
+│   │   ├── Models.ts(barrel) ← ModelsWire / ModelsFiles / ModelsChat / ModelsConfig / ModelsEvents
+│   │   ├── ChatPresentation.ts(barrel) ← ChatPresentationTypes / ChatJson / ChatEventParsers /
+│   │   │     ChatItemBuilders / ChatToolItems / ChatToolFormat
+│   │   └── HarnessViewModel.ts(barrel+空壳) ← **继承链**（单向，不可乱序）：
+│   │         HarnessTypes → HarnessHelpers → ViewModelBase → { Catalog, Files, Composer }
+│   │         → Sessions → Connection（构造末尾用可覆盖钩子 startRestore() 打断成环）
 │   ├── platform/    ← ★平台能力（已落地 10 个）：Platform.ets 为总装，其余为单项实现
 │   │   ├── Platform.ets           createHarnessDeps() / platformSelfCheckText() / 时区 / 语言
 │   │   ├── PrefsStore.ets         KeyValueStore → @ohos.data.preferences（同步族）
@@ -50,17 +56,27 @@ dsh-companion-harmony/
 │   │   ├── Pickers.ets            相册/文件选择器（对位 GetContent / OpenDocument，零权限）
 │   │   ├── ImageCodec.ets         原始字节 → PixelMap（ArkUI 的 Image 只认 PixelMap）
 │   │   └── ExternalOpen.ets       外链 → startAbility（对位 ACTION_VIEW）
-│   ├── ui/          ← ★ArkUI 页面与组件（已落地 15 个）：全部 .ets
+│   ├── ui/          ← ★ArkUI 页面与组件（已落地 25 个）：全部 .ets（`FilesLayout.ts` 除外）
 │   │   ├── AppRuntime.ets         唯一 vm 实例 + AppStorage(revision) 桥 + 跨分节跳转请求（当前仅文件分节：requestFilesSection）+ 前后台事件流开关
 │   │   ├── Components.ets         BrandMark / WarningBanner / StatusLabel / endpointKindLabel
 │   │   │                          + BinaryFilePreview（供会话文件表与文件页共用）
 │   │   ├── AppShell.ets           主界面外壳：抽屉 + 五个分节（源 App.kt 的 ConnectedApp）
-│   │   ├── ChatScreen.ets         会话分节：会话列表 + 新建会话 + 工作区管理
-│   │   ├── ChatDetail.ets         聊天详情页：头部/待办/消息流/问答/审批/输入药丸（含 `@` 与斜杠补全面板）
-│   │   ├── ChatMessage.ets        消息条目：正文/工具行/失败行/附件/GenUi 卡片
+│   │   ├── ChatScreen.ets         会话分节：装配（会话列表 + 新建会话 + 工作区管理），拆出下两行
+│   │   ├── SessionRow.ets         会话列表行（拆自 `ChatScreen.ets`）
+│   │   ├── SessionSheets.ets      新建会话 + 工作区管理两个面板（拆自 `ChatScreen.ets`）
+│   │   ├── ChatDetail.ets         聊天详情**装配层**：待办/消息流/问答/思考条/审批区 + 装配下三行
+│   │   ├── ChatHeader.ets         头部 + 三个面板宿主（会话文件/会话配置/完整访问）（拆自 `ChatDetail.ets`）
+│   │   ├── ChatComposer.ets       输入药丸 + `@`/`/` 补全面板（拆自 `ChatDetail.ets`）
+│   │   ├── ChatDetailPanels.ets   叶子零件：QuestionCard / ApprovalPanel / AttachmentThumb（拆自 `ChatDetail.ets`）
+│   │   ├── ChatMessage.ets        消息条目：正文/工具行/失败行/附件/GenUi 卡片（拆出下两行）
+│   │   ├── MarkdownView.ets       Markdown 块渲染 + 表格（拆自 `ChatMessage.ets`）
+│   │   ├── MessageParts.ets       消息零件（拆自 `ChatMessage.ets`）
 │   │   ├── ComposerSuggestions.ets `@` 文件补全 + `/` 命令补全两个面板（源 ChatScreen.kt 2139–2326）
 │   │   ├── GenUiCard.ets          dsh-ui 卡片渲染（源 GenUiCard.kt 604 行）
-│   │   ├── FilesScreen.ets        文件分节：目录浏览 + 行号编辑器 + 新建/移动/回收站三个面板
+│   │   ├── FilesScreen.ets        文件分节：装配（授权根 + 新建/移动/回收站三面板），拆出下三行
+│   │   ├── FilesLayout.ts         文件页纯布局常量（拆自 `FilesScreen.ets`）
+│   │   ├── FileBrowser.ets        目录浏览（拆自 `FilesScreen.ets`）
+│   │   ├── EditorPane.ets         行号编辑器 + Markdown 源码/预览（拆自 `FilesScreen.ets`）
 │   │   ├── PluginsScreen.ets      插件分节：清单/四种状态徽章/启停确认/检查更新
 │   │   ├── ModelsScreen.ets       模型分节：供应商列表 + 编辑面板 + 新建自定义供应商
 │   │   ├── SettingsScreen.ets     设置分节：连接/设备权限/语言/发送方式/三个开关/关于/断开
@@ -85,12 +101,12 @@ dsh-companion-harmony/
 **构建验证（已通过）**：`cd 工程根 && source _toolchain/env.sh && hvigorw assembleHap --no-daemon` →
 `entry/build/default/outputs/default/entry-default-unsigned.hap`。
 **单测验证（已通过）**：`cd test && npm test`（node --import tsx --test cases/*.test.ts），
-当前 **29 个测试文件 512 用例全绿**（详见 §7 末尾的分文件统计）。
+当前 **29 个测试文件 531 用例全绿**（详见 §7 末尾的分文件统计）。
 
 **重要：ArkTS 只编译「被入口可达」的文件。** 新写的 `core/*.ts` 若无人 import 就不会被类型检查；
 早期曾用 `core/Probe.ts`（由 `pages/Index.ets` import）当编译探针把新模块都引用一遍。
 **现已删除**：五个分节 UI 全部落地后，从 `pages/Index.ets` 出发做 import 可达闭包，结论是
-**30 个 core 模块 100% 可达**（脚本枚举 import 并沿相对路径遍历），探针不再是任何模块的唯一引用者。
+**49 个 core 模块 100% 可达**（脚本枚举 import 并沿相对路径遍历），探针不再是任何模块的唯一引用者。
 
 **字节类型统一用 `Uint8Array`**（ArkTS 支持，且与 preferences/HUKS/cryptoFramework 的入参一致）。
 **纯逻辑里不做平台调用**：SHA-256 经 `CryptoBridge` 注入（ArkTS 用 `@ohos.security.cryptoFramework`，
@@ -1052,6 +1068,12 @@ JSON：`{displayName, endpoints:[{label,baseUrl}], token?, deviceName?, scopes?}
 24. **表格列宽不折断英文单词**（坑 23 修复的复测）：打开含英文标识符的 Markdown 表格
     （如 `bundleName`），确认该词**整词折行**、不被断成 `bundleNam` / `e`；同时确认长表格
     横向滚动仍可用、列宽未溢出屏幕。（改完设备已断开，本条**尚未跑**。）
+25. **`/` 命令面板能出得来**（坑 24 修复的复测，本轮用户报告的 bug）：连上 harness 后，在会话页
+    输入框只打一个 `/`，面板是否**立刻列出服务端命令**（`state.commands`）；再补打前缀（如
+    `/doc`）确认候选被过滤；打完参数（斜杠后有空白）确认面板**立刻收起**。这是**首要复测项**
+    —— 修复前该面板**从不出现**，`@` 面板却正常，正是「实例先于数据存在 + 普通成员不回写」的
+    典型症状。按键口诀（坑 21 / 坑 24）：**实例先于数据存在的入参，一律 `@Prop`。**
+    （改完设备已断开，本条**尚未跑**。）
 
 ### 收尾五：真机接入与首次装包（2026-10-15）
 
@@ -1387,6 +1409,44 @@ video-v2.0，无重叠、无留白）。
 **验证**：单测 3 条（长英文标识符列宽足以不折词 / 表头字号更大时按表头估 / 不传表头字号时按正文处理），
 `531 用例全绿` + `BUILD SUCCESSFUL`；**真机未验**（改完设备已断开，见 §7「待真机验证」第 24 条）。
 
+**坑 24：会话页输入 `/` 带不出 dsh 命令（2026-10-15 用户报告，源工程 Android 版正常）**
+
+用户原话：「会话页"/"无法带出 dsh命令，源目录 APP 是正常的」。`@` 文件补全能用，唯独 `/` 命令面板
+**从不出现**。这是**平台语义坑**，不是逻辑坑：判据 `core/ComposerSuggestions.ts` 本身正确
+（`commandSuggestions` 要求整行以 `/` 开头、斜杠后无空白、按前缀匹配，`COMMAND_LIMIT = 5`），
+真机上前端就是拿不到最新输入。
+
+**根因（ArkUI 独有，Kotlin/Compose 无此问题）**：`CommandSuggestions` 的 `value` / `commands`
+原本是**普通成员**。而命令面板所在的分支 —— 空输入时 `mentioning()` 为 false —— **从页面加载起就
+存在，其实例在首帧即被创建**。父组件每次重绘时，ArkUI 只回写**带装饰器**的成员，**普通成员被跳过**，
+永远停在首帧值 → `commandSuggestions('')` 恒为空 → 面板永不出现。
+`@` 面板能成立纯属偶然：它是「切换分支」时**新建**的实例，恰好拿到当时的输入，并非普通成员也能更新。
+
+**硬证据（编译产物即规范）**：`entry/build/…/esmodule/debug/entry/src/main/ets/ui/ComposerSuggestions.ts`
+里编译器生成的 `updateStateVars(params)` **参数只由 `@Prop` 收集**：
+```
+343:    updateStateVars(params: CommandSuggestions_Params) {
+344:        this.__value.reset(params.value);
+345:        this.__commands.reset(params.commands);
+```
+普通成员根本不在 `params` 里 —— 这就是「不回写」的机制级证据，与坑 21 同源。
+
+**修法**：两个面板的下行数据成员一律改 `@Prop`（`value` / `entries` / `failed` / `cwd` /
+`cwdAbsolute` / `commands`）；**函数成员（`onSelect`）保持普通成员** —— 它不随父状态变化，
+且 `@Prop` 深拷贝会连原型一起拷、把闭包语义改坏。
+
+**顺带确证的第二个结论（`@Prop` 深拷贝保原型）**：`MentionSuggestions` 收 `FileEntry[]`，
+若深拷贝丢掉原型，`entry.isDirectory()` 会在渲染时炸。运行时 `libace_compatible.so` 的
+`deepCopyObjectInternal` → `getDeepCopyOfObjectRecursive` 明确走
+`Object.setPrototypeOf(copy, Object.getPrototypeOf(obj))` + `Object.keys` 递归 ——
+**方法随原型保留**，故 `@Prop` 传类实例数组安全。（`Object.keys` 只遍历自有可枚举属性，
+原型上的方法本就该留在原型里。）
+
+**规则（与坑 21 合并成一条口诀）**：**键里没有的信息（`ForEach`）与实例先于数据存在的信息（条件分支），
+都不能靠普通成员传 —— 一律 `@Prop`/`@Link`。判据就是编译产物里 `updateStateVars` 收没收它。**
+
+**验证**：`BUILD SUCCESSFUL` + `531 用例全绿`；**真机未验**（改完设备已断开，见 §7「待真机验证」第 25 条）。
+
 **系统导航条随主题设色（2026-10-15 用户要求，已落地）**
 
 实现（`entryability/EntryAbility.ets`）：`onWindowStageCreate` 里 `windowStage.getMainWindowSync()`
@@ -1462,3 +1522,39 @@ due to not trusted app source`），因为设备只信任 AGC 调试证书。所
 - `README.md`：项目简介、构建/签名/测试命令、工程结构、文档索引
 - `.gitignore` 关键策略：**`signing/` 整体忽略**（私钥 `.p12` 绝不入库）、构建产物与包扩展名兜底、
   `oh-package-lock.json` 改入版本库以锁定依赖环境
+
+### 收尾七：按域拆分 7 个超长文件（2026-10-15 用户要求）
+
+用户原话：「现在对行数超的 按照 900 行左右拆分，拆分不能影响原功能」。
+把 `TECH-DEBT.md` 在册的 7 个文件拆到 **每个 ≤ 900 行**（原预算 1 000，本轮收紧到 900），
+**对外接口与行为完全不变**：判据 `BUILD SUCCESSFUL` + **531 用例全绿**（用例数未降）。
+
+**Split 后的文件清单与行数** 见 §1 结构树；每个原文件 → 产物 → 最大行数的对照见
+`docs/TECH-DEBT.md` 的「在册文件 → 清账记录」表。
+
+**ArkTS 拆分踩到的四个坑（都不是逻辑问题，是平台/工具链问题）**：
+
+1. **跨文件共享私有状态只有「继承」一条路，且继承单向。** 拆 ViewModel 不能靠「组合 + 传
+   `this`」，因为 `private` 成员跨文件不可见。于是 `HarnessViewModel` 被拆成一条**继承链**：
+   `HarnessViewModelBase` → `Catalog` → `Files` → `Sessions` → `Composer` → `Connection`，
+   中间层按依赖拓扑排。**顺序不能乱**，乱了就是「用了父类里没有的成员」。
+   两处机械改写：类内 `private` → `protected`；方法体内 `const self: HarnessViewModel = this;`
+   → 各自文件自己的类名（否则类型不符）。
+2. **构造末尾不能反向依赖最后一层，会成环。** 基类构造里原本 `restoreConnection()` 直接调用
+   —— 但 `restoreConnection` 在 `Connection` 层（最底层）。改成**可覆盖钩子**：基类构造调用
+   `this.startRestore()`（空实现），`Connection` 层覆盖它去调 `restoreConnection()`。
+   与 Kotlin 的 `init { restoreConnection() }` 语义等价。
+3. **`export { X } from './Y'` 转发导出可保 barrel 对外名字不变**；但 **interface / 纯类型
+   必须用 `export type { X }` 再导出** —— 用 `export {}` 的话，ArkTS 编译能过，而 **node 侧
+   （tsx/esbuild）运行期**会报 `does not provide an export named 'X'`，直接把整个测试文件
+   加载失败（实测用例数从 531 掉到 443）。这是「编译期绿、运行期炸」的典型，必须记住。
+4. **本工作区 Edit 工具偶发「改动不落盘」**；每次编辑后都用 `grep` / 逐行复核，必要时改用
+   python 脚本切片改写（拆分本身即用切片脚本，不手抄，保证搬走的成员体**逐字节命中**）。
+
+**字节保持性核验**：用 git 原文行多重集比对各拆分文件，所有「丢失」行**全部可解释**为上述
+机械改写（import 重排、加 `export` / `protected`、`self` 类型标注、调用点改写），**零无法解释的丢失**。
+`ui/ChatDetail.ets` 拆分另用脚本核验：括号配平、搬走成员逐字节命中、父组件无残留/缺失成员、
+无悬空 `this.xxx(` 调用、两个新文件 import 无未用符号。
+
+**顺带清理**：`ChatDetail.ets` 拆分后残留 25 个已随搬移变为无用的 import，本轮一并删除
+（拆分产物，非原有代码；不影响功能）。

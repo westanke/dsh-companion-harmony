@@ -1,19 +1,47 @@
 /**
- * 聊天详情页 —— 移植自原工程 `ui/ChatScreen.kt` 的 `ChatDetail` 及其下属组件：
+ * 聊天详情页 —— **装配层**。移植自原工程 `ui/ChatScreen.kt` 的 `ChatDetail`：
  *
- * | 源工程 | 本文件 |
+ * | 源工程 | 本文件 / 承载文件 |
  * |---|---|
- * | `ChatDetail`（417–736） | `ChatDetail` |
- * | `ConversationHeader`（738–877） | `ChatDetail.header` |
+ * | `ChatDetail`（417–736） | `ChatDetail`（装配层，本文件） |
+ * | `ConversationHeader`（738–877） | `ui/ChatHeader.ets` 的 `ChatHeaderPanelHost.header` |
+ * | 三个面板宿主（会话文件 / 会话配置 / 完整访问确认） | `ui/ChatHeader.ets` 的 `sheetContent` |
  * | `ApprovalStatusLabel` / `ApprovalLoading`（1286–1317） | `ChatDetail.approvalArea` |
- * | `ApprovalPanel`（1319–1442） | `ApprovalPanel` |
- * | `QuestionCard`（1493–1643） | `QuestionCard` |
- * | `Composer`（1645–1866） | `ChatDetail.composer` |
+ * | `ApprovalPanel`（1319–1442） | `ui/ChatDetailPanels.ets` 的 `ApprovalPanel` |
+ * | `QuestionCard`（1493–1643） | `ui/ChatDetailPanels.ets` 的 `QuestionCard` |
+ * | `Composer`（1645–1866） | `ui/ChatComposer.ets` 的 `ChatComposer.composer` |
  * | `MentionSuggestions`（2139–2255） | `ui/ComposerSuggestions.ets` 的 `MentionSuggestions` |
  * | `commandSuggestions`（2264–2274） | `core/ComposerSuggestions.ts` 的 `commandSuggestions` |
  * | `CommandSuggestions`（2276–2326） | `ui/ComposerSuggestions.ets` 的 `CommandSuggestions` |
  * | `ChatThinkBar`（1897–1928） | `ChatDetail.thinkBar` |
  * | `TodoPanel`（2045–2125） | `ChatDetail.todoPanel` |
+ *
+ * ## 拆分说明（切在哪、为什么）
+ *
+ * 本文件原是一个 1900+ 行的单文件。按「内聚」切，不按行数对齐硬切，得到四块：
+ *
+ * 1. `ui/ChatDetailPanels.ets` —— **叶子零件**（`QuestionCard` / `ApprovalPanel` /
+ *    `AttachmentThumb`）。它们只吃入参、只吐回调，不拖 `ChatDetail` 的任何状态，能整体搬走。
+ * 2. `ui/ChatHeader.ets`（`ChatHeaderPanelHost`）—— **头部 + 三个面板宿主**。头部是
+ *    「会话文件 / 会话配置」两个面板唯一的入口（`📂` 与 `⋯`），而「完整访问确认」面板的
+ *    开关状态又与头部菜单里的权限档位共用一套判据；头部与面板宿主同住一处，
+ *    `openSheet` / `closeSheet` / `sheetContent` / `sheetHeight` 就不必跨组件回调。
+ * 3. `ui/ChatComposer.ets`（`ChatComposer`）—— **输入药丸 + 补全面板**。附件、提交、
+ *    `@`/`/` 提示自成一块，也是本页唯一会写回 `message` 的地方。
+ * 4. 本文件保留：待办面板、消息流、「跳到最新」、问答区、思考条、审批区（四态分派与两次
+ *    确认的**发起**），以及把 2 / 3 两个子组件装配起来的 `build()`。
+ *
+ * ## 状态归属（拆分的硬约束）
+ *
+ * **唯一数据源一律留在本文件（父组件）**：`message`、`sheetOpen` / `sheetKind` /
+ * `fullAccessApprovalId` / `fullAccessAck`。子组件用 `@Link` 双向绑定「两边都会写」的那几个
+ * （输入框 `onChange` 写 `message`；审批区走二次确认、头部菜单切权限档位都要写 sheet 那几份），
+ * 只读入参用 `@Prop`，函数 / 回调用普通成员。子组件**不再各自复制一份 `@State`** ——
+ * 双数据源会让两边打架。
+ *
+ * `message` 经 `@Link` 被 `ChatComposer` 写回时，本组件的 `@Watch('onMessageChanged')`
+ * **不保证**会被触发；所以 `ChatComposer` 的 `onChange` 会显式回调一次 `onMessageEdited()`
+ * （内部即 `syncComposerOverlay()`），理由写在 `ui/ChatComposer.ets` 的文件头。
  *
  * ## 六处平台差异（都不是取舍口味，是 ArkUI 侧做不到或做法不同）
  *
@@ -54,7 +82,6 @@
  *    `composerHint` 三态决定 —— 这两条抽成纯函数并有单测，界面只负责显示。
  */
 
-import { common } from '@kit.AbilityKit';
 import {
   AgentPreset, ChatHistory, ChatQuestion, ChatSession, ModelSelection, PendingApproval,
   PendingQuestionSet, PermissionOption, PermissionSelect, QuestionAnswer, QuestionOption, TodoItem,
@@ -66,436 +93,17 @@ import {
   ChatDisplayItem, ChatItemKind, LiveChatState, displayItemsOf, permissionSelectOf, todoItemsOf,
 } from '../core/ChatPresentation';
 import { liveThinkingText, thinkBarText } from '../core/ChatThinkBar';
-import { ComposerHint, composerHint } from '../core/ComposerPill';
-import { SEND_MODE_STEER, canSubmit, resolveSendMode } from '../core/ComposerSendPolicy';
-import { activeStart, applySelection } from '../core/MentionQuery';
 import { composerOverlayActive } from '../core/ComposerSuggestions';
-import { allAnswered, buildAnswers } from '../core/QuestionAnswers';
-import { MAX_FILE_BYTES, MAX_IMAGE_BYTES, formatBytes } from '../core/ChatContentParts';
-import { PickFailureKind, PickResult, pickFile, pickImage } from '../platform/Pickers';
-import { decodeImageSync } from '../platform/ImageCodec';
-import { harnessState, harnessVm, requestFilesSection } from './AppRuntime';
-import { StatusLabel } from './Components';
+import { harnessState, harnessVm } from './AppRuntime';
 import { ChatMessageView } from './ChatMessage';
-import { CommandSuggestions, MentionSuggestions } from './ComposerSuggestions';
-import { SessionFilesSheet } from './SessionFilesSheet';
-import { SessionConfigSheet } from './ModelSheet';
-
-/** 面板宿主的三态（`sheetKind` 只在本文件内使用，故用数字常量而非导出枚举）。 */
-const SHEET_FILES: number = 0;
-const SHEET_CONFIG: number = 1;
-const SHEET_FULL_ACCESS: number = 2;
+import { ApprovalPanel, QuestionCard } from './ChatDetailPanels';
+import { ChatHeaderPanelHost, SHEET_FILES, SHEET_FULL_ACCESS } from './ChatHeader';
+import { ChatComposer } from './ChatComposer';
 
 /** 待回答问题区的高度上限：对位源工程 `heightIn(max = 340.dp)`。 */
 const QUESTION_PANEL_MAX_HEIGHT_VP: number = 340;
 
-/** 审批面板里「脱敏命令预览」的高度上限：对位 `heightIn(max = 144.dp)`。 */
-const COMMAND_DETAIL_MAX_HEIGHT_VP: number = 144;
-
-/**
- * 一轮问答卡（`ask_user_question`，方案 A 只做 `continued`）。
- *
- * 勾选与自由文本都按 `callId` 记住（见 `aboutToAppear`）：同一组题在重绘之间不能丢答案；
- * 换了一组就从零开始，免得上一组的答案漏到下一组 —— 那是「提交上去的答案张冠李戴」这类事故。
- *
- * **单选再点一次已选中的就是取消**（源工程注释写明了这是为了「让用户能改主意」，而不是
- * 与网页版的 radio 对齐 —— 网页版的 radio 点不掉）。
- */
-@Component
-struct QuestionCard {
-  questionSet: PendingQuestionSet = new PendingQuestionSet();
-  answered: boolean = false;
-  submitting: boolean = false;
-  canWrite: boolean = false;
-  onSubmit: (answers: QuestionAnswer[]) => void = (): void => {};
-
-  /**
-   * 勾选：`questionId → 已选标签集合`。
-   *
-   * 用 `@State` 存 `Map`，每次改动**换一个新 Map**（原地 `set` 不会触发重绘）——
-   * 这是 ArkUI 与 Compose 的 `mutableStateMapOf` 最容易踩反的一处。
-   */
-  @State selected: Map<string, Set<string>> = new Map<string, Set<string>>();
-  /** 自由文本：`questionId → 草稿`。同样每次换新 Map。 */
-  @State customText: Map<string, string> = new Map<string, string>();
-
-  aboutToAppear(): void {
-    this.selected = new Map<string, Set<string>>();
-    this.customText = new Map<string, string>();
-  }
-
-  /** 可交互 = 有写权限 + 没在提交 + 还没答过。三条缺一不可（照抄源工程）。 */
-  private interactive(): boolean {
-    return this.canWrite && !this.submitting && !this.answered;
-  }
-
-  /** 一组题全答完（纯函数，与源工程 `isAnswered` 同一份判据）。 */
-  private complete(): boolean {
-    return this.questionSet.questions.length > 0
-      && allAnswered(this.questionSet.questions, this.selected, this.customText);
-  }
-
-  private pickedLabels(questionId: string): Set<string> {
-    const current: Set<string> | undefined = this.selected.get(questionId);
-    return current === undefined ? new Set<string>() : current;
-  }
-
-  /** 切换一个选项。单选与多选的差别只在「要不要清掉别的」（照抄源工程）。 */
-  private toggle(question: ChatQuestion, label: string): void {
-    if (!this.interactive()) {
-      return;
-    }
-    const current: Set<string> = this.pickedLabels(question.id);
-    const checked: boolean = current.has(label);
-    const next: Set<string> = new Set<string>();
-    if (!question.multiSelect) {
-      if (!checked) {
-        next.add(label);
-      }
-    } else {
-      current.forEach((item: string): void => {
-        if (item !== label) {
-          next.add(item);
-        }
-      });
-      if (!checked) {
-        next.add(label);
-      }
-    }
-    const map: Map<string, Set<string>> = new Map<string, Set<string>>();
-    this.selected.forEach((value: Set<string>, key: string): void => {
-      map.set(key, key === question.id ? next : value);
-    });
-    map.set(question.id, next);
-    this.selected = map;
-  }
-
-  private onCustomChange(questionId: string, text: string): void {
-    if (!this.interactive()) {
-      return;
-    }
-    const map: Map<string, string> = new Map<string, string>();
-    this.customText.forEach((value: string, key: string): void => {
-      map.set(key, value);
-    });
-    map.set(questionId, text);
-    this.customText = map;
-  }
-
-  private headerText(): ResourceStr {
-    return this.answered ? $r('app.string.question_answered') : $r('app.string.question_waiting');
-  }
-
-  private headerColor(): ResourceStr {
-    return this.answered
-      ? $r('sys.color.ohos_id_color_text_secondary')
-      : $r('sys.color.ohos_id_color_text_primary_activated');
-  }
-
-  /** 每题一块：header / 题干 / 补充说明 / 选项或自由文本。 */
-  @Builder
-  questionBlock(question: ChatQuestion) {
-    Column() {
-      if (question.header !== null && question.header.length > 0) {
-        Text(question.header)
-          .fontSize(13)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('sys.color.ohos_id_color_text_primary_activated'))
-          .width('100%')
-      }
-      Text(question.question)
-        .fontSize(14)
-        .fontWeight(FontWeight.Medium)
-        .width('100%')
-        .margin({ top: 2 })
-      if (question.detail !== null && question.detail.length > 0) {
-        Text(question.detail)
-          .fontSize(12)
-          .fontColor($r('sys.color.ohos_id_color_text_secondary'))
-          .width('100%')
-          .margin({ top: 2 })
-      }
-      if (question.options.length === 0) {
-        // 没有选项 = 这题要自由文本，正好对应协议里的 custom。
-        TextArea({ text: this.customText.get(question.id) ?? '', placeholder: $r('app.string.answer_your_own') })
-          .width('100%')
-          .constraintSize({ minHeight: 44, maxHeight: 120 })
-          .enabled(this.interactive())
-          .margin({ top: 4 })
-          .onChange((value: string): void => {
-            this.onCustomChange(question.id, value);
-          })
-      } else {
-        ForEach(question.options, (option: QuestionOption) => {
-          Row() {
-            // 多选用 ☑/☐，单选用 ◉/○：字形代替 Material 的 Checkbox / RadioButton。
-            Text(question.multiSelect
-              ? (this.pickedLabels(question.id).has(option.label) ? '☑' : '☐')
-              : (this.pickedLabels(question.id).has(option.label) ? '◉' : '○'))
-              .fontSize(15)
-              .width(22)
-              .fontColor(this.pickedLabels(question.id).has(option.label)
-                ? $r('sys.color.ohos_id_color_text_primary_activated')
-                : $r('sys.color.ohos_id_color_text_secondary'))
-            Column() {
-              Text(option.label)
-                .fontSize(14)
-                .width('100%')
-              if (option.description !== null && option.description.length > 0) {
-                Text(option.description)
-                  .fontSize(12)
-                  .fontColor($r('sys.color.ohos_id_color_text_secondary'))
-                  .width('100%')
-              }
-            }
-            .layoutWeight(1)
-            .alignItems(HorizontalAlign.Start)
-            .margin({ left: 4 })
-          }
-          .width('100%')
-          .padding({ top: 4, bottom: 4 })
-          .alignItems(VerticalAlign.Center)
-          .opacity(this.interactive() ? 1 : 0.6)
-          .onClick((): void => {
-            this.toggle(question, option.label);
-          })
-        }, (option: QuestionOption) => `${question.id}:${option.label}`)
-      }
-    }
-    .width('100%')
-    .alignItems(HorizontalAlign.Start)
-    .margin({ top: 4 })
-  }
-
-  build() {
-    Column() {
-      Row() {
-        Text(this.answered ? '✓' : '❓')
-          .fontSize(16)
-          .fontColor(this.headerColor())
-        Column() {
-          Text(this.headerText())
-            .fontSize(15)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(this.headerColor())
-            .width('100%')
-          if (this.questionSet.questions.length > 1) {
-            Text($r('app.string.question_count', this.questionSet.questions.length))
-              .fontSize(12)
-              .fontColor($r('sys.color.ohos_id_color_text_secondary'))
-              .width('100%')
-          }
-        }
-        .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
-        .margin({ left: 8 })
-
-        if (this.submitting) {
-          LoadingProgress().width(20).height(20)
-        }
-      }
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
-
-      ForEach(this.questionSet.questions, (question: ChatQuestion) => {
-        this.questionBlock(question)
-      }, (question: ChatQuestion) => question.id)
-
-      if (!this.answered) {
-        Row() {
-          if (this.submitting) {
-            Text($r('app.string.answer_submitting'))
-              .fontSize(12)
-              .fontColor($r('sys.color.ohos_id_color_text_secondary'))
-              .margin({ right: 8 })
-          }
-          Button($r('app.string.submit_answer'))
-            .type(ButtonType.Capsule)
-            .height(38)
-            .enabled(this.interactive() && this.complete())
-            .onClick((): void => {
-              this.onSubmit(buildAnswers(this.questionSet.questions, this.selected, this.customText));
-            })
-        }
-        .width('100%')
-        .margin({ top: 6 })
-        .justifyContent(FlexAlign.End)
-        .alignItems(VerticalAlign.Center)
-      }
-    }
-    .width('100%')
-    .padding({ left: 12, right: 12, top: 10, bottom: 10 })
-    .borderRadius(10)
-    .backgroundColor($r('sys.color.ohos_id_color_sub_background'))
-    // 边框语义照抄：未答用主色（要你注意），已答降到分隔线色（不必再看）。
-    .border({
-      width: 1,
-      color: this.answered
-        ? $r('sys.color.ohos_id_color_list_separator')
-        : $r('sys.color.ohos_id_color_text_primary_activated'),
-    })
-  }
-}
-
-/**
- * 审批面板（`PendingApproval`）。
- *
- * `risk == "full-access"` 时是**另一套语义**：描边与图标换成警告色，并多一行
- * 「请求完整系统访问权限」。点「允许一次」时源工程会先弹二次确认对话框 ——
- * 那个对话框在本工程里由 `ChatDetail` 的 `SHEET_FULL_ACCESS` 面板承担，
- * 所以这里只负责把请求交出去（`onAllowOnce`），不自己弹。
- */
-@Component
-struct ApprovalPanel {
-  approval: PendingApproval = new PendingApproval();
-  count: number = 1;
-  deciding: boolean = false;
-  canWrite: boolean = false;
-  onReject: () => void = (): void => {};
-  onAllowOnce: () => void = (): void => {};
-
-  /** 高风险审批：全访问。 */
-  private fullAccess(): boolean {
-    return this.approval.risk === 'full-access';
-  }
-
-  private interactive(): boolean {
-    return this.canWrite && !this.deciding;
-  }
-
-  private accent(): ResourceStr {
-    return this.fullAccess()
-      ? $r('sys.color.ohos_id_color_warning')
-      : $r('sys.color.ohos_id_color_text_secondary');
-  }
-
-  private subtitle(): ResourceStr {
-    return this.count > 1
-      ? $r('app.string.approval_count', this.approval.toolName, this.count)
-      : this.approval.toolName;
-  }
-
-  build() {
-    Column() {
-      Row() {
-        Text(this.fullAccess() ? '⚠' : '🔧')
-          .fontSize(17)
-          .fontColor(this.accent())
-        Column() {
-          Text($r('app.string.approval_required'))
-            .fontSize(15)
-            .fontWeight(FontWeight.Medium)
-            .width('100%')
-          Text(this.subtitle())
-            .fontSize(12)
-            .fontColor($r('sys.color.ohos_id_color_text_secondary'))
-            .width('100%')
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-        }
-        .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
-        .margin({ left: 8 })
-
-        if (this.deciding) {
-          LoadingProgress().width(20).height(20)
-        }
-      }
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
-
-      if (this.approval.reason !== null && this.approval.reason.length > 0) {
-        Text(this.approval.reason)
-          .fontSize(12)
-          .fontColor($r('sys.color.ohos_id_color_text_secondary'))
-          .width('100%')
-          .margin({ top: 6 })
-      }
-
-      if (this.approval.detail !== null && this.approval.detail.length > 0) {
-        Text($r('app.string.approval_command_preview'))
-          .fontSize(12)
-          .fontColor($r('sys.color.ohos_id_color_text_secondary'))
-          .width('100%')
-          .margin({ top: 8 })
-        Scroll() {
-          Text(this.approval.detail as string)
-            .fontSize(12)
-            .fontFamily('monospace')
-            .padding(8)
-            .copyOption(CopyOptions.LocalDevice)
-        }
-        .scrollable(ScrollDirection.Vertical)
-        .width('100%')
-        .constraintSize({ maxHeight: COMMAND_DETAIL_MAX_HEIGHT_VP })
-        .margin({ top: 4 })
-        .borderRadius(6)
-        .backgroundColor($r('sys.color.ohos_id_color_component_normal'))
-      }
-
-      if (this.fullAccess()) {
-        Row() {
-          Text('⚠')
-            .fontSize(14)
-            .fontColor($r('sys.color.ohos_id_color_warning'))
-          Text($r('app.string.full_access'))
-            .fontSize(12)
-            .fontColor($r('sys.color.ohos_id_color_warning'))
-            .margin({ left: 6 })
-        }
-        .width('100%')
-        .margin({ top: 8 })
-        .alignItems(VerticalAlign.Center)
-      }
-
-      Row() {
-        Button($r('app.string.reject'))
-          .type(ButtonType.Capsule)
-          .height(38)
-          .backgroundColor($r('sys.color.ohos_id_color_component_normal'))
-          .fontColor($r('sys.color.ohos_id_color_text_primary'))
-          .enabled(this.interactive())
-          .onClick((): void => {
-            this.onReject();
-          })
-        Button($r('app.string.allow_once'))
-          .type(ButtonType.Capsule)
-          .height(38)
-          .margin({ left: 8 })
-          .enabled(this.interactive())
-          .onClick((): void => {
-            this.onAllowOnce();
-          })
-      }
-      .width('100%')
-      .margin({ top: 8 })
-      .justifyContent(FlexAlign.End)
-
-      // 冻结态（`DECIDING`）：用户已经点过「允许一次 / 拒绝」，按钮不能再点第二次
-      // （重复提交会让内核收到两条互相矛盾的裁决）。这里照抄源工程：两个回调都传空，
-      // 只把 `deciding` 置真，让面板自己把按钮置灰并显示转圈。
-      if (this.deciding) {
-        Text($r('app.string.approval_loading'))
-          .fontSize(12)
-          .fontColor($r('sys.color.ohos_id_color_text_secondary'))
-          .width('100%')
-          .margin({ top: 6 })
-      }
-    }
-    .width('100%')
-    .padding({ left: 12, right: 12, top: 10, bottom: 10 })
-    .borderRadius(10)
-    .backgroundColor($r('sys.color.ohos_id_color_sub_background'))
-    .border({
-      width: 1,
-      color: this.fullAccess()
-        ? $r('sys.color.ohos_id_color_warning')
-        : $r('sys.color.ohos_id_color_list_separator'),
-    })
-  }
-}
-
-/** 聊天详情页：头部 + 待办 + 消息流 + 问答 + 思考条 + 审批/输入区 + 两个面板。 */
+/** 聊天详情页（装配层）：头部面板宿主 + 待办 + 消息流 + 问答 + 思考条 + 审批 / 输入区。 */
 @Component
 export struct ChatDetail {
   /** 窄屏时显示返回键（宽屏详情常驻，没有「返回列表」这回事）。 */
@@ -586,32 +194,6 @@ export struct ChatDetail {
       }
     }
     return null;
-  }
-
-  private hostContext(): common.Context | undefined {
-    return this.getUIContext().getHostContext();
-  }
-
-  /** 无参资源 → 字符串（只在必须拿 string 的场合用：系统弹窗、字符串拼接）。 */
-  private resText(res: Resource): string {
-    const ctx: common.Context | undefined = this.hostContext();
-    if (ctx === undefined) {
-      return '';
-    }
-    return ctx.resourceManager.getStringSync(res.id);
-  }
-
-  /** 参数化资源 → 字符串。 */
-  private fmt1(res: Resource, arg: string | number): string {
-    const ctx: common.Context | undefined = this.hostContext();
-    if (ctx === undefined) {
-      return '';
-    }
-    return ctx.resourceManager.getStringSync(res.id, arg);
-  }
-
-  private toast(text: string): void {
-    this.getUIContext().getPromptAction().showToast({ message: text });
   }
 
   // ————————————————— 消息流 —————————————————
@@ -705,13 +287,6 @@ export struct ChatDetail {
     return count;
   }
 
-  private refreshHistory(): void {
-    const vm: HarnessViewModel | null = this.vm();
-    if (vm !== null) {
-      void vm.refreshHistory();
-    }
-  }
-
   private loadOlder(): void {
     const vm: HarnessViewModel | null = this.vm();
     if (vm !== null) {
@@ -781,290 +356,6 @@ export struct ChatDetail {
       return;
     }
     vm.setComposerOverlay(composerOverlayActive(this.message, this.st().commands));
-  }
-
-  /** 光标是否落在一个 `@` 提及词里 —— 决定画 `@` 面板还是 `/` 面板（互斥）。 */
-  private mentioning(): boolean {
-    return activeStart(this.message) !== null;
-  }
-
-  /** 会话工作目录**相对授权根**的形态；没有会话时给空串（`absolute` 认这个合法值）。 */
-  private sessionCwd(): string {
-    const session: ChatSession | null = this.currentSession();
-    return session === null ? '' : session.cwd;
-  }
-
-  /** 会话工作目录**绝对**的形态；老服务端可能不给，此时为 null（`absolute` 会降级）。 */
-  private sessionCwdAbsolute(): string | null {
-    const session: ChatSession | null = this.currentSession();
-    return session === null ? null : session.cwdAbsolute;
-  }
-
-  // ————————————————— 头部 —————————————————
-
-  /**
-   * 详情页标题链：`title ?? workspaceTitle ?? (cwd 非空取 cwd，否则取 id)`。
-   * **完整 id，不是列表行的前 12 位**（见文件头判据 1）。
-   */
-  private headerTitle(): string {
-    const session: ChatSession | null = this.currentSession();
-    if (session === null) {
-      return '';
-    }
-    const title: string | null = session.title;
-    if (title !== null) {
-      return title;
-    }
-    const workspaceTitle: string | null = session.workspaceTitle;
-    if (workspaceTitle !== null) {
-      return workspaceTitle;
-    }
-    if (session.cwd.trim().length > 0) {
-      return session.cwd;
-    }
-    return session.id;
-  }
-
-  private permission(): PermissionSelect | null {
-    const history: ChatHistory | null = this.st().history;
-    return history === null ? null : permissionSelectOf(history);
-  }
-
-  private sessionRunning(): boolean {
-    const vm: HarnessViewModel | null = this.vm();
-    return vm === null ? false : vm.selectedSessionRunning();
-  }
-
-  private approvalIsNone(): boolean {
-    return this.st().approvalState.kind === ApprovalUiKind.NONE;
-  }
-
-  /** 插话可用的三条判据（见文件头判据 4）。 */
-  private canSteer(): boolean {
-    return this.approvalIsNone() && this.canWrite()
-      && (canSubmit(this.message, this.canWrite()) || this.st().pendingAttachments.length > 0);
-  }
-
-  /** 权限档位的中文名：值 → 资源，未命中就用服务端给的展示名，再不行用原值。 */
-  private permissionLabel(value: string, fallback: string): string {
-    if (value === 'read-only') {
-      return this.resText($r('app.string.permission_read_only'));
-    }
-    if (value === 'workspace-write') {
-      return this.resText($r('app.string.permission_workspace_write'));
-    }
-    if (value === 'danger-full-access') {
-      return this.resText($r('app.string.permission_full_access'));
-    }
-    if (value === 'custom') {
-      return this.resText($r('app.string.permission_custom'));
-    }
-    return fallback.length > 0 ? fallback : value;
-  }
-
-  private modelSummary(): string {
-    const session: ChatSession | null = this.currentSession();
-    const presets: AgentPreset[] = this.st().agentPresets;
-    let agentName: string = session === null ? '' : (session.agentPreset ?? '');
-    for (let i = 0; i < presets.length; i++) {
-      if (session !== null && presets[i].id === session.agentPreset) {
-        agentName = presets[i].name;
-        break;
-      }
-    }
-    const models = this.st().sessionModels;
-    const provider: string = models === null ? '' : models.current.provider;
-    const model: string = models === null ? '' : models.current.model;
-    const parts: string[] = [];
-    if (agentName.length > 0) {
-      parts.push(agentName);
-    }
-    if (provider.length > 0) {
-      parts.push(provider);
-    }
-    if (model.length > 0) {
-      parts.push(model);
-    }
-    return parts.join(' · ');
-  }
-
-  private modelMenuEnabled(): boolean {
-    const models = this.st().sessionModels;
-    return models !== null && models.routable;
-  }
-
-  /**
-   * `⋯` 菜单项。
-   *
-   * 三项顺序照抄源工程：**模型** → **权限档位** → **插话**。权限那一段在源工程里是
-   * `DropdownMenu` 内嵌的一段（当前值一行 + 每个档位一行），这里压平成同一级菜单
-   * （见文件头差异 3），但档位顺序、`custom` 不显示、`danger-full-access` 走二次确认不变。
-   */
-  private moreMenuItems(): MenuElement[] {
-    const out: MenuElement[] = [];
-    const summary: string = this.modelSummary();
-    out.push({
-      value: summary.length > 0
-        ? `${this.resText($r('app.string.model'))} · ${summary}`
-        : $r('app.string.model'),
-      enabled: this.modelMenuEnabled(),
-      action: (): void => {
-        this.openSheet(SHEET_CONFIG);
-      },
-    });
-
-    const permission: PermissionSelect | null = this.permission();
-    if (permission !== null && permission.options.length > 0) {
-      out.push({
-        value: `${this.resText($r('app.string.access_mode'))} · ${this.permissionLabel(permission.currentValue, '')}`,
-        enabled: false,
-        action: (): void => {
-        },
-      });
-      const permissionEnabled: boolean = this.canWrite() && !this.st().busy;
-      for (let i = 0; i < permission.options.length; i++) {
-        const option: PermissionOption = permission.options[i];
-        if (option.value === 'custom') {
-          continue;
-        }
-        const mark: string = option.value === permission.currentValue ? '✓ ' : '';
-        out.push({
-          value: `${mark}${this.permissionLabel(option.value, option.name)}`,
-          enabled: permissionEnabled,
-          action: (): void => {
-            this.onPermissionPicked(option.value);
-          },
-        });
-      }
-    }
-
-    out.push({
-      value: `${this.resText($r('app.string.steer'))} · ${this.resText($r('app.string.busy_send_mode_steer_desc'))}`,
-      enabled: this.canSteer(),
-      action: (): void => {
-        this.steer();
-      },
-    });
-    return out;
-  }
-
-  /** 权限档位被点中：完整访问要走二次确认，其余直接提交。 */
-  private onPermissionPicked(value: string): void {
-    if (value === 'danger-full-access') {
-      this.fullAccessApprovalId = '';
-      this.fullAccessAck = false;
-      this.openSheet(SHEET_FULL_ACCESS);
-      return;
-    }
-    const vm: HarnessViewModel | null = this.vm();
-    if (vm !== null) {
-      void vm.selectPermissionPreset(value);
-    }
-  }
-
-  /** 插话：固定 steer 提交（不受设置里的「繁忙时默认行为」影响）。 */
-  private steer(): void {
-    const vm: HarnessViewModel | null = this.vm();
-    if (vm !== null && this.canSteer()) {
-      void vm.sendMessage(this.message, true);
-      this.message = '';
-      this.scrollToBottom();
-    }
-  }
-
-  private cancelRun(): void {
-    const vm: HarnessViewModel | null = this.vm();
-    if (vm !== null) {
-      void vm.cancelRun();
-    }
-  }
-
-  @Builder
-  header() {
-    Column() {
-      Row() {
-        if (!this.wide) {
-          Text('←')
-            .fontSize(18)
-            .padding(10)
-            .onClick((): void => {
-              this.onBack();
-            })
-        }
-        Column() {
-          Text(this.headerTitle())
-            .fontSize(16)
-            .fontWeight(FontWeight.Medium)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .width('100%')
-          StatusLabel({
-            label: this.st().eventsConnected ? $r('app.string.online') : $r('app.string.offline'),
-            active: this.st().eventsConnected,
-          })
-          if (this.currentSession() !== null
-            && (this.currentSession() as ChatSession).pendingInteraction === 'approval') {
-            Row() {
-              Text('⚠')
-                .fontSize(12)
-                .fontColor($r('sys.color.ohos_id_color_warning'))
-              Text($r('app.string.awaiting_approval'))
-                .fontSize(12)
-                .fontColor($r('sys.color.ohos_id_color_warning'))
-                .margin({ left: 5 })
-            }
-            .margin({ top: 2 })
-            .alignItems(VerticalAlign.Center)
-          }
-        }
-        .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
-        .margin({ left: this.wide ? 16 : 2 })
-
-        Text('📂')
-          .fontSize(17)
-          .padding(9)
-          .fontColor($r('sys.color.ohos_id_color_text_secondary'))
-          .onClick((): void => {
-            this.openSheet(SHEET_FILES);
-          })
-        Text('↻')
-          .fontSize(17)
-          .padding(9)
-          .fontColor($r('sys.color.ohos_id_color_text_secondary'))
-          .opacity(this.st().busy ? 0.4 : 1)
-          .onClick((): void => {
-            if (!this.st().busy) {
-              this.refreshHistory();
-            }
-          })
-        if (this.currentSession() !== null && (this.currentSession() as ChatSession).running) {
-          Text('✕')
-            .fontSize(17)
-            .padding(9)
-            .fontColor($r('sys.color.ohos_id_color_alert'))
-            .opacity(this.canWrite() ? 1 : 0.4)
-            .onClick((): void => {
-              if (this.canWrite()) {
-                this.cancelRun();
-              }
-            })
-        }
-        Text('⋯')
-          .fontSize(17)
-          .padding(9)
-          .fontColor($r('sys.color.ohos_id_color_text_secondary'))
-          .bindMenu(this.moreMenuItems())
-      }
-      .width('100%')
-      .padding({ left: 8, right: 8, top: 3, bottom: 3 })
-      .alignItems(VerticalAlign.Center)
-
-      Divider()
-        .strokeWidth(1)
-        .color($r('sys.color.ohos_id_color_list_separator'))
-    }
-    .width('100%')
   }
 
   // ————————————————— 待办 —————————————————
@@ -1330,7 +621,15 @@ export struct ChatDetail {
   @Builder
   approvalArea() {
     if (this.st().approvalState.kind === ApprovalUiKind.NONE) {
-      this.composer()
+      ChatComposer({
+        message: $message,
+        onScrollToBottom: (): void => {
+          this.scrollToBottom();
+        },
+        onMessageEdited: (): void => {
+          this.syncComposerOverlay();
+        },
+      })
     } else if (this.st().approvalState.kind === ApprovalUiKind.LOADING) {
       Row() {
         LoadingProgress().width(20).height(20)
@@ -1396,467 +695,36 @@ export struct ChatDetail {
     if (approval.risk === 'full-access') {
       this.fullAccessApprovalId = approval.id;
       this.fullAccessAck = false;
-      this.openSheet(SHEET_FULL_ACCESS);
+      // 面板宿主已拆到 `ChatHeaderPanelHost`（见文件头「拆分说明」）：这里就地写与原
+      // `openSheet(SHEET_FULL_ACCESS)` 等价的两行 —— `sheetKind` / `sheetOpen`
+      // 是与那个子组件双向绑定的 `@Link`，父组件可以直接写。
+      this.sheetKind = SHEET_FULL_ACCESS;
+      this.sheetOpen = true;
       return;
     }
     this.decide(approval, true);
-  }
-
-  /** 二次确认面板按下确认键：审批放行，或切换到完整访问档位。 */
-  private confirmFullAccess(): void {
-    const approvalId: string = this.fullAccessApprovalId;
-    this.closeSheet();
-    if (approvalId.length === 0) {
-      const vm: HarnessViewModel | null = this.vm();
-      if (vm !== null) {
-        void vm.selectPermissionPreset('danger-full-access');
-      }
-      return;
-    }
-    const items: PendingApproval[] = this.st().approvalState.items;
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].id === approvalId) {
-        this.decide(items[i], true);
-        return;
-      }
-    }
-  }
-
-  // ————————————————— 输入区（药丸） —————————————————
-
-  private attachments(): PendingAttachment[] {
-    return this.st().pendingAttachments;
-  }
-
-  private attachmentUploading(): boolean {
-    return this.st().attachmentUploading;
-  }
-
-  private defaultIsSteer(): boolean {
-    return resolveSendMode(this.sessionRunning(), this.st().busySendMode) === SEND_MODE_STEER;
-  }
-
-  /** 可提交 = 有写权限，且（文案可提交 或 有待发附件）。刻意**不**看全局 `busy`。 */
-  private submittable(): boolean {
-    return canSubmit(this.message, this.canWrite())
-      || (this.canWrite() && this.attachments().length > 0);
-  }
-
-  private hint(): ResourceStr {
-    const which: ComposerHint = composerHint(this.sessionRunning(), this.defaultIsSteer());
-    if (which === ComposerHint.RUNNING_STEER) {
-      return $r('app.string.message_hint_running_steer');
-    }
-    if (which === ComposerHint.RUNNING_QUEUE) {
-      return $r('app.string.message_hint_running_queue');
-    }
-    return $r('app.string.message_hint');
-  }
-
-  private attachMenuItems(): MenuElement[] {
-    return [
-      {
-        value: $r('app.string.attachment_pick_image'),
-        action: (): void => {
-          this.pickImageAttachment();
-        },
-      },
-      {
-        value: $r('app.string.attachment_pick_file'),
-        action: (): void => {
-          this.pickFileAttachment();
-        },
-      },
-    ];
-  }
-
-  /**
-   * 选图片。三条与源工程一致：**取消不弹提示**（用户自己关掉的选择器不是错误）、
-   * 超限弹一句明白话、能读回字节才算成功。
-   */
-  private async pickImageAttachment(): Promise<void> {
-    const ctx: common.Context | undefined = this.hostContext();
-    const vm: HarnessViewModel | null = this.vm();
-    if (ctx === undefined || vm === null) {
-      return;
-    }
-    const result: PickResult = await pickImage(ctx, MAX_IMAGE_BYTES);
-    if (result.failure === PickFailureKind.CANCELLED) {
-      return;
-    }
-    if (result.failure === PickFailureKind.TOO_LARGE) {
-      this.toast(this.fmt1($r('app.string.attachment_image_too_large'), formatBytes(result.limitBytes)));
-      return;
-    }
-    if (result.failure !== null || result.file === null) {
-      this.toast(this.resText($r('app.string.attachment_read_failed')));
-      return;
-    }
-    await vm.attachImage(result.file.name, result.file.mediaType, result.file.bytes);
-  }
-
-  private async pickFileAttachment(): Promise<void> {
-    const ctx: common.Context | undefined = this.hostContext();
-    const vm: HarnessViewModel | null = this.vm();
-    if (ctx === undefined || vm === null) {
-      return;
-    }
-    const result: PickResult = await pickFile(ctx, MAX_FILE_BYTES);
-    if (result.failure === PickFailureKind.CANCELLED) {
-      return;
-    }
-    if (result.failure === PickFailureKind.TOO_LARGE) {
-      this.toast(this.fmt1($r('app.string.attachment_file_too_large'), formatBytes(result.limitBytes)));
-      return;
-    }
-    if (result.failure !== null || result.file === null) {
-      this.toast(this.resText($r('app.string.attachment_read_failed')));
-      return;
-    }
-    await vm.attachFile(result.file.name, result.file.bytes);
-  }
-
-  private removeAttachment(id: string): void {
-    const vm: HarnessViewModel | null = this.vm();
-    if (vm !== null) {
-      vm.removePendingAttachment(id);
-    }
-  }
-
-  /** 提交：发送成功后立刻清空输入框（清空后 `submittable()` 自然为假，不必另设防重复提交）。 */
-  private submit(steer: boolean): void {
-    const vm: HarnessViewModel | null = this.vm();
-    if (vm === null || !this.submittable()) {
-      return;
-    }
-    const text: string = this.message;
-    this.message = '';
-    this.scrollToBottom();
-    void vm.sendMessage(text, steer);
-  }
-
-  /**
-   * 输入框上方的补全面板（`@` 文件 / `/` 命令），**两者互斥**。
-   *
-   * 源工程把这两个面板放在药丸**上方**的同一个 `Column` 里，并按「`@` 提及活跃优先、
-   * 否则画命令面板」的顺序：同一时刻不可能两个都成立（`/` 只在整行以斜杠开头时出，
-   * `@` 只在光标落在提及词里时出）。万一将来判据放宽，这里先立规矩 —— 斜杠优先，
-   * 避免两个列表叠在一起。
-   *
-   * 面板的过滤 / 排序 / 限量 / 路径拼接全在 core（见 `core/ComposerSuggestions.ts`、
-   * `core/MentionQuery.ts`），本组件只负责把选中结果写回输入框。
-   */
-  @Builder
-  suggestionsArea() {
-    if (this.mentioning()) {
-      MentionSuggestions({
-        value: this.message,
-        entries: this.st().mentionEntries,
-        failed: this.st().mentionFailed,
-        cwd: this.sessionCwd(),
-        cwdAbsolute: this.sessionCwdAbsolute(),
-        onSelect: (inserted: string): void => {
-          // 只替换「@…末尾」那一段：用户很可能已经写了半句「帮我看看 @xxx」，
-          // 整行替换会把前半句吃掉（见 `MentionQuery.applySelection`）。
-          this.message = applySelection(this.message, inserted);
-        },
-      })
-    } else {
-      CommandSuggestions({
-        value: this.message,
-        commands: this.st().commands,
-        onSelect: (inserted: string): void => {
-          // 命令面板只在整行以 `/` 开头时出现，所以这里是**整行替换**而不是追加。
-          this.message = inserted;
-        },
-      })
-    }
-  }
-
-  /**
-   * 输入药丸：附件条（可横向滚）+ 加号 / 输入框 / 圆形发送键。
-   *
-   * 三处照抄：① 底部对齐（输入框长高时 `+` 与发送键落在底部，不飘在半空）；
-   * ② 不可发送时发送键是**透明底 + 灰字**，不是整体压透明度（压了会连底色一起淡掉，
-   * 看着像残废控件）；③ 运行中才把软键盘回车变成「发送」，空闲时保持换行 ——
-   * 换行键也会派发 Enter 事件，所以不能拿 Enter 当发送（源工程注释里专门写过这一条）。
-   */
-  @Builder
-  composer() {
-    Column() {
-      this.suggestionsArea()
-      Column() {
-        if (this.attachments().length > 0 || this.attachmentUploading()) {
-          Scroll() {
-            Row() {
-              ForEach(this.attachments(), (attachment: PendingAttachment) => {
-                Row() {
-                  if (attachment.imageBytes !== null) {
-                    AttachmentThumb({ bytes: attachment.imageBytes as Uint8Array })
-                  } else {
-                    Text('📄')
-                      .fontSize(14)
-                      .fontColor($r('sys.color.ohos_id_color_text_secondary'))
-                  }
-                  Column() {
-                    Text(attachment.name)
-                      .fontSize(12)
-                      .maxLines(1)
-                      .textOverflow({ overflow: TextOverflow.Ellipsis })
-                      .width('100%')
-                    Text(formatBytes(attachment.sizeBytes))
-                      .fontSize(10)
-                      .fontColor($r('sys.color.ohos_id_color_text_secondary'))
-                      .width('100%')
-                  }
-                  .layoutWeight(1)
-                  .alignItems(HorizontalAlign.Start)
-                  .margin({ left: 6 })
-
-                  Text('✕')
-                    .fontSize(12)
-                    .padding({ left: 6, right: 2 })
-                    .fontColor($r('sys.color.ohos_id_color_text_secondary'))
-                    .onClick((): void => {
-                      this.removeAttachment(attachment.id);
-                    })
-                }
-                .padding({ left: 5, right: 3, top: 3, bottom: 3 })
-                .borderRadius(6)
-                .backgroundColor($r('sys.color.ohos_id_color_component_normal'))
-                .alignItems(VerticalAlign.Center)
-                .constraintSize({ maxWidth: 200 })
-              }, (attachment: PendingAttachment) => attachment.id)
-
-              if (this.attachmentUploading()) {
-                Row() {
-                  LoadingProgress().width(15).height(15)
-                  Text($r('app.string.attachment_uploading'))
-                    .fontSize(11)
-                    .fontColor($r('sys.color.ohos_id_color_text_secondary'))
-                    .margin({ left: 6 })
-                }
-                .padding({ left: 4, right: 4 })
-                .alignItems(VerticalAlign.Center)
-              }
-            }
-          }
-          .scrollable(ScrollDirection.Horizontal)
-          .width('100%')
-          .padding({ top: 3, bottom: 1 })
-          .scrollBar(BarState.Off)
-        }
-
-        Row() {
-          if (this.canWrite()) {
-            Text('＋')
-              .fontSize(20)
-              .width(34)
-              .height(34)
-              .textAlign(TextAlign.Center)
-              .fontColor($r('sys.color.ohos_id_color_text_secondary'))
-              .bindMenu(this.attachMenuItems())
-          }
-
-          TextArea({ text: this.message, placeholder: this.hint() })
-            .layoutWeight(1)
-            .constraintSize({ minHeight: 44, maxHeight: 120 })
-            .fontSize(14)
-            .backgroundColor(Color.Transparent)
-            .borderRadius(0)
-            .margin({ left: 4, right: 4 })
-            .enterKeyType(this.sessionRunning() ? EnterKeyType.Send : EnterKeyType.NEW_LINE)
-            .onChange((value: string): void => {
-              this.message = value;
-            })
-            .onSubmit((): void => {
-              if (this.submittable() && this.sessionRunning()) {
-                this.submit(this.defaultIsSteer());
-              }
-            })
-
-          Text('➤')
-            .fontSize(16)
-            .width(34)
-            .height(34)
-            .textAlign(TextAlign.Center)
-            .borderRadius(17)
-            .backgroundColor(this.submittable()
-              ? $r('sys.color.ohos_id_color_emphasize')
-              : Color.Transparent)
-            .fontColor(this.submittable()
-              ? $r('sys.color.ohos_id_color_foreground_contrary')
-              : $r('sys.color.ohos_id_color_text_secondary'))
-            .onClick((): void => {
-              this.submit(this.defaultIsSteer());
-            })
-        }
-        .width('100%')
-        .alignItems(VerticalAlign.Bottom)
-        // 真机实测：这一行会被上游压到 22vp（里面的 ＋/➤ 声明 34vp 却只剩 12.5vp、
-        // 输入框连自己声明的 minHeight 44vp 都保不住），表现就是「输入框只剩一条缝」。
-        // 用 minHeight 把下限钉死 —— 空间不够时宁可让它挤别处，也不许把输入区压瘪。
-        .constraintSize({ minHeight: 48 })
-      }
-      .width('100%')
-      .padding({ left: 4, right: 4, top: 3, bottom: 3 })
-      .borderRadius(22)
-      .backgroundColor($r('sys.color.ohos_id_color_sub_background'))
-      .border({ width: 1, color: $r('sys.color.ohos_id_color_list_separator') })
-    }
-    .width('100%')
-    .padding({ left: 8, right: 8, top: 3, bottom: 3 })
-  }
-
-  // ————————————————— 面板宿主 —————————————————
-
-  private openSheet(kind: number): void {
-    this.sheetKind = kind;
-    this.sheetOpen = true;
-  }
-
-  private closeSheet(): void {
-    this.sheetOpen = false;
-  }
-
-  /** 面板高度：完整体验优先，内容最少的那块（全访问确认）给够即可。 */
-  private sheetHeight(): SheetSize | number {
-    // 会话配置面板（`SHEET_CONFIG`）用 `FIT_CONTENT`：内容是「Agent 预设 + 各 provider 的
-    // 模型清单」，长度随 provider 数量浮动。原先用 `SheetSize.LARGE`（近全屏）时，只有
-    // 一个 provider 的会话会在面板下半部留出近半屏空白（真机截图实证，见 PORT-MAP 坑 20）
-    // —— 源工程的 Compose `ModalBottomSheet` 默认就是**按内容自适应高度**，`FIT_CONTENT`
-    // 才是对位写法；内容长了它同样会撑满并滚动。
-    // 全访问二次确认面板是固定短内容（一个勾选框 + 两行文案），继续用固定高度 380。
-    return this.sheetKind === SHEET_FULL_ACCESS ? 380 : SheetSize.FIT_CONTENT;
-  }
-
-  private openSessionFile(path: string): void {
-    const vm: HarnessViewModel | null = this.vm();
-    if (vm !== null) {
-      void vm.openSessionFile(path);
-    }
-  }
-
-  private closeSessionFile(): void {
-    const vm: HarnessViewModel | null = this.vm();
-    if (vm !== null) {
-      vm.closeSessionFile();
-    }
-  }
-
-  @Builder
-  sheetContent() {
-    Column() {
-      if (this.sheetKind === SHEET_FILES) {
-        SessionFilesSheet({
-          history: this.st().history,
-          open: this.st().sessionFileOpen,
-          sessionId: this.selectedId(),
-          onOpen: (path: string): void => {
-            this.openSessionFile(path);
-          },
-          onBack: (): void => {
-            this.closeSessionFile();
-          },
-          // 「打开目录」= 切到「文件」分节并就地浏览该目录。
-          //
-          // 会话页拿不到分节状态（`AppShell.section` 是外壳自己的局部 state，没有路由参数可用），
-          // 所以走 `AppRuntime.requestFilesSection()`：它在 `AppStorage` 里发一个递增序号，
-          // 外壳用 `@StorageLink + @Watch` 收到后切分节。
-          //
-          // 顺序很关键：**先把目录读好再发请求**。反过来的话外壳切过去时
-          // `directory` 还是上一个目录的旧列表，用户会看到"点了目录却停在原地"。
-          onOpenDirectory: (rootId: string, path: string): void => {
-            const vm: HarnessViewModel | null = this.vm();
-            if (vm === null) {
-              return;
-            }
-            // 面板是同一次交互的一部分，跳走之前先关掉它，否则切完分节还会挂在上面。
-            // 关面板要动的是 `sheetOpen`（`sheetKind` 只是分派标，它管不了显隐）。
-            this.sheetOpen = false;
-            requestFilesSection();
-            void vm.revealDirectory(rootId, path);
-          },
-        })
-      } else if (this.sheetKind === SHEET_CONFIG) {
-        SessionConfigSheet({
-          onSelectAgent: (id: string): void => {
-            const vm: HarnessViewModel | null = this.vm();
-            if (vm !== null) {
-              void vm.selectAgentPreset(id);
-            }
-          },
-          onSelectModel: (selection: ModelSelection): void => {
-            const vm: HarnessViewModel | null = this.vm();
-            if (vm !== null) {
-              void vm.selectModel(selection);
-            }
-          },
-        })
-      } else {
-        Column() {
-          Text($r('app.string.permission_full_access_title'))
-            .fontSize(18)
-            .fontWeight(FontWeight.Medium)
-            .width('100%')
-          Text($r('app.string.permission_full_access_warning'))
-            .fontSize(13)
-            .fontColor($r('sys.color.ohos_id_color_text_secondary'))
-            .width('100%')
-            .margin({ top: 10 })
-          Row() {
-            Checkbox({ name: 'fullAccessAck' })
-              .select(this.fullAccessAck)
-              .onChange((checked: boolean): void => {
-                this.fullAccessAck = checked;
-              })
-            Text($r('app.string.permission_full_access_ack'))
-              .fontSize(13)
-              .layoutWeight(1)
-              .margin({ left: 4 })
-          }
-          .width('100%')
-          .margin({ top: 12 })
-          .alignItems(VerticalAlign.Center)
-
-          Row() {
-            Button($r('app.string.close'))
-              .type(ButtonType.Capsule)
-              .layoutWeight(1)
-              .height(44)
-              .backgroundColor($r('sys.color.ohos_id_color_component_normal'))
-              .fontColor($r('sys.color.ohos_id_color_text_primary'))
-              .onClick((): void => {
-                this.closeSheet();
-              })
-            Button($r('app.string.enable_full_access'))
-              .type(ButtonType.Capsule)
-              .layoutWeight(1)
-              .height(44)
-              .margin({ left: 10 })
-              .enabled(this.fullAccessAck)
-              .onClick((): void => {
-                this.confirmFullAccess();
-              })
-          }
-          .width('100%')
-          .margin({ top: 18 })
-        }
-        .width('100%')
-        .height('100%')
-        .alignItems(HorizontalAlign.Start)
-      }
-    }
-    .width('100%')
-    .height('100%')
-    .padding({ left: 18, right: 18, top: 8, bottom: 16 })
-    .backgroundColor($r('sys.color.ohos_id_color_sub_background'))
   }
 
   // ————————————————— 顶层 —————————————————
 
   build() {
     Column() {
+      ChatHeaderPanelHost({
+        wide: this.wide,
+        onBack: this.onBack,
+        message: $message,
+        sheetOpen: $sheetOpen,
+        sheetKind: $sheetKind,
+        fullAccessApprovalId: $fullAccessApprovalId,
+        fullAccessAck: $fullAccessAck,
+        onDecide: (approval: PendingApproval, allowOnce: boolean): void => {
+          this.decide(approval, allowOnce);
+        },
+        onScrollToBottom: (): void => {
+          this.scrollToBottom();
+        },
+      })
+
       if (this.currentSession() === null) {
         Column() {
           Text('💬').fontSize(30)
@@ -1869,8 +737,6 @@ export struct ChatDetail {
         .layoutWeight(1)
         .justifyContent(FlexAlign.Center)
       } else {
-        this.header()
-
         if (this.todos().length > 0) {
           this.todoPanel()
         }
@@ -1893,47 +759,5 @@ export struct ChatDetail {
     }
     .width('100%')
     .height('100%')
-    // 一个面板宿主（见文件头差异 1）。`isShow` 走单向：用户下拉关掉时靠 `onDisappear`
-    // 复位标志，否则标志会留在 true，下一次再设 true 就不再触发。
-    .bindSheet(this.sheetOpen, this.sheetContent(), {
-      height: this.sheetHeight(),
-      dragBar: true,
-      onDisappear: (): void => {
-        this.sheetOpen = false;
-      },
-    })
-  }
-}
-
-/**
- * 附件条上的图片缩略图。
- *
- * 单成一个组件是因为解码必须落在 `aboutToAppear`：`@Builder` 里不能声明局部变量，
- * 写在表达式里就会每帧重解一次图。
- */
-@Component
-struct AttachmentThumb {
-  bytes: Uint8Array = new Uint8Array();
-
-  @State thumb: PixelMap | null = null;
-
-  aboutToAppear(): void {
-    this.thumb = decodeImageSync(this.bytes);
-  }
-
-  build() {
-    if (this.thumb !== null) {
-      Image(this.thumb)
-        .width(28)
-        .height(28)
-        .borderRadius(4)
-        .objectFit(ImageFit.Cover)
-    } else {
-      Text('🖼')
-        .fontSize(14)
-        .width(28)
-        .textAlign(TextAlign.Center)
-        .fontColor($r('sys.color.ohos_id_color_text_secondary'))
-    }
   }
 }

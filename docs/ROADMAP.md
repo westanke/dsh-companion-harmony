@@ -18,8 +18,9 @@
 | # | 任务 | 验收判据 | 阻塞 |
 |---|---|---|---|
 | 1 | 真机复测**坑 23**（表格列宽不断英文词） | 含 `bundleName` 的表格整词折行、不出现 `bundleNam` / `e`；长表横向滚动仍可用 | **设备已断开** |
-| 2 | 重截上架截图第 3 张 | 表格渲染正常，入 `docs/screenshots/03-chat-markdown.png` | 同上 |
-| 3 | 按需重出正式版 `.app` | 含坑 23 修复，里外双签通过 `verify-app` | 取决于用户是否已上传 |
+| 2 | 真机复测**坑 24**（`/` 命令面板） | 输入 `/` 立刻列出服务端命令、补前缀被过滤、打参数后收起 | 同上 |
+| 3 | 重截上架截图第 3 张 | 表格渲染正常，入 `docs/screenshots/03-chat-markdown.png` | 同上 |
+| 4 | 按需重出正式版 `.app` | 含坑 23 / 坑 24 修复，里外双签通过 `verify-app` | 取决于用户是否已上传 |
 
 ## 下一阶段
 
@@ -30,14 +31,18 @@
 
 ### 1.1.0（拆债）
 
-按 `TECH-DEBT.md` 在册 7 个文件逐项拆解，验收判据：**拆后每文件 ≤ 1 000 行且用例数不降**。
+**本轮已提前完成**：按 `TECH-DEBT.md` 在册 7 个文件**逐项拆分至「约 900 行」**，
+对外接口与行为不变（`BUILD SUCCESSFUL` + `531 用例全绿`，用例数未降），7 文件全部退出台账。
+详见 `docs/CHANGELOG.md` `[未发布]` 与 `docs/PORT-MAP.md` §1 新结构树。
+4 个子 ViewModel 的**语义切分**（`ConnectionViewModel` / `ChatViewModel` / `FilesViewModel` /
+`PluginsViewModel`）未做 —— 本轮拆的是**文件**（`HarnessViewModel` 继承链），不是**对象**。
 
-| 优先 | 目标 | 判据 |
-|---|---|---|
-| 高 | `core/HarnessViewModel.ts` 3 345 行 | 拆出 4 个子 ViewModel，对外接口（`harnessVm()` / `harnessState()`）不变 |
-| 中 | `ui/ChatDetail.ets` 1 939 行 | 拆出 Composer / Timeline / Sheets，`ChatDetail` 只做编排 |
-| 中 | `ui/ChatMessage.ets` 1 099 行 | 拆出 `MarkdownView` / `MarkdownTableView`，表格逻辑独立可测 |
-| 低 | 其余 4 个（`Models` / `ChatPresentation` / `FilesScreen` / `ChatScreen`） | 同上 |
+| 优先 | 目标 | 判据 | 状态 |
+|---|---|---|---|
+| 高 | `core/HarnessViewModel.ts` 3 345 行 | 9 文件继承链，对外接口（`harnessVm()` / `harnessState()`）不变 | ✅ 已拆（最大 779 行）|
+| 中 | `ui/ChatDetail.ets` 1 939 行 | 头部 / 输入区 / 三面板各自成文件，`ChatDetail` 只做编排 | ✅ 已拆 |
+| 中 | `ui/ChatMessage.ets` 1 099 行 | 拆出 `MarkdownView` / `MessageParts` | ✅ 已拆 |
+| 低 | 其余 4 个（`Models` / `ChatPresentation` / `FilesScreen` / `ChatScreen`） | 同上 | ✅ 已拆 |
 
 同时清 `DEBT-003`（`ModelsScreen` 与 `ModelSheet` 合并去重、`DshClient` REST/WS 分层）。
 

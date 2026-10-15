@@ -1,0 +1,491 @@
+/**
+ * 消息气泡的各个「零件」—— 从 `ui/ChatMessage.ets` 拆出（见该文件头的「拆分说明」）。
+ *
+ * 装的是**被 `ChatMessageView` 组装起来的小组件**，彼此之间只有"嵌套"一种关系：
+ *
+ * | 组件 | 管什么 | 对应源工程 |
+ * |---|---|---|
+ * | `GenUiSegment` | 一个 dsh-ui 片段的解析与渲染 | `GenUiSegment` |
+ * | `GenUiDebugLine` | dsh-ui 诊断行（设置里开开关才出现） | `GenUiDebugLine` |
+ * | `AttachmentImage` | 单张附件图（先解码再画） | `AttachmentNotice` 的图片支 |
+ * | `MessageAttachments` | 一条消息的图片列表 | `MessageAttachments` |
+ * | `TurnFailureRow` | 一轮运行的终局失败行 | `TurnFailureRow` |
+ * | `ToolTextBlock` | 可滚动可复制的等宽文本（工具输入/输出） | `ToolTextBlock` |
+ * | `ToolCallDetailBlock` | 一条工具调用的详情块 | `ToolCallDetailBlock` |
+ *
+ * 三条照抄源工程、不许简化的判据（原在 `ChatMessage.ets` 文件头，随代码挪来）：
+ *
+ * 1. **图片要先解码**（`platform/ImageCodec.ets`）。ArkUI 的 `Image()` 不接受原始字节，
+ *    只认 `PixelMap`；解码放在 `AttachmentImage.aboutToAppear`，解不出来就显示
+ *    「这张图片无法显示」（对应源工程 `BitmapFactory` 返回 null 的那一支）。
+ * 2. **工具行的「把失败显示在折叠态」**：用户点开详情最主要的理由就是「刚才那条命令
+ *    报了什么错」，所以 `failed` 时折叠态也要有红色「失败」两字与感叹号图标。
+ * 3. **`tool.result == null` 与 `tool.result == ""` 是两种状态**（还没有结果 / 结果为空），
+ *    文案不同，不能合并成一个分支。
+ *
+ * 这些组件原先不带 `export`（只给同文件的 `ChatMessageView` 用），拆开后都改成
+ * `export struct` —— 跨文件的引用必须显式导出，这是拆分的机械代价，不是语义变化。
+ */
+
+import {
+  ChatAttachment, ChatDisplayItem, ChatTurnFailure, formatToolDuration, prettyToolArguments,
+  ToolCallDetail,
+} from '../core/ChatPresentation';
+import { GenUiDiagnosis, diagnoseGenUi, GenUiSpec, parseGenUi } from '../core/GenUiBlocks';
+import { localizedErrorText } from '../core/ErrorMessages';
+import { GenUiCard } from './GenUiCard';
+import { MarkdownView } from './MarkdownView';
+import { writeClipboardText } from '../platform/Clipboard';
+import { decodeImageSync } from '../platform/ImageCodec';
+import { systemLanguageTag } from '../platform/Platform';
+
+/**
+ * 一个 dsh-ui 片段。
+ *
+ * 单独成一个组件而不是内联在 `AssistantBody` 里，是为了让「解析一次」这件事落在
+ * `aboutToAppear` 上：`@Builder` 里不能声明局部变量，写在表达式里就得解析两遍
+ * （一次判空、一次传参）。
+ */
+@Component
+export struct GenUiSegment {
+  json: string = '';
+  onAnswer: (text: string) => void = (): void => {};
+
+  @State spec: GenUiSpec | null = null;
+
+  aboutToAppear(): void {
+    this.spec = parseGenUi(this.json);
+  }
+
+  build() {
+    Column() {
+      if (this.spec !== null) {
+        GenUiCard({ spec: this.spec as GenUiSpec, onAnswer: this.onAnswer })
+      } else {
+        // 解析失败不吞内容：回落成代码块，用户至少还能看到原文（与源工程一致）。
+        MarkdownView({ body: `\`\`\`json\n${this.json}\n\`\`\`` })
+      }
+    }
+    .width('100%')
+  }
+}
+/**
+ * dsh-ui 诊断行（只在设置里打开开关时出现）。
+ *
+ * 点一下在「摘要 / 全文」之间切换：一行灰字塞不下全部信息，但用户截图发回来就够了，
+ * 所以摘要页也必须能展开 —— 否则最关键的那句报错会被截断掉，等于白测。
+ */
+@Component
+export struct GenUiDebugLine {
+  diagnosis: GenUiDiagnosis = new GenUiDiagnosis('', '');
+
+  @State expanded: boolean = false;
+
+  private copyAll(): void {
+    writeClipboardText(this.diagnosis.details);
+    this.getUIContext().getPromptAction().showToast({ message: $r('app.string.copied') });
+  }
+
+  build() {
+    Column() {
+      Text(this.diagnosis.summary)
+        .fontSize(11)
+        .fontColor($r('sys.color.ohos_id_color_text_secondary'))
+        .width('100%')
+      if (this.expanded) {
+        Text(this.diagnosis.details)
+          .fontSize(11)
+          .fontColor($r('sys.color.ohos_id_color_text_secondary'))
+          .margin({ top: 2 })
+          .width('100%')
+          .copyOption(CopyOptions.LocalDevice)
+      }
+    }
+    .width('100%')
+    .margin({ top: 4 })
+    .onClick((): void => {
+      this.expanded = !this.expanded;
+    })
+    .gesture(GestureGroup(GestureMode.Parallel, LongPressGesture().onAction((): void => {
+      this.copyAll();
+    })))
+  }
+}
+/**
+ * 一张会话图片。
+ *
+ * 三态是刻意的：**下载中**显示占位、**失败**显示可读的原因、**成功**显示图片。
+ * 少了中间态，慢网络下用户会以为图丢了；把失败也当成「还在加载」，用户会一直等下去。
+ *
+ * 解码失败（字节取到了但不是有效图片）单独区分：那说明数据有问题，与网络无关，
+ * 提示也不该让用户去重试网络。
+ */
+@Component
+export struct AttachmentImage {
+  attachmentId: string = '';
+  bytes: Uint8Array | null = null;
+  mediaType: string = '';
+  failure: string | null = null;
+  onLoad: (id: string) => void = (): void => {};
+
+  @State pixelMap: PixelMap | null = null;
+
+  aboutToAppear(): void {
+    if (this.bytes !== null) {
+      this.pixelMap = decodeImageSync(this.bytes);
+      return;
+    }
+    // 还没有字节也没有失败 → 请求一次。`HarnessViewModel.loadAttachmentImage` 自带
+    // 「已经在读」「已经拿到」「已经记死失败」三重闸，重复调用不会打穿服务端。
+    if (this.failure === null) {
+      this.onLoad(this.attachmentId);
+    }
+  }
+
+  build() {
+    Column() {
+      if (this.pixelMap !== null) {
+        Image(this.pixelMap)
+          .objectFit(ImageFit.Contain)
+          .constraintSize({ maxWidth: 260, maxHeight: 340 })
+          .borderRadius(8)
+      } else if (this.bytes !== null) {
+        Text($r('app.string.attachment_undecodable'))
+          .fontSize(11)
+          .fontColor($r('sys.color.ohos_id_color_text_secondary'))
+      } else if (this.failure !== null) {
+        Text(this.failure)
+          .fontSize(11)
+          .fontColor($r('sys.color.ohos_id_color_text_secondary'))
+          .constraintSize({ maxWidth: 260 })
+      } else {
+        Column() {
+          LoadingProgress()
+            .width(20)
+            .height(20)
+            .color($r('sys.color.ohos_id_color_text_secondary'))
+        }
+        .width(88)
+        .height(88)
+        .borderRadius(6)
+        .backgroundColor($r('sys.color.ohos_id_color_component_normal'))
+        .justifyContent(FlexAlign.Center)
+      }
+    }
+    .alignItems(HorizontalAlign.End)
+  }
+}
+/** 一条消息附带的图片列表。 */
+@Component
+export struct MessageAttachments {
+  attachments: ChatAttachment[] = [];
+  /** 已取到的字节，按 attachmentId 索引。 */
+  images: Map<string, Uint8Array> = new Map();
+  /** 取图失败的原因（已本地化），按 attachmentId 索引。 */
+  failures: Map<string, string> = new Map();
+  onLoadImage: (id: string) => void = (): void => {};
+
+  private bytesOf(id: string): Uint8Array | null {
+    const found: Uint8Array | undefined = this.images.get(id);
+    return found === undefined ? null : found;
+  }
+
+  private failureOf(id: string): string | null {
+    const found: string | undefined = this.failures.get(id);
+    return found === undefined ? null : found;
+  }
+
+  /**
+   * ForEach 的键必须把「拿到字节 / 记下失败」也编进去。
+   *
+   * 只用 `attachmentId` 当键的话，字节到达时键不变，ArkUI 会**跳过**该子组件的重建，
+   * 于是图片永远显示成加载中 —— 这是本页最容易踩、且看起来最像「后端没返回」的一个坑。
+   */
+  private keyOf(id: string): string {
+    if (this.images.has(id)) {
+      return `${id}:bytes`;
+    }
+    if (this.failures.has(id)) {
+      return `${id}:fail`;
+    }
+    return `${id}:loading`;
+  }
+
+  build() {
+    Column() {
+      if (this.attachments.length > 0) {
+        ForEach(this.attachments, (attachment: ChatAttachment) => {
+          AttachmentImage({
+            attachmentId: attachment.attachmentId,
+            bytes: this.bytesOf(attachment.attachmentId),
+            mediaType: attachment.mediaType,
+            failure: this.failureOf(attachment.attachmentId),
+            onLoad: this.onLoadImage,
+          })
+        }, (attachment: ChatAttachment) => this.keyOf(attachment.attachmentId))
+      }
+    }
+    .width('100%')
+    .margin({ top: 4 })
+    .alignItems(HorizontalAlign.End)
+  }
+}
+/**
+ * 一轮模型运行的终局失败行（源工程 `TurnFailureRow`）。
+ *
+ * 三行信息各自有用，缺一行就得靠猜：
+ * - 标题：「本轮运行失败」/「任务已停止」（后者是登出，不是模型故障）；
+ * - 正文：服务端的原话（429 限流那句话就在这里）；命中本地错误码表时换成中文句子；
+ * - 错误码：**照原样显示，空串也占位**（行高不忽高忽低）。
+ */
+@Component
+export struct TurnFailureRow {
+  failure: ChatTurnFailure = new ChatTurnFailure();
+
+  private headline(): ResourceStr {
+    return this.failure.stopped ? $r('app.string.turn_stopped_title') : $r('app.string.turn_failed_title');
+  }
+
+  /**
+   * 正文：命中错误码表就用本地化句子，否则退回内核原文（英文，但至少是信息，也方便贴给开发者）。
+   *
+   * 与源工程一致：**标题与正文都不写死在数据层** —— 那里以前写死中文，英文界面下照样弹中文。
+   */
+  private detail(): string {
+    const localized: string | null = localizedErrorText(this.failure.code, systemLanguageTag());
+    return localized === null ? this.failure.message : localized;
+  }
+
+  /**
+   * 复制的是**内容**而不是标题：用户把这段贴给别人时，标题（「本轮运行失败」）
+   * 不含任何信息，一句服务端原话加上错误码才是现场。所以标题行不进来。
+   */
+  private copyAll(): void {
+    const lines: string[] = [];
+    if (this.detail().length > 0) {
+      lines.push(this.detail());
+    }
+    if (this.failure.code !== null && this.failure.code.length > 0) {
+      lines.push(this.failure.code);
+    }
+    writeClipboardText(lines.join('\n'));
+    this.getUIContext().getPromptAction().showToast({ message: $r('app.string.copied') });
+  }
+
+  build() {
+    Column() {
+      Row() {
+        Text('⚠')
+          .fontSize(16)
+          .fontColor($r('sys.color.ohos_id_color_alert'))
+        Text(this.headline())
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('sys.color.ohos_id_color_alert'))
+          .margin({ left: 7 })
+        if (this.failure.code !== null && this.failure.code.length > 0) {
+          Text(this.failure.code)
+            .fontSize(11)
+            .fontColor($r('sys.color.ohos_id_color_text_secondary'))
+            .margin({ left: 6 })
+        }
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      if (this.detail().length > 0) {
+        Text(this.detail())
+          .fontSize(12)
+          .fontColor($r('sys.color.ohos_id_color_text_secondary'))
+          .width('100%')
+          .margin({ top: 2 })
+          .copyOption(CopyOptions.LocalDevice)
+      }
+    }
+    .width('100%')
+    .padding({ left: 4, right: 4, top: 4, bottom: 4 })
+    .alignItems(HorizontalAlign.Start)
+    .gesture(GestureGroup(GestureMode.Parallel, LongPressGesture().onAction((): void => {
+      this.copyAll();
+    })))
+  }
+}
+/**
+ * 一段可滚动、可复制、等宽显示的工具文本（输入或输出）。
+ *
+ * 两个轴都要能滚：终端输出经常是「很宽的一行 + 很多行」，只给纵向滚动的话宽行会被
+ * 硬折行，缩进层次就全乱了。ArkUI 的一个 `Scroll` 只支持单方向，所以纵向套横向。
+ */
+@Component
+struct ToolTextBlock {
+  label: ResourceStr = '';
+  text: string = '';
+  isError: boolean = false;
+  maxHeightVp: number = 160;
+
+  private accent(): ResourceStr {
+    return this.isError ? $r('sys.color.ohos_id_color_alert') : $r('sys.color.ohos_id_color_list_separator');
+  }
+
+  private copy(): void {
+    writeClipboardText(this.text);
+    this.getUIContext().getPromptAction().showToast({ message: $r('app.string.copied') });
+  }
+
+  build() {
+    Column() {
+      Row() {
+        Text(this.label)
+          .fontSize(11)
+          .fontWeight(this.isError ? FontWeight.Medium : FontWeight.Normal)
+          .fontColor(this.isError
+            ? $r('sys.color.ohos_id_color_alert')
+            : $r('sys.color.ohos_id_color_text_secondary'))
+          .layoutWeight(1)
+        Text($r('app.string.tool_detail_copy'))
+          .fontSize(11)
+          .fontColor($r('sys.color.ohos_id_color_text_primary_activated'))
+          .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+          .onClick((): void => {
+            this.copy();
+          })
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      Scroll() {
+        Scroll() {
+          Text(this.text)
+            .fontSize(12)
+            .fontFamily('monospace')
+            .fontColor(this.isError
+              ? $r('sys.color.ohos_id_color_alert')
+              : $r('sys.color.ohos_id_color_text_primary'))
+            .copyOption(CopyOptions.LocalDevice)
+        }
+        .scrollable(ScrollDirection.Horizontal)
+      }
+      .width('100%')
+      .align(Alignment.TopStart)
+    }
+    .width('100%')
+    .padding({ left: 8, right: 8, top: 6, bottom: 6 })
+    .borderRadius(6)
+    .border({ width: 1, color: this.accent() })
+    .backgroundColor($r('sys.color.ohos_id_color_sub_background'))
+    .constraintSize({ maxHeight: this.maxHeightVp })
+    .alignItems(HorizontalAlign.Start)
+  }
+}
+/**
+ * 一条工具调用的详情块：工具名 + 状态 + 耗时，然后是完整输入与完整输出。
+ *
+ * 数据全部来自 `ChatDisplayItem.tools`。输入是内核原样的 `arguments` 字符串（缩进后显示），
+ * 输出是 `tool/result` 的 content 里 text 段拼起来的结果。两者都能一键复制 ——
+ * 手机上开不了终端，把这段输出复制出来发给自己，是唯一能把现场带走的办法。
+ */
+@Component
+export struct ToolCallDetailBlock {
+  tool: ToolCallDetail = new ToolCallDetail();
+
+  private statusText(): ResourceStr {
+    if (this.tool.result === null) {
+      return $r('app.string.tool_detail_pending');
+    }
+    return this.tool.failed ? $r('app.string.tool_detail_failed') : $r('app.string.tool_detail_ok');
+  }
+
+  private statusColor(): ResourceStr {
+    if (this.tool.failed) {
+      return $r('sys.color.ohos_id_color_alert');
+    }
+    return this.tool.result === null
+      ? $r('sys.color.ohos_id_color_text_secondary')
+      : $r('sys.color.ohos_id_color_text_primary_activated');
+  }
+
+  private nameText(): string {
+    return this.tool.name.trim().length > 0 ? this.tool.name : '';
+  }
+
+  private argumentsText(): string {
+    return prettyToolArguments(this.tool.argumentsJson);
+  }
+
+  private durationText(): string {
+    const duration: number | null = this.tool.durationMs;
+    // 算不出来就没有这一行（不显示 0、也不显示负数）。
+    return duration === null ? '' : formatToolDuration(duration);
+  }
+
+  @Builder
+  resultBlock() {
+    if (this.tool.result === null) {
+      Text($r('app.string.tool_detail_no_result'))
+        .fontSize(11)
+        .fontColor($r('sys.color.ohos_id_color_text_secondary'))
+    } else if (this.tool.result.length === 0) {
+      Text($r('app.string.tool_detail_empty_result'))
+        .fontSize(11)
+        .fontColor($r('sys.color.ohos_id_color_text_secondary'))
+    } else {
+      ToolTextBlock({
+        label: this.tool.failed ? $r('app.string.tool_detail_error') : $r('app.string.tool_detail_output'),
+        text: this.tool.result,
+        isError: this.tool.failed,
+        maxHeightVp: 260,
+      })
+    }
+  }
+
+  build() {
+    Column() {
+      Row() {
+        if (this.nameText().length > 0) {
+          Text(this.nameText())
+            .fontSize(13)
+            .fontWeight(FontWeight.Medium)
+            .fontFamily('monospace')
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .layoutWeight(1)
+        } else {
+          Text($r('app.string.tool_call'))
+            .fontSize(13)
+            .fontWeight(FontWeight.Medium)
+            .layoutWeight(1)
+        }
+        if (this.durationText().length > 0) {
+          Text(this.durationText())
+            .fontSize(11)
+            .fontColor($r('sys.color.ohos_id_color_text_secondary'))
+            .margin({ right: 8 })
+        }
+        Text(this.statusText())
+          .fontSize(11)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.statusColor())
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      if (this.argumentsText().length === 0) {
+        Text($r('app.string.tool_detail_no_args'))
+          .fontSize(11)
+          .fontColor($r('sys.color.ohos_id_color_text_secondary'))
+      } else {
+        ToolTextBlock({
+          label: $r('app.string.tool_detail_input'),
+          text: this.argumentsText(),
+          isError: false,
+          maxHeightVp: 160,
+        })
+      }
+
+      this.resultBlock()
+    }
+    .width('100%')
+    .margin({ top: 6 })
+    .alignItems(HorizontalAlign.Start)
+  }
+}

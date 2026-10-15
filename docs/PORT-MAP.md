@@ -51,7 +51,7 @@ dsh-companion-harmony/
 │   │   ├── ImageCodec.ets         原始字节 → PixelMap（ArkUI 的 Image 只认 PixelMap）
 │   │   └── ExternalOpen.ets       外链 → startAbility（对位 ACTION_VIEW）
 │   ├── ui/          ← ★ArkUI 页面与组件（已落地 15 个）：全部 .ets
-│   │   ├── AppRuntime.ets         唯一 vm 实例 + AppStorage(revision) 桥 + 跨分节导航请求 + 前后台事件流开关
+│   │   ├── AppRuntime.ets         唯一 vm 实例 + AppStorage(revision) 桥 + 跨分节跳转请求（当前仅文件分节：requestFilesSection）+ 前后台事件流开关
 │   │   ├── Components.ets         BrandMark / WarningBanner / StatusLabel / endpointKindLabel
 │   │   │                          + BinaryFilePreview（供会话文件表与文件页共用）
 │   │   ├── AppShell.ets           主界面外壳：抽屉 + 五个分节（源 App.kt 的 ConnectedApp）

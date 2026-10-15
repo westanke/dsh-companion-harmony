@@ -96,8 +96,8 @@ ui/     ← 只消费 HarnessState，调 HarnessViewModel 动作；不持有协�
 - 台账放 `docs/TECH-DEBT.md`，每条含：位置、为什么是债、清账阶段。
 - **只许收紧**：条目对应的债务消失，同一提交里删掉该条目（自证非空转）。
 - **上调必须带理由**：单文件超过行数预算时，只许带理由在同一提交里上调，且必须在下一阶段拆回。
-- 当前行数预算：**800 行/文件**。基线测量日 2026-10-15，**10 个文件在册**
-  （`HarnessViewModel.ts` 3 345 为最大一笔）。
+- 当前行数预算：**1 000 行/文件**（由 800 上调，理由见 `TECH-DEBT.md`：ArkTS 样板多于 Kotlin）。
+  基线测量日 2026-10-15，**7 个文件在册**（`HarnessViewModel.ts` 3 345 为最大一笔）。
   > 这些是**已登记的债，不是许可**。新增超预算文件必须先入台账再写码。
 
 ---
@@ -142,7 +142,11 @@ ui/     ← 只消费 HarnessState，调 HarnessViewModel 动作；不持有协�
 | 借鉴项 | 本项目 |
 |---|---|
 | 工程宪法 + 文档路由表 | 保留，命令换为 hvigor / hap-sign-tool |
-| 债务台账（TECH-DEBT） | **已立账**：`docs/TECH-DEBT.md`，行数预算 800 行/文件，10 文件在册 |
+| 债务台账（TECH-DEBT） | **已立账**：`docs/TECH-DEBT.md`，行数预算 1 000 行/文件，7 文件在册 |
+| 能力对等矩阵（PARITY） | **已建立**：`docs/PARITY.md`（能力 / 插件 API / 本工程 / 状态） |
+| 任务台账（ROADMAP） | **已建立**：`docs/ROADMAP.md`（阶段、进行中、待办池） |
+| 架构决策记录（ADR） | **已建立**：`docs/decisions/`（一事一文件） |
+| 发版说明 | **已建立**：`artifacts/RELEASE_NOTES_<版本>.md` |
 | 坑位索引 | 保留，内容为 HarmonyOS 特有坑 |
 | `@patch` 四要素 | 暂未引入 |
 

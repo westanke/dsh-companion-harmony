@@ -38,6 +38,14 @@
 - 引入债务台账制度：新增 `docs/TECH-DEBT.md`，行数预算 **800 行/文件**，按 2026-10-15
   基线登记 **10 个超预算文件**（最大 `core/HarnessViewModel.ts` 3 345 行）与 2 条结构性债务；
   `AGENTS.md` §4.2 立制、§8 同步，`docs/README.md` 挂索引。
+- 行数预算由 800 **上调至 1 000**（理由：ArkTS 样板多于 Kotlin），在册文件 **10 → 7**；
+  退出的 3 个文件（`GenUiCard` / `ModelsScreen` / `DshClient`）转入新增的 `DEBT-003` 继续跟踪。
+- 补齐源工程文档体系的其余四类：
+  - `docs/PARITY.md` 能力对等矩阵（✅/🟡/🔵/⛔ 四态，20 项已验 / 22 项待验 / 4 项有意差异）
+  - `docs/ROADMAP.md` 任务台账（阶段、进行中、1.0.1 / 1.1.0 拆债、待办池）
+  - `docs/decisions/` 架构决策记录（索引 + 6 条 ADR，其中 **ADR-0005 记录了一次被推翻的决策**：
+    Markdown 表格从「刻意不解析」改为「解析并原生渲染」，前案原文保留）
+  - `artifacts/RELEASE_NOTES_v1.0.0.md` 发版说明（面向用户与审核）
 
 ---
 

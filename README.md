@@ -82,8 +82,13 @@ dsh-companion-harmony/
 - [docs/TESTING.md](docs/TESTING.md) — 测试记录
 - [docs/SECURITY.md](docs/SECURITY.md) — 安全
 - [docs/PORT-MAP.md](docs/PORT-MAP.md) — 移植对照与坑点
+- [docs/PARITY.md](docs/PARITY.md) — 能力对等矩阵
+- [docs/ROADMAP.md](docs/ROADMAP.md) — 任务台账
+- [docs/TECH-DEBT.md](docs/TECH-DEBT.md) — 技术债务台账
+- [docs/decisions/](docs/decisions/) — 架构决策记录（ADR）
 - [docs/CHANGELOG.md](docs/CHANGELOG.md) — 变更日志
 - [docs/store-listing.md](docs/store-listing.md) — 上架文案（中英文）
+- [artifacts/RELEASE_NOTES_v1.0.0.md](artifacts/RELEASE_NOTES_v1.0.0.md) — 1.0.0 发版说明
 
 ## 开发约定
 

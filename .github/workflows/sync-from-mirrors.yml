@@ -14,6 +14,10 @@
 #   待推送区间一旦含 `.github/workflows/` 下的文件就会被 GitHub 拒绝，而且会让整条链永久停摆
 #   （后续每次快进都包含那一笔）—— 2026-10-16 实测踩到，详见 PORT-MAP 收尾十一 坑 C。
 #   secret 缺失时表达式退回 `github.token`：普通提交仍能推，只是 workflow 提交会失败。
+#
+# 端到端验证（2026-10-16）：本 workflow 接入 `SYNC_PAT` 后，特地把改动**只推镜像**、
+# 再手动触发本链，验证 Runner 能把含 `.github/workflows/` 改动的提交推回 GitHub ——
+# 即坑 C 的「永久停摆」已消除。结果记于 PORT-MAP 收尾十一。
 
 name: 从镜像同步（Gitee / AtomGit → GitHub）
 

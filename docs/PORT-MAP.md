@@ -1806,6 +1806,12 @@ due to not trusted app source`），因为设备只信任 AGC 调试证书。所
   （`enabled: true` / `allowed_actions: all`）、仓库 public。
 - 不可达 / 不存在的镜像由 `git ls-remote` 预检后跳过，因此 AtomGit 仓库尚未建好也不影响 Gitee 同步。
 
+**实测（2026-10-16，`workflow_dispatch` 手动触发 run `38896654332`）**：
+`✓ 逐个镜像快进并推回 GitHub` —— 日志显示 `===== 镜像 gitee =====` →
+`From https://gitee.com/westanke/dsh-companion-harmony` 拉取成功 → `Already up to date` →
+`完成：gitee → GitHub 已快进到 88b254e`；`===== 镜像 atomgit =====` → `跳过：仓库不可达或还不存在`。
+**即「GitHub 侧 Runner 能正常访问 gitee 并回补」已成立**，atomgit 待建仓后自动接上。
+
 **解法二（应急）：GitHub REST API 补推**（Actions 未跑或不可用时手动补齐）。本次已实测跑通
 （本地 `e8977be` 经 API 补齐后，GitHub / Gitee / 本地三方 SHA 一致），两个坑记下：
 - **坑 A：提交信息必须取原始字节**。`git log --format=%B` 经 shell 命令替换会**吃掉结尾换行**，

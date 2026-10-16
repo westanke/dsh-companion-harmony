@@ -31,7 +31,13 @@
   | `dsh-companion-harmony-1.0.2-release-signed.app` | 里外双签，**上架 AGC 用** |
   | `dsh-companion-harmony-1.0.2-release-signed.hap` | 发布证书签的内部 hap（`.app` 内层） |
   | `dsh-companion-harmony-1.0.2-release-debugsigned.hap` | 调试签名，**装真机用** |
-  | `dsh-companion-harmony-1.0.2-demo-walkthrough.mp4` | 遍历使用的演示录屏，**AGC「自测文件」用** |
+  | `dsh-companion-harmony-1.0.2-demo-9x16.mp4` | 遍历使用的演示录屏，**1080×1920（9:16）/ 117.4s**，**AGC「自测文件」用** |
+
+  > 录屏规格是**硬约束**：AGC 驳回原文「当前视频文件时长：136 秒，要求：15 秒至 120 秒；
+  > 当前视频文件宽高比：120:271，要求：9:16」。用户自录的 720×1626 / 136.34s 原始录屏因此不合格；
+  > 旧产物 `…-1.0.2-demo-walkthrough.mp4`（1080×2440，宽高比 27:61）同样不合格，**已作废**。
+  > 合规化**无需重录**：模糊铺底 + 居中满高（不裁掉任何界面元素）+ 1.16 倍变速，一次 ffmpeg 转码即达标，
+  > 详见 PORT-MAP 收尾十二。
 
   > 前两者与真机包**代码完全相同**，只差签名来源；发布证书签的 hap 无法 `hdc install`
   > （设备只信任调试证书）。
@@ -44,10 +50,11 @@
   | `…-1.0.2-release-signed.app` | 446 829 | `f2ac9d3632ff3623a5e2ba003a6f0e0c62e7e8e39590601ecaa0fbbbcd748741` |
   | `…-1.0.2-release-signed.hap` | 1 287 513 | `2530349380dd1aec93760ea14ccc3427cb5df82c3e06d28afee1e8abac56e5da` |
   | `…-1.0.2-release-debugsigned.hap` | 1 287 602 | `aadb2ebd128fb50889cd5ad11b0deddaa43eefff3ddfd75f6b83fda05b8ed759` |
-  | `…-1.0.2-demo-walkthrough.mp4` | 7 834 275 | `05abc796cfdd963c82bb5bc16bd7e88624190f426fd4f08c22ca508d1f740954` |
+  | `…-1.0.2-demo-9x16.mp4` | 37 415 192 | `5be2680aacba5770379d847b2c71a29f02570af55e932943cd411591bd7e38bc` |
 
-  > 前三项在 2026-10-16 修复「设置页药丸不刷新」（坑 27）后**重新出包**，故哈希已更新；
-  > 录屏未重录，哈希不变。
+  > 前三项在 2026-10-16 修复「设置页药丸不刷新」（坑 27）后**重新出包**，故哈希已更新。
+  > 第 4 项为合规化转码后的演示录屏（源为用户自录 `8c848cac491bdc15f947b0022293e1ce.mp4`，
+  > 720×1626 / 136.34s / 数字静音 → 1080×1920 / 117.367s / 无音轨）。
 - **应用图标**：**分层资源**（前景透明 PNG + 背景纯色、背景不含透明像素），两层均 1024×1024 正方形、
   无圆角、无内间距；`AppScope/app_layered_image.json`（`app_foreground` / `app_background`）与
   `entry/layered_image.json`（`foreground` / `background`）刻意用**不同资源名**避免同名覆盖；

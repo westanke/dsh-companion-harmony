@@ -46,7 +46,7 @@ jobs:
           # 名称|地址，一行一个；新增镜像在此加一行即可
           MIRRORS: |
             gitee|https://gitee.com/westanke/dsh-companion-harmony.git
-            atomgit|https://atomgit.com/westanke/dsh-companion-harmony.git
+            atomgit|https://atomgit.com/westanke163/dsh-companion-harmony.git
         run: |
           set -u
           git checkout "$BRANCH"

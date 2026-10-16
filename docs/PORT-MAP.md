@@ -1719,11 +1719,13 @@ due to not trusted app source`），因为设备只信任 AGC 调试证书。所
 |---|---|---|
 | `origin` | `https://github.com/westanke/dsh-companion-harmony` | 主（`master` 跟踪它） |
 | `gitee` | `https://gitee.com/westanke/dsh-companion-harmony.git` | 镜像（国内访问） |
-| `atomgit` | `https://atomgit.com/westanke/dsh-companion-harmony.git` | 镜像（国内；仓库待用户创建） |
+| `atomgit` | `https://atomgit.com/westanke163/dsh-companion-harmony.git` | 镜像（国内；**账号名与 GitHub / Gitee 不同**） |
 
 > AtomGit 已于收尾十一补入；因 github.com 不稳定，另立「镜像 → GitHub」自动同步链，详见收尾十一。
+> ⚠️ AtomGit 账号是 **`westanke163`**，而 GitHub / Gitee 是 `westanke` —— 照抄 GitHub 用户名
+> 会得到一个不存在的仓库（表现为 `403 / project could not be found`，极易误判成「仓库没建」）。
 
-两个远端 `master` 指向同一提交 —— 推送后必须**逐远端 `git ls-remote --heads <r> master` 核验**，
+三个远端 `master` 指向同一提交 —— 推送后必须**逐远端 `git ls-remote --heads <r> master` 核验**，
 不能只看本地 `HEAD`（本地与远端不一致时 `git log` 是自欺）。
 
 **建仓踩到的两个坑**：
@@ -1859,6 +1861,21 @@ due to not trusted app source`），因为设备只信任 AGC 调试证书。所
   `git rev-parse` 期望值比对，**commit SHA 必须等于本地 `HEAD`** 才能 `PATCH ref`，否则就分叉了。
   最后回查 `<远端> master` 是否等于本地 `HEAD`。
 
-**AtomGit 状态**：`https://atomgit.com/westanke/dsh-companion-harmony.git` 现返回
-`403 / project could not be found` —— **仓库尚不存在**，需用户先在 AtomGit 建仓；建仓后
-`git remote add atomgit <url>` 再推，同步链里 `MIRRORS` 已预留该行、会自动接上。
+**AtomGit 建仓（2026-10-16，用户要求「你自己建」）—— 用它的 OpenAPI，不必登录网页**：
+
+- **API 宿主与鉴权**：`https://api.atomgit.com`（**不是** `atomgit.com`，后者是网页/仓库地址）；
+  鉴权头是 **`Authorization: Bearer <token>`** —— 注意**不是** Gitea 风格的 `token <t>`，
+  用错会得到 `401 UNAUTHORIZED / "token not found"`（一个会让人误以为 token 失效的假象）。
+  token 取自本地 `~/.git-credentials` 的 atomgit 条目（与 `git push` 用的是同一个），
+  不必再让用户登录或另发令牌。
+- **建仓接口**：`POST /api/v5/user/repos`，JSON 体 `{name, private: false, auto_init: false, description}`。
+  返回体里 `private: false` / `public: true` 即公开仓。**已实测创建**
+  `westanke163/dsh-companion-harmony`（仓库 id `11090856`，`default_branch` = `master`）。
+  判别可用：`GET /api/v5/user/repos` 列自己的仓、`GET /api/v5/repos/<owner>/<repo>` 查单个。
+- **仓库地址族**（注意 AtomGit 自己的账号名是 **`westanke163`**，与 GitHub / Gitee 的 `westanke` **不同**）：
+  网页 `https://atomgit.com/westanke163/dsh-companion-harmony`、
+  clone `https://atomgit.com/westanke163/dsh-companion-harmony.git`。
+- **推送**：`git remote add atomgit <clone 地址>` → `git push -u atomgit master`。
+  推完**要记得把上游改回** `origin/master`（`git branch --set-upstream-to=origin/master master`），
+  否则 `git push -u` 会把 `master` 的跟踪分支悄悄改成 `atomgit/master`，
+  与「`origin` 是主」的约定不符。三端核验：`git ls-remote --heads <r> master` 逐个等于本地 `HEAD`。

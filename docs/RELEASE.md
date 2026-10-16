@@ -95,3 +95,16 @@ sha256sum <产物>         # 摘要
 
 - 禁止 `--force`。
 - 推送 / tag / 发 Release 必须用户明确同意。
+- **双远端**：`origin` = GitHub（主，`master` 跟踪它），`gitee` = Gitee（镜像）。
+  两边都要推，推完**逐远端核验**：`git ls-remote --heads <远端> master` 必须等于本地 `HEAD`
+  —— 只看本地 `git log` 是自欺（本地领先时它照样显示新提交）。
+- **GitHub 间歇不可达的重试阶梯**（国内网络常见：`github.com:443` 被断，但 `api.github.com` 通）：
+  ① 重试并强制 `-c http.version=HTTP/1.1`（`gnutls_handshake failed` 多为 HTTP/2 问题）；
+  ② 探测本机代理（7890 / 1080 / 8118…），命中则 `-c http.proxy=…` **一次性**推送、不改全局配置；
+  ③ 试 `ssh -T -p 443 git@ssh.github.com`（该端口常通；**需账号已挂 SSH 公钥**）；
+  ④ 仍不通 → 用 GitHub REST API 补推：`POST /git/blobs`（每个改动文件，base64）→
+  `POST /git/trees`（`base_tree` 取父提交的 tree）→ `POST /git/commits` → `PATCH /git/refs/heads/master`。
+  关键：commit 必须**复刻本地提交的 tree / parent / author / committer / message 五要素**
+  （author/committer 连时间戳与时区都要一致），否则算出的 SHA 与本地不同 → 远端与本地**分叉**，
+  后续正常 `push` 会被拒。做法：每步都用 `git rev-parse` 期望值断言，**commit SHA 必须等于本地 HEAD**。
+  ⛔ 不要为此阻塞收尾：Gitee 已全量同步时，如实说明「GitHub 仅差一笔，待网络恢复重推」即可。

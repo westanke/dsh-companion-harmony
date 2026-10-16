@@ -34,14 +34,14 @@
 |---|---|---|---|---|
 | 会话列表 | `GET /sessions` | `ui/ChatScreen.ets` | ✅ | |
 | 消息流（实时） | WebSocket | `core/ChatPresentation.ts` | ✅ | `step/end`、`turn/end`、token 序列**不**渲染为卡片 |
-| Markdown 渲染 | 无（自研 `MarkdownLite`） | `core/MarkdownLite.ts` | 🟡 | 标题/列表/引用/代码/GFM 表格/分隔线；表格列宽修复待验第 24 条 |
+| Markdown 渲染 | 无（自研 `MarkdownLite`） | `core/MarkdownLite.ts` | ✅ | 标题/列表/引用/代码/GFM 表格/分隔线；表格列宽修复 2026-10-16 真机已验（待验第 24 条） |
 | GenUI 卡片（`dsh-ui` 围栏） | 无（自研 `GenUiBlocks`） | `ui/GenUiCard.ets` | ✅ | 22 种组件，23 用例 |
 | 工具调用详情 | 消息体 | `core/ToolCallDetail.ts` | ✅ | 18 用例 |
 | 审批（含 `full-access` 二次确认） | `POST /approvals` | `ui/ChatDetail.ets` | ✅ | 由 `AlertDialog` 改为底部面板 + 勾选闸门 |
 | AI 追问（ask） | 消息体 | `ui/ChatDetail.ets` | ✅ | 两道闸 |
 | 上下文注入来源显示 | 消息体 | `ChatPresentation` | ✅ | 受设置 `showContext` 控制 |
 | `@` 文件补全面板 | `GET /mention-entries` | `core/ComposerSuggestions.ts` + `ui/ComposerSuggestions.ets` | 🟡 | 待验第 18 条（三态文案、绝对路径是否被服务端认可） |
-| `/` 命令补全面板 | `state.commands` | 同上 | 🟡 | 待验第 19 条 |
+| `/` 命令补全面板 | `state.commands` | 同上 | ✅ | 2026-10-16 真机已验（待验第 25 条）：输入 `/` 即带出命令 |
 | 会话配置面板（模型切换） | `sessionModels` | `ui/SessionConfigSheet.ets` | 🟡 | 待验第 21 条 |
 | 双击复制 / 长按选择 | 无 | `ui/ChatMessage.ets` | 🟡 | 待验第 7 条（两者是否打架） |
 | 自动跟随滚动 | 无 | `ui/ChatDetail.ets` | 🟡 | 待验第 8 条 |
@@ -88,14 +88,14 @@
 
 ---
 
-## 统计（2026-10-15）
+## 统计（2026-10-16）
 
 | 状态 | 项数 |
 |---|---|
-| ✅ 已实现并真机验证 | 20 |
-| 🟡 已实现待真机验证 | 22 |
+| ✅ 已实现并真机验证 | 22 |
+| 🟡 已实现待真机验证 | 20 |
 | 🔵 有意的差异 | 4 |
 | ⛔ 不做 | 0 |
 
 > **🟡 不等于"差"**，而是"等设备"。无设备时**不许**把 🟡 说成 ✅。
-> 逐条复测方法见 `PORT-MAP.md` §7「待真机验证」（24 条）。
+> 逐条复测方法见 `PORT-MAP.md` §7「待真机验证」（25 条）。

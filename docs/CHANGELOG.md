@@ -30,6 +30,9 @@
   机制级证据取自编译产物 `updateStateVars` 只收 `@Prop`，与既有坑 21 同源。详见 PORT-MAP 坑 24。
 - `MentionSuggestions` 收 `FileEntry[]` 时 `entry.isDirectory()` 在 `@Prop` 深拷贝后仍可用
   （运行时 `deepCopyObjectInternal` 走 `Object.setPrototypeOf` 保原型）—— 顺带确证并写入文档。
+- **真机验收（2026-10-16）**：release 构建 + 调试证书签名包装机后，上述两条修复均确认成立
+  —— 输入 `/` 能带出 dsh 命令；Markdown 表格英文标识符整词折行（`bundleNam` / `e` 消失）。
+  详见 `docs/TESTING.md` 真机验收记录、PORT-MAP §7 第 24 / 25 条。
 
 ### 变更
 

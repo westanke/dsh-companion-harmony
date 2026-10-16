@@ -118,6 +118,9 @@
   仅 workflow 提交失败，退化温和。安全提示：本次写入的是 `gh` 的 OAuth 用户令牌，其 `repo`
   scope 为**账号级**，存进本仓 secrets 意味着本仓 Actions 可读写该账号所有仓库；更稳妥是改用
   仅限本仓的 fine-grained PAT，已向用户提示待其定夺。
+  **端到端验证通过**（run `38902595071`）：一笔只推镜像、且含 workflow 改动的提交被 Runner 成功
+  推回 GitHub（`a7f4ebb..7dd40c4 HEAD -> master`）—— 该动作在坑 C 里用 `GITHUB_TOKEN` 时会被拒，
+  故 PAT 确已生效。
   本次这笔提交因 GitHub 主站不可达，改用 **GitHub REST API 复刻推送**
   （blob → tree → commit → ref，逐层 SHA 断言到与本地 `HEAD` 完全一致）补齐。
   复盘见 `docs/PORT-MAP.md` 收尾十一、`docs/RELEASE.md` ⑦。

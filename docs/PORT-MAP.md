@@ -1872,6 +1872,12 @@ due to not trusted app source`），因为设备只信任 AGC 调试证书。所
   安全提示：本条写入的是 `gh` 的 OAuth 用户令牌，其 `repo` scope 是**账号级**的，
   存进本仓 secrets 意味着本仓 Actions 可读写该账号**所有**仓库；更稳妥是改用**仅限本仓的
   fine-grained PAT**（需在网页创建），已向用户提示待其定夺。
+  **端到端验证（2026-10-16，run `38902595071`）**：特地做一笔**只推镜像**、且含 workflow 改动的
+  提交（`7dd40c4`），再 `gh workflow run` 手动触发本链。日志关键行：
+  `Updating a7f4ebb..7dd40c4` → `Fast-forward` → `.github/workflows/sync-from-mirrors.yml | 4 ++++`
+  → `To https://github.com/... a7f4ebb..7dd40c4  HEAD -> master` → `完成：gitee → GitHub 已快进到 7dd40c4`。
+  **同一动作在坑 C 里用 `GITHUB_TOKEN` 时是被拒的**，此处成功即证 PAT 生效、坑 C 已闭环。
+  事后三端（本地 / GitHub / Gitee / AtomGit）`master` 同为 `7dd40c4`。
 
 **解法二（应急）：GitHub REST API 补推**（Actions 未跑或不可用时手动补齐）。本次已实测跑通
 （本地 `e8977be` 经 API 补齐后，GitHub / Gitee / 本地三方 SHA 一致），两个坑记下：

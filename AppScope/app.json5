@@ -4,9 +4,14 @@
     // `hap-sign-tool` 会校验 profile 里的 bundle-name 与这里是否相同，不一致直接签名失败。
     "bundleName": "com.Deepseek_Harness_client.westanke",
     "vendor": "hakunm",
-    "versionCode": 1000000,
-    "versionName": "1.0.0",
-    "icon": "$media:app_icon",
+    // 1.0.0 已上传 AGC 并被审核驳回，同 versionCode 重传会被平台拒（拒绝重复版本号），故递增。
+    "versionCode": 1000001,
+    "versionName": "1.0.1",
+    // 应用图标必须是 **1024×1024 的分层资源**（前景透明 PNG + 背景纯色、背景不许含透明像素）。
+    // 2026-10-15 首次送审被 AGC 驳回：「应用图标单层图尺寸为216px*216px，标准要求尺寸1024px*1024px」。
+    // 命名刻意与 entry 侧不同（entry 用 `layered_image`）—— 两边同名时，entry 的资源会被
+    // AppScope 的同名资源覆盖（官方文档「配置图标后不生效」条目）。
+    "icon": "$media:app_layered_image",
     "label": "$string:app_name"
   }
 }

@@ -48,10 +48,12 @@ See THIRD_PARTY_LICENSES/MULTIPLATFORM_MARKDOWN_RENDERER_LICENSE.
 
 上游 NOTICE 提到的两项第三方资源，本移植版**都没有打包**，因此对应的许可文件不适用：
 
-1. **DeepSeek 品牌图形不适用。** 本工程不含 DeepSeek logo 的 SVG 路径（全工程只有
-   `AppScope/resources/base/media/app_icon.png` 与 `entry/src/main/resources/base/media/app_icon.png`
-   两个自绘占位图标）。界面上的品牌标记由 `ui/Components.ets` 里的 `BrandMark` 绘制，
-   它是一个纯文字字形「DSH」的方块，不涉及第三方图形版权。
+1. **DeepSeek 品牌图形不适用。** 本工程不含 DeepSeek logo 的 SVG 路径。应用图标为自绘资源，
+   且按 HarmonyOS 规范做成**分层图标**（前景透明 PNG + 背景纯色，均为 1024×1024）：
+   `AppScope/resources/base/media/app_layered_image.json`（引用 `app_foreground.png` /
+   `app_background.png`）与 `entry/src/main/resources/base/media/layered_image.json`
+   （引用 `foreground.png` / `background.png`）。界面上的品牌标记由 `ui/Components.ets` 里的
+   `BrandMark` 绘制，它是一个纯文字字形「DSH」的方块，不涉及第三方图形版权。
 
 2. **Markdown 渲染库不适用。** 上游用 multiplatform-markdown-renderer（Apache-2.0）；
    ArkUI 没有对位的 Markdown 渲染器，本工程改为自研 `core/MarkdownLite.ts` 做**块级切分**、

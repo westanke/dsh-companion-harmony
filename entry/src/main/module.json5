@@ -17,8 +17,12 @@
         "name": "EntryAbility",
         "srcEntry": "./ets/entryability/EntryAbility.ets",
         "description": "$string:EntryAbility_desc",
-        "icon": "$media:app_icon",
+        // 分层图标（前景 + 背景），与 AppScope 侧同名资源会互相覆盖，故刻意用不同资源名。
+        // 详见 AppScope/app.json5 里 `icon` 上方的注释。
+        "icon": "$media:layered_image",
         "label": "$string:EntryAbility_label",
+        // 启动页图标用的是**独立的单层图**（官方文档「生成单层图标」会产出 icon_startwindow.png），
+        // 不要求分层，故 startIcon 保持单层 PNG。
         "startWindowIcon": "$media:startIcon",
         "startWindowBackground": "$color:start_window_background",
         "exported": true,

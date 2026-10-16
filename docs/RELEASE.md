@@ -21,10 +21,23 @@
 
 | 文件 | 改什么 |
 |---|---|
-| `entry/src/main/module.json5` | `versionCode` +1、`versionName` |
+| `AppScope/app.json5` | `versionCode` +1、`versionName` —— **应用级版本在这里**，不在 `module.json5`（早期文档写错过，实测验证） |
+| `AppScope/app.json5` + `entry/src/main/module.json5` | 若换过图标：**必须是 1024×1024 分层资源**（上架硬条件，见 PORT-MAP 坑 25），先过下面的自检 |
 | `docs/CHANGELOG.md` | `[未发布]` 段整体挪到版本号下，补日期 |
 | `docs/STATUS.md` | 日期、阶段、版本线 |
 | `docs/TESTING.md` | 本轮用例数与门验结果 |
+
+**上架前图标自检（1.0.0 就栽在这一条上）**：
+
+```bash
+cd entry/build/default/outputs/default
+unzip -l entry-default-unsigned.hap | grep -E 'media/.*(foreground|background|layered_image)'
+python3 -c "from PIL import Image as I; print('fg', I.open('../../../src/main/resources/base/media/foreground.png').size); print('bg', I.open('../../../src/main/resources/base/media/background.png').size)"
+```
+
+判据：包内必须**同时**出现「前景图 + 背景图 + `layered_image.json`」三者，且两张图都是 **1024×1024**，
+**背景层不含透明像素**。只看到一张图标（哪怕它是 1024 的）就是**没分层** —— AGC 会驳
+「未正确配置单层图」。`startWindowIcon` 用独立的单层图属正常，不算问题。
 
 ## ③ 校验
 

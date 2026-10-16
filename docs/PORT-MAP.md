@@ -1077,6 +1077,11 @@ JSON：`{displayName, endpoints:[{label,baseUrl}], token?, deviceName?, scopes?}
     典型症状。按键口诀（坑 21 / 坑 24）：**实例先于数据存在的入参，一律 `@Prop`。**
     ✅ **已验（2026-10-16，用户真机确认「是」）**：输入 `/` 能带出 dsh 命令（`state.commands`），
     面板出现正常 —— 坑 24 的修法在真机成立。
+26. **分层图标在真机桌面上渲染正常**（坑 25 修复的复测）：装 1.0.1 后回桌面，图标应为**圆角方形**、
+    图形居中清晰、**无裁切 / 无硬直角 / 无白边**；若看到硬直的方形四角，说明分层未生效（系统没做遮罩）。
+    ✅ **已验（2026-10-16）**：装 1.0.1（`versionCode` 1000001）后 `snapshot_display` 截屏核对，
+    桌面图标为圆角方形、图形居中清晰、无裁切无硬直角；`bm dump` 中 `iconPath` 已解析为
+    `$media:app_layered_image`、`iconId` 已分配。
 
 ### 收尾五：真机接入与首次装包（2026-10-15）
 
@@ -1450,6 +1455,67 @@ video-v2.0，无重叠、无留白）。
 
 **验证**：`BUILD SUCCESSFUL` + `531 用例全绿`；**真机已验**（2026-10-16 用户确认输入 `/` 能带出 dsh 命令，见 §7「待真机验证」第 25 条）。
 
+**坑 25：上架审核驳回 —— 应用图标必须是 1024×1024 的「分层资源」（2026-10-16，AGC 审核退回）**
+
+AGC 审核原文（同一条出现两次，对应 10-15 的两次送审记录）：
+
+> 未正确配置单层图：应用图标单层图尺寸为 216px\*216px，标准要求尺寸 1024px\*1024px，
+> 且需下载 HUAWEI DevEco Studio 5.0.5.315 或以上版本进行图标再处理。
+
+**根因**：上一版把 1024×1024 的自绘源图**压成 216×216 的单层图**铺进包内 4 处
+（`AppScope` 与 `entry` 各自的 `app_icon.png` / `startIcon.png`）。**两条都不合规**：尺寸不对，
+而且根本没分层。
+
+**规范（一手来源：官方 UX 文档「图标资源规范」与「多平台图标资源规格」）**：图标资源
+**必须为分层资源**、尺寸**必须 1024×1024px**、**必须为正方形**（无需圆角，系统自动生成遮罩裁切）、
+PNG 格式，且**背景图不允许含有透明像素**。手机 / 折叠屏 / 平板 / 电脑 / 智慧屏**全部**是
+「双层 + 正方形 + 1024×1024 + PNG」。官方原话：「请在 Hap 包中正确预置图标资源，否则将无法通过
+上架检查。」
+
+**分层资源怎么写**（命令行工程，无 DevEco Studio GUI）：
+
+```
+entry/src/main/resources/base/media/
+├── foreground.png          # 前景层：图形本身，带透明通道
+├── background.png          # 背景层：纯色底板，**不含任何透明像素**
+└── layered_image.json      # 引用两层
+```
+
+```json
+{
+  "layered-image": {
+    "background": "$media:background",
+    "foreground": "$media:foreground"
+  }
+}
+```
+
+再在配置里把 `icon` 指向该 JSON 的**资源名**（`$media:layered_image`）。`AppScope` 侧同理
+（本次用 `app_layered_image.json` + `app_foreground.png` / `app_background.png`）。
+
+> ⚠️ **`AppScope` 与 entry 的资源不能同名** —— 同名时 entry 的资源会被 AppScope 的**同名资源覆盖**
+> （官方文档「图标配置完成后不生效」条目）。故刻意起不同名：AppScope 用
+> `app_layered_image` / `app_foreground` / `app_background`，entry 用
+> `layered_image` / `foreground` / `background`。
+> 另：`startWindowIcon`（启动页图标）**不是分层资源**，用独立的单层图（官方「生成单层图标」产出的
+> `icon_startwindow.png` 正是给启动页的），故 `startIcon` 保持单层 PNG 不动。
+
+**本次拆分前景/背景的做法**（源图是「蓝底 + 白图形」的**已合成**图，需反解）：实测源图底色为纯
+`(30,90,200)`、白图形占 26.7%，且**整图满足「白色以覆盖率 c 叠加在纯蓝底上」** —— 对任意通道有
+`C = c*255 + (1-c)*BG`。取**跨度最大的 R 通道**反解 `c = (R-30)/225`（实测最大重建误差仅 30，
+只出现在个别比底色更深的蓝像素上）。于是：
+
+- **背景图** = 纯 `(30,90,200)` 铺满 1024×1024，**全不透明**（合规）；
+- **前景图** = 白色、`alpha = clamp(c)`，其余透明。
+- 白卡片内部的蓝条与「DSH」字样是通过**透明孔洞**露出背景层的蓝；因两层蓝同色，合成后与原图
+  **肉眼无差**。
+
+**验证**：真机桌面图标为圆角方形、图形居中清晰、无裁切无硬直角（`snapshot_display` 截屏核对）；
+`bm dump` 中 `iconPath` 已解析为 `$media:app_layered_image` / `$media:layered_image`、`iconId` 已分配。
+
+**上架前自检（补进 `docs/RELEASE.md`）**：图标必须**分层 + 1024×1024 正方形**，且**背景层不含透明
+像素**；用 `unzip` 看包内是否同时存在前景 / 背景两张图与 `layered_image.json`，别只看「有张图标」。
+
 **系统导航条随主题设色（2026-10-15 用户要求，已落地）**
 
 实现（`entryability/EntryAbility.ets`）：`onWindowStageCreate` 里 `windowStage.getMainWindowSync()`
@@ -1601,3 +1667,31 @@ due to not trusted app source`），因为设备只信任 AGC 调试证书。所
 > 故不递增 `versionCode`（`RELEASE.md` 的「每发版 +1」针对的是**已发布**版本）。
 > 若 1.0.0 已上传 AGC，则必须改 `module.json5` 的 `versionCode` 1000000 → 1000001、`versionName` → 1.0.1
 > 后重出（AGC 拒绝重复的 `versionCode`）。
+> **注（2026-10-16 补充）**：审核报告的存在证明 1.0.0 **确已上传**，上述条件成立 —— 已按此改为
+> **1.0.1** 并重出，详见下「收尾九」。
+
+### 收尾九：按 AGC 审核意见修图标并重出 1.0.1（2026-10-16）
+
+用户原话：「`/media/wangke/OFFICE/TRae_work/5d1dadb5bf0644a59d1905884fc80720.zip` 上架审核报告，
+审核未通过，共检测出错误问题 7 个」。
+
+**报告实际内容**：zip 内是两份 `…_dataPackage_7.1.1.4.3_dataPackage.zip`，各含一个同名 txt，内容
+**完全相同** —— 对应 10-15 的**两次送审**记录；去重后**只有 1 条问题**（应用图标 216×216 单层图，
+见坑 25）。随包附带的 `…_app_icon.png` 取样实测 216×216，与报告描述一致。
+
+> ⚠️ 报告里只拆出 **1 条**，而用户说「**7 个**」—— 差 6 条未在 zip 中体现。**已向用户确认**是否另有
+> 报告或在 AGC 网页上看到更多条目；**未答复前不得臆测补修**（猜错会再把包送驳回一次）。
+
+**修复内容**：①图标改 1024×1024 **分层**（坑 25）；②版本号 1.0.0 → **1.0.1**（`versionCode` 1000001）
+—— 「收尾八」里写的「若已上传则必须升版」条件成立：审核报告的存在本身即证明 **1.0.0 确已上传**，
+故此前把 1.0.0 包的修复留作「同版本纠正」的写法**据此作废**（同 `versionCode` 重传会被平台拒）。
+
+**重出流程与产物**（同「收尾八」，只换版本号）：
+
+| 文件 | 用途 |
+|---|---|
+| `dsh-companion-harmony-1.0.1-release-signed.app` | 上架 AGC（发布证书，里外双签） |
+| `dsh-companion-harmony-1.0.1-release-debugsigned.hap` | 真机安装（调试证书） |
+
+三个产物（外层 `.app` / 内部 hap / 真机 hap）`verify-app` 均 `Verify success`；真机核对
+`versionCode` 1000001 / `versionName` 1.0.1，桌面图标渲染正常（见 §7 第 26 条）。

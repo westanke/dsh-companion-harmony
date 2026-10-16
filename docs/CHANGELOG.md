@@ -33,9 +33,24 @@
 - **真机验收（2026-10-16）**：release 构建 + 调试证书签名包装机后，上述两条修复均确认成立
   —— 输入 `/` 能带出 dsh 命令；Markdown 表格英文标识符整词折行（`bundleNam` / `e` 消失）。
   详见 `docs/TESTING.md` 真机验收记录、PORT-MAP §7 第 24 / 25 条。
+- **上架审核驳回：应用图标是 216×216 单层图**。AGC 原文：「未正确配置单层图：应用图标单层图尺寸为
+  216px\*216px，标准要求尺寸 1024px\*1024px 且需下载 HUAWEI DevEco Studio 5.0.5.315 或以上版本
+  进行图标再处理」。**根因**：上一版把 1024×1024 的自绘源图**压成 216×216 单层图**铺进包内 4 处
+  （`AppScope` 与 `entry` 的 `app_icon.png` / `startIcon.png`）—— 尺寸与「必须分层」两条都不符。
+  **修法**：按源图「白色图形以覆盖率叠加在纯蓝底 `(30,90,200)`」的合成关系反解出透明度，拆成
+  **前景图（透明 PNG）+ 背景图（纯色、不含透明像素）**，均为 1024×1024 正方形、无圆角、无内间距；
+  `AppScope` 与 `entry` 刻意引用**不同资源名**（`app_layered_image` / `layered_image`），规避
+  「同名资源被 AppScope 覆盖」的官方坑。启动页图标 `startWindowIcon` 仍为**独立的单层图**
+  （官方「生成单层图标」正是为启动页产出 `icon_startwindow.png`，不要求分层）。
+  真机核对：桌面图标为圆角方形、图形居中清晰、无裁切无硬直角。详见 PORT-MAP 坑 25。
+- **版本递增至 1.0.1**（`versionCode` 1000000 → 1000001）：1.0.0 已上传 AGC 且被驳回，
+  同 `versionCode` 重传会被平台拒（此前把 1.0.0 包的修复留作「同版本纠正」的写法据此作废）。
 
 ### 变更
 
+- **重出 1.0.1 上架包**（`versionCode` 1000001）：`assembleApp -p buildMode=release` → 签内部 hap →
+  组装 `.app` → 签外层，内外层 `verify-app` 均 `Verify success`；同批真机包（调试证书）一并重出。
+  真机核对：设备上 `versionCode` 1000001 / `versionName` 1.0.1，桌面图标渲染正常。
 - **按域拆分 7 个超长文件至「约 900 行/文件」**（原预算 1 000 行，本轮用户要求收紧到 900；
   对外接口与行为**完全不变**，仅做移动与机械改写 `private`→`protected`、`self` 类型标注）：
   - `core/Models.ts`(1542) → `Models.ts`(barrel) + `ModelsWire` / `ModelsFiles` / `ModelsChat` /

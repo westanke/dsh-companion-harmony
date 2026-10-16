@@ -70,6 +70,19 @@ jobs:
             if git push origin "HEAD:$BRANCH"; then
               echo "完成：$name → GitHub 已快进到 $(git rev-parse --short HEAD)"
             else
-              echo "跳过：推回 GitHub 失败（权限或网络）"
+              # GITHUB_TOKEN **没有** workflows 权限：只要待推送的提交里含 .github/workflows/ 下的
+              # 文件，GitHub 就会拒绝（原文：refusing to allow a GitHub App to create or update
+              # workflow ... without `workflows` permission）。这不是网络或 general 权限问题，
+              # 换什么 --force 都没用，只能改用带 workflow 权限的令牌直推 / REST 补推。
+              # 后果是**这条链会一直卡住**（后续每次快进都包含那个 workflow 提交），必须显式喊出来，
+              # 否则会被当成偶发网络抖动而无限重试。
+              if git diff --name-only "origin/$BRANCH..HEAD" 2>/dev/null | grep -q '^\.github/workflows/'; then
+                echo "跳过：推回 GitHub 被拒 —— 待推送内容含 .github/workflows/ 下的文件，"
+                echo "      GITHUB_TOKEN 不具备 workflows 权限，这类提交 Actions 无法代推。"
+                echo "      处置：用带 workflow 权限的令牌直推 GitHub（或 GitHub REST API 补推），"
+                echo "           GitHub 追平后本链自动恢复；否则本链会一直卡在这一笔。"
+              else
+                echo "跳过：推回 GitHub 失败（权限或网络）"
+              fi
             fi
           done <<< "$MIRRORS"

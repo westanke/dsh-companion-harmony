@@ -109,6 +109,9 @@
   ⚠️ AtomGit 的账号名是 **`westanke163`**，与 GitHub / Gitee 的 `westanke` 不同 ——
   照抄 GitHub 用户名会得到不存在的仓库（`403 / project could not be found`），
   早先就因此误判成「仓库尚未创建」。接口与两个鉴权坑见 `docs/PORT-MAP.md` 收尾十一。
+  **同步链的边界（实测踩到）**：`GITHUB_TOKEN` 天生不带 `workflows` 权限，**改动
+  `.github/workflows/` 的提交，镜像链一律代推不了**，且会让整条链停摆；这类提交必须直推
+  或走 REST 补推。workflow 里已加显式诊断，不许沉默（详见 PORT-MAP 收尾十一 坑 C、RELEASE.md ⑦）。
   本次这笔提交因 GitHub 主站不可达，改用 **GitHub REST API 复刻推送**
   （blob → tree → commit → ref，逐层 SHA 断言到与本地 `HEAD` 完全一致）补齐。
   复盘见 `docs/PORT-MAP.md` 收尾十一、`docs/RELEASE.md` ⑦。

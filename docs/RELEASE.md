@@ -124,6 +124,12 @@ sha256sum <产物>         # 摘要
     只做快进（`git merge --ff-only`）：镜像落后就拉齐，镜像与 GitHub 分叉则跳过、**绝不强推**。
     > 前提：仓库 Actions 已启用、workflow 里声明 `permissions: contents: write`（本仓默认
     > workflow 权限是 `read`，不显式提权会推不回去）。
+    > ⚠️ **这条链推不了「改了 workflow 的提交」**：`GITHUB_TOKEN` 天生没有 `workflows` 权限，
+    > 待推送区间一旦含 `.github/workflows/` 下的文件，GitHub 直接拒绝
+    > （`refusing to allow a GitHub App to create or update workflow ... without 'workflows' permission`），
+    > 提权到 `contents: write` 也没用。**且会一直卡住**（后续快进都包含那一笔）。
+    > 处置：这类提交改用下面第 ④ 步的 REST 补推（用户令牌带 `workflow` scope 即可，本账号有），
+    > GitHub 追平后这条链自动恢复。workflow 里已加显式诊断，日志会直接点明原因。
   - **应急重试阶梯**（Actions 未跑或不可用时手动补齐）：
     ① 重试并强制 `-c http.version=HTTP/1.1`（`gnutls_handshake failed` 多为 HTTP/2 问题）；
     ② 探测本机代理（7890 / 1080 / 8118…），命中则 `-c http.proxy=…` **一次性**推送、不改全局配置；

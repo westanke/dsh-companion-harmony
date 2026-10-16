@@ -1850,7 +1850,22 @@ due to not trusted app source`），因为设备只信任 AGC 调试证书。所
 `✓ 逐个镜像快进并推回 GitHub` —— 日志显示 `===== 镜像 gitee =====` →
 `From https://gitee.com/westanke/dsh-companion-harmony` 拉取成功 → `Already up to date` →
 `完成：gitee → GitHub 已快进到 88b254e`；`===== 镜像 atomgit =====` → `跳过：仓库不可达或还不存在`。
-**即「GitHub 侧 Runner 能正常访问 gitee 并回补」已成立**，atomgit 待建仓后自动接上。
+- **即「GitHub 侧 Runner 能正常访问 gitee 并回补」已成立**。
+
+- **坑 C（2026-10-16 实测踩到，且会永久卡住整条链）：`GITHUB_TOKEN` 改不了 workflow 文件。**
+  run `38901422594` 从 Gitee 拉到了含 `.github/workflows/sync-from-mirrors.yml` 改动的新提交，
+  推回 GitHub 时被拒，原文：
+  `! [remote rejected] HEAD -> master (refusing to allow a GitHub App to create or update workflow
+  .github/workflows/sync-from-mirrors.yml without 'workflows' permission)`。
+  **这不是网络问题、也不是 `contents` 权限不够** —— 即使把仓库默认 workflow 权限提到 `write` 也没用：
+  `GITHUB_TOKEN` 天生不带 `workflows` 权限，`--force` 同样无效。
+  所以**凡是改动 `.github/workflows/` 的提交，镜像链一律代推不了**，只能用直推或 REST 补推
+  （用户令牌带 `workflow` scope 即可；本账号 `gh auth status` 确有该 scope，故 REST 补推能改 workflow）。
+  **更麻烦的是它会一直卡下去**：后续每次快进都包含那个 workflow 提交 → **整条链停摆**，
+  且会被误当成偶发网络抖动而反复重试。故 workflow 里加了显式诊断：推回失败时若发现
+  待推送区间含 `.github/workflows/`，就打出上述结论与处置办法 —— **不许沉默**。
+  （可选加固：把带 `workflow` 权限的 PAT 存进仓库 secrets 供 `actions/checkout` 使用 ——
+  需用户同意把凭据写进仓库，本轮未执行。）
 
 **解法二（应急）：GitHub REST API 补推**（Actions 未跑或不可用时手动补齐）。本次已实测跑通
 （本地 `e8977be` 经 API 补齐后，GitHub / Gitee / 本地三方 SHA 一致），两个坑记下：

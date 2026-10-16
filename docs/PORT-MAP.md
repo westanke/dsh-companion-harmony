@@ -1561,3 +1561,43 @@ due to not trusted app source`），因为设备只信任 AGC 调试证书。所
 
 **顺带清理**：`ChatDetail.ets` 拆分后残留 25 个已随搬移变为无用的 import，本轮一并删除
 （拆分产物，非原有代码；不影响功能）。
+
+### 收尾八：双远端托管与重出上架包（2026-10-16 用户要求）
+
+用户原话：「在 Gitee/GitHub 你建仓，写好各种文档，本地提交，出包，提交等流程，我的 Gitee/GitHub
+信息本地应该有」。
+
+**双远端（同一 `master`，两个远端各一份）**：
+
+| 远端 | 地址 | 角色 |
+|---|---|---|
+| `origin` | `https://github.com/westanke/dsh-companion-harmony` | 主（`master` 跟踪它） |
+| `gitee` | `https://gitee.com/westanke/dsh-companion-harmony.git` | 镜像（国内访问） |
+
+两个远端 `master` 指向同一提交 —— 推送后必须**逐远端 `git ls-remote --heads <r> master` 核验**，
+不能只看本地 `HEAD`（本地与远端不一致时 `git log` 是自欺）。
+
+**建仓踩到的两个坑**：
+
+1. **Gitee OpenAPI 的 `private=false` 会被当成真值**。用 `-d "private=false"`（form 编码）建出来的
+   是**私有仓** —— 表单值是字符串，Gitee 侧判非空即 `true`。建仓后必须回查 `private` 字段确认，
+   别只看创建成功的返回。补救：**先推内容再改可见性** —— Gitee 对**空仓**调 `PATCH ... private=false`
+   会返回 `400 Bad Request`（空仓不允许转公开），推完第一笔再改就成功。
+2. **建仓后两个远端都要显式验证可达**：`gh repo create --source=. --remote=origin --push` 会把
+   upstream 设为 `origin/master`；再用 `git push -u gitee master` 会把 upstream **改写成 `gitee/master`**。
+   若希望 GitHub 为主，需显式 `git branch -u origin/master master` 改回来。
+
+**重出上架包**：10-15 打的 `…-signed.app` 早于坑 23 / 坑 24 两条修复，**内容已过期**。本轮按
+`RELEASE.md` 流程重出（`assembleApp -p buildMode=release` → 签内部 hap → 组装 `.app` → 签外层），
+内外层均 `verify-app` → `Verify success`。产物：
+
+| 文件 | 用途 |
+|---|---|
+| `dsh-companion-harmony-1.0.0-release-signed.app` | 上架 AGC（发布证书，里外双签） |
+| `dsh-companion-harmony-1.0.0-release-debugsigned.hap` | 真机安装（调试证书） |
+
+> **两层内容完全相同**，只差签名来源（见上「收尾六」的注意事项）。
+> 版本号**仍为 1.0.0**：该版本**尚未上传 AGC**，本次是把「未发布的 1.0.0 包」纠正为含修复的版本，
+> 故不递增 `versionCode`（`RELEASE.md` 的「每发版 +1」针对的是**已发布**版本）。
+> 若 1.0.0 已上传 AGC，则必须改 `module.json5` 的 `versionCode` 1000000 → 1000001、`versionName` → 1.0.1
+> 后重出（AGC 拒绝重复的 `versionCode`）。

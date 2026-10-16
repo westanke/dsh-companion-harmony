@@ -6,6 +6,9 @@
 > 本仓库是 Android 版 DSH Companion 的 HarmonyOS 原生移植（ArkTS / ArkUI），
 > 不使用 WebView，聊天页为原生重写。
 
+**仓库**：[GitHub](https://github.com/westanke/dsh-companion-harmony) ·
+[Gitee](https://gitee.com/westanke/dsh-companion-harmony)（镜像，内容同源）
+
 ## 功能
 
 - **连接管理**：局域网 / 虚拟网 / 公网多地址并存与切换，配置导入与一次性配对码

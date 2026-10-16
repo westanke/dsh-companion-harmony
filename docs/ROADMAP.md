@@ -20,10 +20,11 @@
 | 1 | ✅ **坑 23** 真机复测（表格列宽不断英文词） | 含 `bundleName` 的表格整词折行、不出现 `bundleNam` / `e` | 无（2026-10-16 已验） |
 | 2 | ✅ **坑 24** 真机复测（`/` 命令面板） | 输入 `/` 立刻列出服务端命令 | 无（2026-10-16 已验） |
 | 3 | 重截上架截图第 3 张 | 表格渲染正常，入 `docs/screenshots/03-chat-markdown.png` | 需设备在连 |
-| 4 | 按需重出正式版 `.app` | 含坑 23 / 坑 24 修复，里外双签通过 `verify-app` | 取决于用户是否已上传 |
+| 4 | ✅ 重出正式版 `.app` | 含坑 23 / 坑 24 修复，里外双签通过 `verify-app` | 无（2026-10-16 已完成） |
 
-> 本版候选 `.hap` 已产出：`dsh-companion-harmony-1.0.0-release-debugsigned.hap`（release 构建 +
-> 调试证书，真机可装），已装机验证上述 1 / 2 两项。
+> 本版候选 `.hap` / `.app` 均已产出（`dsh-companion-harmony-1.0.0-release-signed.app` 上架用、
+> `…-release-debugsigned.hap` 真机用），**两层代码相同、只差签名来源**。
+> 上述 1 / 2 两项已装机验证。
 
 ## 下一阶段
 

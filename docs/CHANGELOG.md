@@ -79,11 +79,24 @@
 - **行数预算再由 1 000 收紧至 900**（用户本轮要求「按照 900 行左右拆分」）；7 个在册文件本轮
   **全部拆到达标并退出台账**（当前实测最大 897 行 `GenUiCard.ets`）。
 - 补齐源工程文档体系的其余四类：
-  - `docs/PARITY.md` 能力对等矩阵（✅/🟡/🔵/⛔ 四态，20 项已验 / 22 项待验 / 4 项有意差异）
+  - `docs/PARITY.md` 能力对等矩阵（✅/🟡/🔵/⛔ 四态，22 项已验 / 20 项待验 / 4 项有意差异）
   - `docs/ROADMAP.md` 任务台账（阶段、进行中、1.0.1 / 1.1.0 拆债、待办池）
   - `docs/decisions/` 架构决策记录（索引 + 6 条 ADR，其中 **ADR-0005 记录了一次被推翻的决策**：
     Markdown 表格从「刻意不解析」改为「解析并原生渲染」，前案原文保留）
   - `artifacts/RELEASE_NOTES_v1.0.0.md` 发版说明（面向用户与审核）
+
+### 变更
+
+- **双远端托管**：新建公开仓 `westanke/dsh-companion-harmony` —— GitHub 为主（`origin`）、
+  Gitee 为镜像（`gitee`），两远端 `master` 指向同一提交；根 `README.md` 补仓库链接。
+  建仓踩到两坑（Gitee OpenAPI 的 `private=false` 被当**字符串真值** → 建出私有仓；
+  **空仓**不允许转公开，须先推内容再改可见性），记入 PORT-MAP「收尾八」。
+- **重出上架包**：10-15 产的 `…-signed.app` **早于坑 23 / 坑 24 修复**，内容已过期。
+  按 `RELEASE.md` 重出并里外双签（内外层 `verify-app` 均 `Verify success`），覆盖
+  `dsh-companion-harmony-1.0.0-release-signed.app`；同批真机包 `…-release-debugsigned.hap`
+  一并更新。版本号**仍为 1.0.0** —— 该版本尚未上传 AGC，本次是纠正**未发布**的 1.0.0 包，
+  故不递增 `versionCode`（`RELEASE.md` 的「每发版 +1」针对**已发布**版本；若已上传须改 1.0.1）。
+  重出判据：`BUILD SUCCESSFUL` + `531/531`。
 
 ---
 

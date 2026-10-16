@@ -1670,17 +1670,20 @@ due to not trusted app source`），因为设备只信任 AGC 调试证书。所
 **顺带清理**：`ChatDetail.ets` 拆分后残留 25 个已随搬移变为无用的 import，本轮一并删除
 （拆分产物，非原有代码；不影响功能）。
 
-### 收尾八：双远端托管与重出上架包（2026-10-16 用户要求）
+### 收尾八：多远端托管与重出上架包（2026-10-16 用户要求）
 
 用户原话：「在 Gitee/GitHub 你建仓，写好各种文档，本地提交，出包，提交等流程，我的 Gitee/GitHub
 信息本地应该有」。
 
-**双远端（同一 `master`，两个远端各一份）**：
+**远端（同一 `master`，每个远端各一份）**：
 
 | 远端 | 地址 | 角色 |
 |---|---|---|
 | `origin` | `https://github.com/westanke/dsh-companion-harmony` | 主（`master` 跟踪它） |
 | `gitee` | `https://gitee.com/westanke/dsh-companion-harmony.git` | 镜像（国内访问） |
+| `atomgit` | `https://atomgit.com/westanke/dsh-companion-harmony.git` | 镜像（国内；仓库待用户创建） |
+
+> AtomGit 已于收尾十一补入；因 github.com 不稳定，另立「镜像 → GitHub」自动同步链，详见收尾十一。
 
 两个远端 `master` 指向同一提交 —— 推送后必须**逐远端 `git ls-remote --heads <r> master` 核验**，
 不能只看本地 `HEAD`（本地与远端不一致时 `git log` 是自欺）。
@@ -1781,3 +1784,37 @@ due to not trusted app source`），因为设备只信任 AGC 调试证书。所
 - 三个坑：① 中文用 `inputText` 直接送（实测可送「你好」）；② `keyEvent Back` 可收键盘；
   ③ **通知横幅会抢掉同一坐标**（☰ 在 63,209，横幅也在顶部）—— 点错就跳到别的应用，
   故拍摄前先把应用拉回前台，并在每次 ☰ 前留足等待。
+
+### 收尾十一：AtomGit 镜像与「镜像 → GitHub」自动同步链（2026-10-16 用户要求）
+
+用户原话：「推双端，另外也要推atomgit，github网络访问问题多，可否让github同步atomgit和gitee」。
+
+**问题**：本机到 `github.com:443` 不稳 —— `git push` 先报
+`gnutls_handshake() failed: The TLS connection was non-properly terminated`，改 `-c http.version=HTTP/1.1`
+重试后又 `Failed to connect to github.com port 443: Connection timed out`；但同一时刻
+`api.github.com` 返回 200、`ssh.github.com:443` 可达、本机**无任何代理端口**。
+即「GitHub 主站被断、API 通」，与 `RELEASE.md` ⑦ 记的一致。
+
+**解法一（常规）：镜像 → GitHub 的单向自动同步链**。新增
+`.github/workflows/sync-from-mirrors.yml` —— Runner 跑在 **GitHub 服务器上**（出网正常，能访问
+`gitee.com` / `atomgit.com`），定时（每 30 分钟）或手动 `workflow_dispatch` 触发，
+逐镜像 `git fetch` → `git merge --ff-only` → `git push origin master`。
+- 方向是**镜像补齐 GitHub**，非双向；GitHub 上新增的提交不会反向推回镜像。
+- **只做快进**：镜像与 GitHub 分叉时跳过并报错，**绝不强推**（GitHub 上可能有镜像没有的提交）。
+- **默认 workflow 权限是 `read`**（本仓实测 `default_workflow_permissions: read`），故 workflow 里
+  必须显式 `permissions: contents: write`，否则 `GITHUB_TOKEN` 推不回去。仓库 Actions 已启用
+  （`enabled: true` / `allowed_actions: all`）、仓库 public。
+- 不可达 / 不存在的镜像由 `git ls-remote` 预检后跳过，因此 AtomGit 仓库尚未建好也不影响 Gitee 同步。
+
+**解法二（应急）：GitHub REST API 补推**（Actions 未跑或不可用时手动补齐）。本次已实测跑通
+（本地 `e8977be` 经 API 补齐后，GitHub / Gitee / 本地三方 SHA 一致），两个坑记下：
+- **坑 A：提交信息必须取原始字节**。`git log --format=%B` 经 shell 命令替换会**吃掉结尾换行**，
+  复刻出的 commit SHA 与本地差一字节、对不上 —— 首次就栽在这里（tree SHA 一致、commit SHA 不一致）。
+  改用 `git cat-file commit HEAD` 取 `\n\n` 之后的全部字节。
+- **坑 B：三层 SHA 都要断言**。blob SHA 由内容决定、天然可比；tree / commit SHA 需逐层与
+  `git rev-parse` 期望值比对，**commit SHA 必须等于本地 `HEAD`** 才能 `PATCH ref`，否则就分叉了。
+  最后回查 `<远端> master` 是否等于本地 `HEAD`。
+
+**AtomGit 状态**：`https://atomgit.com/westanke/dsh-companion-harmony.git` 现返回
+`403 / project could not be found` —— **仓库尚不存在**，需用户先在 AtomGit 建仓；建仓后
+`git remote add atomgit <url>` 再推，同步链里 `MIRRORS` 已预留该行、会自动接上。

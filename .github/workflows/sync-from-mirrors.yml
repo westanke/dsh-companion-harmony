@@ -1,0 +1,75 @@
+# 从镜像同步到 GitHub（Gitee / AtomGit → GitHub）
+#
+# 为什么需要它：国内网络下 github.com:443 经常被断（本机实测 TLS handshake 中断 / 连接超时），
+# 而 api.github.com 与 gitee.com 是通的。与其每次在本地苦等 GitHub，不如换个方向：
+# 本地只推 Gitee / AtomGit，让**运行在 GitHub 服务器上**的 Runner 去把镜像拉回来推到 GitHub
+# —— Runner 出网正常，能访问 gitee.com / atomgit.com，彻底绕开本地到 GitHub 的网络问题。
+#
+# 设计取舍：
+# - **只做快进（--ff-only）**：镜像落后就拉齐；镜像与 GitHub 分叉就跳过并报错，绝不强推，
+#   避免把 GitHub 上可能存在的独有提交冲掉。
+# - 镜像地址写死在 MIRRORS 里，新增镜像加一行即可；不可达的镜像会被跳过、不影响其它镜像。
+# - 这是**镜像 → GitHub 的单向补齐**；GitHub 上新增的提交不会反向推回镜像（本地正常推镜像即可）。
+
+name: 从镜像同步（Gitee / AtomGit → GitHub）
+
+on:
+  schedule:
+    # 每 30 分钟一次（GitHub 高峰可能延迟，属正常）
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-from-mirrors
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出 GitHub 仓库（含全部历史，供快进合并）
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 配置提交者
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: 逐个镜像快进并推回 GitHub
+        env:
+          BRANCH: master
+          # 名称|地址，一行一个；新增镜像在此加一行即可
+          MIRRORS: |
+            gitee|https://gitee.com/westanke/dsh-companion-harmony.git
+            atomgit|https://atomgit.com/westanke/dsh-companion-harmony.git
+        run: |
+          set -u
+          git checkout "$BRANCH"
+          while IFS='|' read -r name url; do
+            [ -z "${name:-}" ] && continue
+            echo "===== 镜像 $name ($url) ====="
+            if ! git ls-remote --heads "$url" "$BRANCH" >/dev/null 2>&1; then
+              echo "跳过：$name 仓库不可达或还不存在"
+              continue
+            fi
+            git remote remove "$name" 2>/dev/null || true
+            git remote add "$name" "$url"
+            if ! git fetch --no-tags "$name" "$BRANCH"; then
+              echo "跳过：$name 拉取失败"
+              continue
+            fi
+            if ! git merge --ff-only FETCH_HEAD; then
+              echo "跳过：$name 不是 GitHub 的后代（两边分叉），不做强推"
+              continue
+            fi
+            if git push origin "HEAD:$BRANCH"; then
+              echo "完成：$name → GitHub 已快进到 $(git rev-parse --short HEAD)"
+            else
+              echo "跳过：推回 GitHub 失败（权限或网络）"
+            fi
+          done <<< "$MIRRORS"

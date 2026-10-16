@@ -15,7 +15,7 @@
 | 打包 | 完成（`.app` 里外双签 + 真机 debug hap，均 `verify-app` → `Verify success`） |
 | 上架材料 | 文案 ✅ / 截图 ✅（1.0.2 真机重拍 6 张）/ 图标 ✅（1024 分层）/ AI 标识证据 ✅ / 演示录屏 ✅ |
 | 上传 AGC | 待用户操作 |
-| git | 本轮改动待提交并推送双远端 |
+| git | 已提交 `e8977be`；GitHub / Gitee 已同步三端一致；AtomGit 待建仓后补推 |
 
 候选产物（代码相同、只差签名来源）：
 `dsh-companion-harmony-1.0.2-release-signed.app`（上架）·

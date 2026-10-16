@@ -85,6 +85,13 @@
   `docs/screenshots/ai-generated-label-evidence.png`（AI 标识证据）；新增录屏
   `dsh-companion-harmony-1.0.2-demo-walkthrough.mp4`（1080×2440，约 103 秒，
   遍历连接管理 / 会话浏览 / 交互操作 / 文件查看 —— 对应 AGC「需提供遍历使用的演示录屏」）。
+- **远端扩至三个并加自动同步链**：新增 `atomgit`（AtomGit）镜像；并在仓库内新增
+  `.github/workflows/sync-from-mirrors.yml` —— 既然本机到 `github.com:443` 不稳
+  （实测 `gnutls_handshake` 中断 / 连接超时），就**换个方向**：本地只推 Gitee / AtomGit，
+  由 GitHub 服务器上的 Runner 定时把镜像**快进**拉回 GitHub（`--ff-only`，分叉则跳过、不强推）。
+  本次这笔提交因 GitHub 主站不可达，改用 **GitHub REST API 复刻推送**
+  （blob → tree → commit → ref，逐层 SHA 断言到与本地 `HEAD` 完全一致）补齐。
+  复盘见 `docs/PORT-MAP.md` 收尾十一、`docs/RELEASE.md` ⑦。
 
 
 - **重出 1.0.1 上架包**（`versionCode` 1000001）：`assembleApp -p buildMode=release` → 签内部 hap →

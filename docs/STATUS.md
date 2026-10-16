@@ -10,7 +10,10 @@
 - **应用名**：包内 `app_name` = 「DSH 伴侣」（中文）/ 「DSH Companion」（英文）；
   连接页标题去品牌化为「连接服务端」。**应用信息、应用介绍中不得再出现第三方品牌名**。
 - **仓库**：[GitHub](https://github.com/westanke/dsh-companion-harmony)（`origin`，主）·
-  [Gitee](https://gitee.com/westanke/dsh-companion-harmony)（`gitee`，镜像）
+  [Gitee](https://gitee.com/westanke/dsh-companion-harmony)（`gitee`，镜像）·
+  [AtomGit](https://atomgit.com/westanke/dsh-companion-harmony)（`atomgit`，镜像；**仓库待创建**）。
+  因本机到 `github.com:443` 不稳，新增 `.github/workflows/sync-from-mirrors.yml`
+  让镜像**快进回补** GitHub（详见 PORT-MAP 收尾十一）。
 - **兼容**：HarmonyOS 6.0 及以上（`compatibleSdkVersion` = 5.1.0(18)）
 - **设备类型**：phone / tablet / 2in1
 - **插件基线**：`dsh-remote-bridge` **≥ 2.0.4**（旧名 `dsh-workspace`）

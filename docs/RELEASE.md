@@ -112,16 +112,31 @@ sha256sum <产物>         # 摘要
 
 - 禁止 `--force`。
 - 推送 / tag / 发 Release 必须用户明确同意。
-- **双远端**：`origin` = GitHub（主，`master` 跟踪它），`gitee` = Gitee（镜像）。
-  两边都要推，推完**逐远端核验**：`git ls-remote --heads <远端> master` 必须等于本地 `HEAD`
-  —— 只看本地 `git log` 是自欺（本地领先时它照样显示新提交）。
-- **GitHub 间歇不可达的重试阶梯**（国内网络常见：`github.com:443` 被断，但 `api.github.com` 通）：
-  ① 重试并强制 `-c http.version=HTTP/1.1`（`gnutls_handshake failed` 多为 HTTP/2 问题）；
-  ② 探测本机代理（7890 / 1080 / 8118…），命中则 `-c http.proxy=…` **一次性**推送、不改全局配置；
-  ③ 试 `ssh -T -p 443 git@ssh.github.com`（该端口常通；**需账号已挂 SSH 公钥**）；
-  ④ 仍不通 → 用 GitHub REST API 补推：`POST /git/blobs`（每个改动文件，base64）→
-  `POST /git/trees`（`base_tree` 取父提交的 tree）→ `POST /git/commits` → `PATCH /git/refs/heads/master`。
-  关键：commit 必须**复刻本地提交的 tree / parent / author / committer / message 五要素**
-  （author/committer 连时间戳与时区都要一致），否则算出的 SHA 与本地不同 → 远端与本地**分叉**，
-  后续正常 `push` 会被拒。做法：每步都用 `git rev-parse` 期望值断言，**commit SHA 必须等于本地 HEAD**。
+- **三远端**：`origin` = GitHub（主，`master` 跟踪它）、`gitee` = Gitee（镜像）、
+  `atomgit` = AtomGit（镜像）。每个都推，推完**逐远端核验**：
+  `git ls-remote --heads <远端> master` 必须等于本地 `HEAD` —— 只看本地 `git log` 是自欺
+  （本地领先时它照样显示新提交）。
+- **GitHub 间歇不可达**（国内网络常见：`github.com:443` 被断，但 `api.github.com` 通）。两手准备：
+
+  - **常规（推荐）**：本地只推 Gitee / AtomGit，让 GitHub Actions 反向拉回 ——
+    `.github/workflows/sync-from-mirrors.yml`（每 30 分钟或手动触发）。Runner 跑在 GitHub
+    服务器上、出网正常，能访问 `gitee.com` / `atomgit.com`，**彻底绕开本地到 GitHub 的网络问题**。
+    只做快进（`git merge --ff-only`）：镜像落后就拉齐，镜像与 GitHub 分叉则跳过、**绝不强推**。
+    > 前提：仓库 Actions 已启用、workflow 里声明 `permissions: contents: write`（本仓默认
+    > workflow 权限是 `read`，不显式提权会推不回去）。
+  - **应急重试阶梯**（Actions 未跑或不可用时手动补齐）：
+    ① 重试并强制 `-c http.version=HTTP/1.1`（`gnutls_handshake failed` 多为 HTTP/2 问题）；
+    ② 探测本机代理（7890 / 1080 / 8118…），命中则 `-c http.proxy=…` **一次性**推送、不改全局配置；
+    ③ 试 `ssh -T -p 443 git@ssh.github.com`（该端口常通；**需账号已挂 SSH 公钥**，
+       未挂会 `Permission denied (publickey)`）；
+    ④ 仍不通 → 用 GitHub REST API 补推（**2026-10-16 已实战跑通**）：
+       `POST /git/blobs`（每个新增/修改文件，base64）→ `POST /git/trees`
+       （`base_tree` 取父提交的 tree；删除的路径写 `"sha": null`）→ `POST /git/commits` →
+       `PATCH /git/refs/heads/master`。
+       关键：commit 必须**复刻本地提交的 tree / parent / author / committer / message 五要素**，
+       否则算出的 SHA 与本地不同 → 远端与本地**分叉**，后续正常 `push` 会被拒。两个必踩的点：
+       ① `message` 必须按 `git cat-file commit HEAD` 取**原始字节** —— `git log --format=%B`
+          经命令替换会**吃掉结尾换行**，实测就因这一字节导致 SHA 对不上；
+       ② 每步都用 `git rev-parse` 期望值断言，**blob / tree / commit 三层 SHA 都要等于本地**，
+          最后再回查 `<远端> master` 确认等于本地 `HEAD`。
   ⛔ 不要为此阻塞收尾：Gitee 已全量同步时，如实说明「GitHub 仅差一笔，待网络恢复重推」即可。

@@ -7,7 +7,11 @@
 > 不使用 WebView，聊天页为原生重写。
 
 **仓库**：[GitHub](https://github.com/westanke/dsh-companion-harmony) ·
-[Gitee](https://gitee.com/westanke/dsh-companion-harmony)（镜像，内容同源）
+[Gitee](https://gitee.com/westanke/dsh-companion-harmony) ·
+[AtomGit](https://atomgit.com/westanke/dsh-companion-harmony)（镜像，内容同源）
+
+> GitHub 主站国内常不可达，仓库内 `.github/workflows/sync-from-mirrors.yml` 会由 GitHub 侧的
+> Runner 定时把 Gitee / AtomGit 镜像**快进回补**到 GitHub（详见 `docs/RELEASE.md` ⑦）。
 
 ## 功能
 

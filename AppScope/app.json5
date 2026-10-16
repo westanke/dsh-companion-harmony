@@ -1,12 +1,16 @@
 {
   "app": {
-    // 必须与 AGC 侧那个应用一致：调试 Profile 是 AGC 签过的 PKCS#7，改不了，
-    // `hap-sign-tool` 会校验 profile 里的 bundle-name 与这里是否相同，不一致直接签名失败。
-    "bundleName": "com.Deepseek_Harness_client.westanke",
+    // 2026-10-16 换掉：原 `com.Deepseek_Harness_client.westanke` 在 AGC 被判「与 DeepSeek 名称相似、
+    // 无商标权属证明」，拿不到授权只能改。新 bundleName 由 AGC 侧重建应用时确定，
+    // 新的调试 / 发布 Profile 里 `bundle-name` 均为 `com.dsh.westanke`（已按它重签证书）。
+    //
+    // 必须与 Profile 一致：Profile 是 AGC 签过的 PKCS#7、改不了，`hap-sign-tool` 会校验
+    // profile 里的 bundle-name 与这里是否相同，不一致直接签名失败。
+    "bundleName": "com.dsh.westanke",
     "vendor": "hakunm",
-    // 1.0.0 已上传 AGC 并被审核驳回，同 versionCode 重传会被平台拒（拒绝重复版本号），故递增。
-    "versionCode": 1000001,
-    "versionName": "1.0.1",
+    // 1.0.0 在旧应用被驳回；换 bundleName 后是新应用、无重复版本号约束，沿用递增序列以免与旧产物混淆。
+    "versionCode": 1000002,
+    "versionName": "1.0.2",
     // 应用图标必须是 **1024×1024 的分层资源**（前景透明 PNG + 背景纯色、背景不许含透明像素）。
     // 2026-10-15 首次送审被 AGC 驳回：「应用图标单层图尺寸为216px*216px，标准要求尺寸1024px*1024px」。
     // 命名刻意与 entry 侧不同（entry 用 `layered_image`）—— 两边同名时，entry 的资源会被

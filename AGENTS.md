@@ -65,10 +65,11 @@ java -jar "$DEVECO_SDK_HOME/default/openharmony/toolchains/lib/hap-sign-tool.jar
 
 | 改动 | 必须同步 |
 |---|---|
-| `versionCode` / `versionName` | `entry/src/main/module.json5` + `docs/CHANGELOG.md` + `docs/STATUS.md` |
+| `versionCode` / `versionName` | `AppScope/app.json5` + `docs/CHANGELOG.md` + `docs/STATUS.md` |
 | 测试用例数 | `docs/TESTING.md` |
 | 发布产物 / 体积 / SHA-256 | `docs/STATUS.md` + `docs/RELEASE.md` |
 | 上架文案 / 截图 | `docs/store-listing.md` / `docs/screenshots/` |
+| 改应用名 / 换 `bundleName` | `AppScope/app.json5` + `entry/.../element/string.json`（中英）+ `docs/store-listing.md`，并**重签调试 / 发布 Profile 与证书** —— 三处口径不一致即被判不合格（坑 26） |
 
 **铁律**：改代码 → 改文档与版本号 → 校验 → 打包。**顺序不可倒**——
 先打包再改文档，文档会描述一个不存在的状态。
@@ -134,6 +135,7 @@ ui/     ← 只消费 HarnessState，调 HarnessViewModel 动作；不持有协�
 - `条件分支实例先于数据存在`
 - `普通成员不回写`
 - `@Prop 深拷贝保原型`
+- `改名必须连 bundleName 一起换`
 
 > 新坑位：名字加进上面清单 + 原文写进 `docs/PORT-MAP.md` §6 并补 `### 同名` 锚点。
 

@@ -22,6 +22,7 @@
 | 文件 | 改什么 |
 |---|---|
 | `AppScope/app.json5` | `versionCode` +1、`versionName` —— **应用级版本在这里**，不在 `module.json5`（早期文档写错过，实测验证） |
+| `AppScope/app.json5` + 两侧 `element/string.json` | 换 `bundleName` 或改应用名时：**三处必须同改**（AppScope `app_name`、entry `app_name`/`EntryAbility_desc`/`module_desc`），并同步 AGC 后台的版本信息与应用介绍。`bundleName` 一变，Profile 必须重新签发 —— 见 2026-10-16 的换名事件 |
 | `AppScope/app.json5` + `entry/src/main/module.json5` | 若换过图标：**必须是 1024×1024 分层资源**（上架硬条件，见 PORT-MAP 坑 25），先过下面的自检 |
 | `docs/CHANGELOG.md` | `[未发布]` 段整体挪到版本号下，补日期 |
 | `docs/STATUS.md` | 日期、阶段、版本线 |
@@ -53,7 +54,7 @@ cd test && npm test                  # 全量单测
 # 1. 签 hap
 java -jar "$DEVECO_SDK_HOME/.../hap-sign-tool.jar" sign-app \
   -mode localSign -keyAlias dsh-companion-harmony -keyPwd dshharmony2026 \
-  -appCertFile signing/<cert>.cer -profileFile signing/<profile>.p7b -profileSigned 1 \
+  -appCertFile "signing/dsh伴侣-正式证书.cer" -profileFile "signing/dsh clientRelease.p7b" -profileSigned 1 \
   -inFile entry/build/default/outputs/default/entry-default-unsigned.hap \
   -signAlg SHA256withECDSA -keystoreFile signing/dsh-companion-harmony.p12 \
   -keystorePwd dshharmony2026 -outFile <signed>.hap -compatibleVersion 18 -signCode 1
@@ -68,7 +69,7 @@ zip -X -q /tmp/app-out.app entry-default.hap pack.info   # 顺序：hap 在前�
 #    输入是 zip，必须加 -inForm zip；且**不传** -compatibleVersion（那是 hap 专用）
 java -jar "$DEVECO_SDK_HOME/.../hap-sign-tool.jar" sign-app \
   -mode localSign -keyAlias dsh-companion-harmony -keyPwd dshharmony2026 \
-  -appCertFile signing/<cert>.cer -profileFile signing/<profile>.p7b -profileSigned 1 \
+  -appCertFile "signing/dsh伴侣-正式证书.cer" -profileFile "signing/dsh clientRelease.p7b" -profileSigned 1 \
   -inFile /tmp/app-out.app -inForm zip \
   -signAlg SHA256withECDSA -keystoreFile signing/dsh-companion-harmony.p12 \
   -keystorePwd dshharmony2026 -outFile <signed>.app -signCode 1
@@ -86,6 +87,9 @@ java -jar "$DEVECO_SDK_HOME/.../hap-sign-tool.jar" verify-app -inFile /tmp/appbu
 > **两产物必须同源于同一次构建**：先 `assembleApp` 再分别签两份，别拿上一次构建的 hap 去签
 > 真机包 —— 那样「代码完全相同」这句话就不成立了（本轮即为此重签了一遍）。
 
+> **2026-10-16 起材料名**：调试证书 `signing/dsh伴侣-调试证书.cer` + Profile `signing/ds clientDebug.p7b`；发布证书 `signing/dsh伴侣-正式证书.cer` + Profile `signing/dsh clientRelease.p7b`。
+> 这些文件名**含空格与中文**，命令行里必须加引号（上例已加）。
+>
 > **真机调试包**用**调试证书 + 调试 Profile**（受设备白名单限制，`hdc` 可装）；
 > **上架包**用**发布证书 + 发布 Profile**（白名单 0 条，`hdc` 装不了，必须走应用市场）。
 > 两者**代码完全相同**，只差签名来源。

@@ -2,7 +2,7 @@
   "string": [
     {
       "name": "EntryAbility_desc",
-      "value": "DeepSeek Harness 伴侣"
+      "value": "DSH 伴侣客户端"
     },
     {
       "name": "EntryAbility_label",
@@ -53,6 +53,10 @@
       "value": "智能体预设已被锁定，无法修改"
     },
     {
+      "name": "ai_generated_notice",
+      "value": "内容由 AI 生成"
+    },
+    {
       "name": "allow_once",
       "value": "允许一次"
     },
@@ -74,7 +78,7 @@
     },
     {
       "name": "app_name",
-      "value": "DeepSeek Harness"
+      "value": "DSH 伴侣"
     },
     {
       "name": "approval_command_preview",
@@ -262,7 +266,7 @@
     },
     {
       "name": "connect_title",
-      "value": "连接 DeepSeek Harness"
+      "value": "连接服务端"
     },
     {
       "name": "connected",
@@ -650,7 +654,7 @@
     },
     {
       "name": "module_desc",
-      "value": "DeepSeek Harness 伴侣主模块"
+      "value": "DSH 伴侣主模块"
     },
     {
       "name": "more_actions",

@@ -116,6 +116,13 @@ struct AssistantBody {
           GenUiDebugLine({ diagnosis: this.diagnosis() as GenUiDiagnosis })
         }
       }
+      // 《人工智能生成合成内容标识办法》要求在生成内容上做**显式标识**：
+      // 助手正文一律带一行可见提示，供用户与审核一眼辨认（AGC 2026-10-16 驳回项「未提交
+      // 人工智能生成合成内容标识相关材料」的代码侧整改）。
+      Text($r('app.string.ai_generated_notice'))
+        .fontSize(11)
+        .fontColor($r('sys.color.ohos_id_color_text_secondary'))
+        .margin({ top: 6 })
     }
     .width('100%')
     .constraintSize({ maxWidth: ASSISTANT_MAX_WIDTH_VP })

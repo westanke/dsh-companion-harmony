@@ -1,8 +1,8 @@
 {
   "modelVersion": "5.0.0",
   "name": "dsh-companion-harmony",
-  "version": "1.0.0",
-  "description": "DeepSeek Harness 伴侣 —— 鸿蒙版（Android dsh-companion 的 ArkUI 原生重写）",
+  "version": "1.0.2",
+  "description": "DSH 伴侣 —— 鸿蒙版（Android dsh-companion 的 ArkUI 原生重写）",
   "main": "",
   "author": "westanke / Hakunm (upstream)",
   "license": "AGPL-3.0",

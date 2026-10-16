@@ -11,6 +11,7 @@ cd test && npm test
 | 版本 | 用例数 | 门验结果 |
 |---|---|---|
 | 1.0.0 | 531 | 全绿 |
+| 1.0.2 | 531 | 全绿（改名去品牌 + AI 生成内容标识，未增删用例） |
 
 > 数字随代码变化，**勿当常量引用**。
 
@@ -20,6 +21,8 @@ cd test && npm test
 |---|---|---|
 | 2026-10-16 | 表格列宽不断英文词（坑 23 复测） | ✅ 整词折行，`bundleNam`/`e` 缺陷消失 |
 | 2026-10-16 | 会话页 `/` 带出 dsh 命令（坑 24 复测） | ✅ 输入 `/` 即带出 `state.commands` |
+| 2026-10-16 | 改名去品牌后应用信息（1.0.2） | ✅ 标题「DSH 伴侣」、连接页「连接服务端」，`bm dump -n com.dsh.westanke` 报 `versionCode` 1000002 |
+| 2026-10-16 | AI 生成内容显式标识（1.0.2） | ✅ 助手消息底部固定显示「内容由 AI 生成」，证据见 `docs/screenshots/ai-generated-label-evidence.png` |
 
 > 装机形态：release 构建 + 调试证书签名（`appProvisionType=debug` / `debug=false`）。
 

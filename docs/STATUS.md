@@ -39,10 +39,13 @@
 
   | 产物 | 字节 | SHA-256 |
   |---|---|---|
-  | `…-1.0.2-release-signed.app` | 443 616 | `1b20c68ecd4068fa297b19babff2a91ce2d2997b3f27c9325337f208c70f8494` |
-  | `…-1.0.2-release-signed.hap` | 1 281 651 | `60bf528184c3cca713239fec0271012202533803bd17364949e93ef1bff9ceb6` |
-  | `…-1.0.2-release-debugsigned.hap` | 1 281 739 | `87e5dcd211724ace6d517ccb37a0b4caec463472184e14cf86054de81606b9f5` |
+  | `…-1.0.2-release-signed.app` | 446 829 | `f2ac9d3632ff3623a5e2ba003a6f0e0c62e7e8e39590601ecaa0fbbbcd748741` |
+  | `…-1.0.2-release-signed.hap` | 1 287 513 | `2530349380dd1aec93760ea14ccc3427cb5df82c3e06d28afee1e8abac56e5da` |
+  | `…-1.0.2-release-debugsigned.hap` | 1 287 602 | `aadb2ebd128fb50889cd5ad11b0deddaa43eefff3ddfd75f6b83fda05b8ed759` |
   | `…-1.0.2-demo-walkthrough.mp4` | 7 834 275 | `05abc796cfdd963c82bb5bc16bd7e88624190f426fd4f08c22ca508d1f740954` |
+
+  > 前三项在 2026-10-16 修复「设置页药丸不刷新」（坑 27）后**重新出包**，故哈希已更新；
+  > 录屏未重录，哈希不变。
 - **应用图标**：**分层资源**（前景透明 PNG + 背景纯色、背景不含透明像素），两层均 1024×1024 正方形、
   无圆角、无内间距；`AppScope/app_layered_image.json`（`app_foreground` / `app_background`）与
   `entry/layered_image.json`（`foreground` / `background`）刻意用**不同资源名**避免同名覆盖；
@@ -63,6 +66,9 @@
 - **本轮改动**：①**改名去 DeepSeek** + 换 bundleName + 全部签名材料重签（详见 PORT-MAP 坑 26）；
   ②助手消息底部新增「内容由 AI 生成」显式标识；
   ③录制遍历演示录屏（连接管理 / 会话浏览 / 交互操作 / 文件查看）；
-  ④重拍上架截图 6 张
+  ④重拍上架截图 6 张；
+  ⑤**修复设置页点药丸「功能生效但选中高亮不动」**（用户真机反馈）——
+  `SettingsScreen.st()` 漏读 `revision` 导致该页动态节点未登记依赖，叠加子组件成员缺 `@Prop`，
+  详见 PORT-MAP 坑 27；修复后已真机复测通过并**重新出包**（故产物哈希已变）。
 - **下一步**：上传 `dsh-companion-harmony-1.0.2-release-signed.app` 到 AGC，
   并按上「AGC 侧待办」补材料

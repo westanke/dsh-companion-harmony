@@ -23,6 +23,7 @@ cd test && npm test
 | 2026-10-16 | 会话页 `/` 带出 dsh 命令（坑 24 复测） | ✅ 输入 `/` 即带出 `state.commands` |
 | 2026-10-16 | 改名去品牌后应用信息（1.0.2） | ✅ 标题「DSH 伴侣」、连接页「连接服务端」，`bm dump -n com.dsh.westanke` 报 `versionCode` 1000002 |
 | 2026-10-16 | AI 生成内容显式标识（1.0.2） | ✅ 助手消息底部固定显示「内容由 AI 生成」，证据见 `docs/screenshots/ai-generated-label-evidence.png` |
+| 2026-10-16 | 设置页药丸选中态即时刷新（坑 27 复测） | ✅ 点「排队 / 插话发送」当场重绘（前后截帧 MD5 不同、描述文案同步切换）；修复前同一操作两帧 MD5 **完全相同** |
 
 > 装机形态：release 构建 + 调试证书签名（`appProvisionType=debug` / `debug=false`）。
 

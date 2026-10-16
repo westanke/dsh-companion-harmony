@@ -65,8 +65,14 @@ export struct WarningBanner {
 /** 状态标签：一个小圆点 + 文案（已连接 / 运行中…）。 */
 @Component
 export struct StatusLabel {
-  label: ResourceStr = '';
-  active: boolean = false;
+  /**
+   * 标题与点亮与否都**随运行时变化**（在线/离线、运行中/空闲），故必须是 `@Prop`。
+   *
+   * 普通成员在父组件重绘时**不会**被回写（ArkUI 只在 `updateStateVars` 里更新带装饰器的成员），
+   * 那样这个指示点会永远停在首帧值 —— 与坑 24 同一机制，见 PORT-MAP 坑 27。
+   */
+  @Prop label: ResourceStr = '';
+  @Prop active: boolean = false;
 
   build() {
     Row() {

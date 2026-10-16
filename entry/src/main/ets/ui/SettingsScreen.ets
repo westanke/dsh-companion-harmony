@@ -19,6 +19,11 @@
  *    「读 SharedPreferences 不是 Compose 状态，改了不会触发重组」—— 表现是**点了开关不动、
  *    得再点别的才跳**。本工程同理：`state.useWebChat` 这些字段由 vm 的 `update()` 推动，
  *    读它们才会随 `revision` 重绘。
+ *    **但只做到这一步还不够**（2026-10-16 补）：父组件取到新值 ≠ 子组件会收到新值 ——
+ *    ArkUI 重绘时只回写**带装饰器**的成员，所以 `SwitchRow.checked`、`SettingRow.title/subtitle`、
+ *    `ChoicePill.selected`、`StatusLabel.label/active` 这些下行数据必须声明为 `@Prop`。
+ *    原先漏了这一步，用户实测「点『English』/『插话发送』选中高亮不动、但功能已生效」。
+ *    机制与坑 24 同源，见 PORT-MAP 坑 27。
  * 3. **`scopeLabel` 认不出的 scope 保留原文**。scope 本身是协议级标识（`chat.read` 这类），
  *    但给人看的不该是协议串；不过服务端将来新增权限时，与其编一个名字把人带偏，
  *    不如让它原样露出来，至少能和文档对得上（与 core 的错误码表同一原则）。
@@ -31,8 +36,10 @@
  *
  * 1. **`SingleChoiceSegmentedButtonRow` → 两个并排的药丸按钮**。ArkUI 没有等价的分段控件，
  *    这里用「选中项填充强调色、未选中项透明 + 描边」表达同一件事。
- *    **两个选择题（语言、发送方式）各写一个 `@Builder` 而不是共用一个带数组参数的**：
- *    ArkUI 的 `@Builder` 只对「按引用传递」的对象参数可靠，传数组 + 回调容易在重绘时丢更新。
+ *    两个选择题（语言、发送方式）**共用同一个 `ChoicePill` 组件**，但**不能**写成
+ *    `@Builder choicePill(label, selected, onTap)` —— ArkUI 的 `@Builder` **按值传参时不会刷新**，
+ *    传布尔（`selected`）和字符串同样会丢更新（原先只防了「数组 + 回调」这一种传法，
+ *    结果 `selected` 就死在这一条上）。改用 `@Component` + `@Prop` 才可靠，见该组件的注释。
  * 2. **`FlowRow` → `Flex({ wrap: FlexWrap.Wrap })`**（地址药丸、权限药丸都用它）。
  * 3. **`Switch` → `Toggle({ type: ToggleType.Switch })`**；`BuildConfig.VERSION_NAME` →
  *    `bundleManager.getBundleInfoForSelfSync()` 的 `versionName`（取不到时显示 `v?` 而不是崩）。
@@ -107,8 +114,10 @@ function SettingsHeading(title: ResourceStr) {
 @Component
 struct SettingRow {
   glyph: string = '';
-  title: ResourceStr = '';
-  subtitle: string = '';
+
+  /** 标题 / 副标题里有**动态值**（主机显示名、当前地址、设备名与 ID、版本号），故用 `@Prop`。 */
+  @Prop title: ResourceStr = '';
+  @Prop subtitle: string = '';
   /** 默认什么都不画：多数行没有尾部内容（作者、版本那两行就是）。 */
   @BuilderParam trailing: () => void = this.noTrailing;
 
@@ -160,7 +169,17 @@ struct SettingRow {
 struct SwitchRow {
   title: ResourceStr = '';
   description: ResourceStr = '';
-  checked: boolean = false;
+
+  /**
+   * 开关的亮灭必须由 `@Prop` 送进来。
+   *
+   * 判据 2 说的是「读 `state` 才能随 `revision` 重绘」——但那保证的是**父组件**取到新值；
+   * 父组件重绘时 ArkUI 只回写带装饰器的成员（`updateStateVars`），普通成员会一直停在首帧值。
+   * 与坑 24 同一机制，见 PORT-MAP 坑 27。
+   */
+  @Prop checked: boolean = false;
+
+  /** 函数成员**不能**加 `@Prop`（会连闭包一起深拷贝坏掉），保持普通成员。 */
   onCheckedChange: (value: boolean) => void = (): void => {};
 
   build() {
@@ -188,6 +207,54 @@ struct SwitchRow {
   }
 }
 
+/**
+ * 一个药丸选项（对应源工程 `SingleChoiceSegmentedButtonRow` 里选中段与未选中段）：
+ * 选中项用强调色填充 + 白字，未选中项透明底 + 描边。
+ *
+ * ## 为什么是 `@Component` 而不是 `@Builder`（真实缺陷的修法）
+ *
+ * 原先这里是 `@Builder choicePill(label, selected, onTap)`。而 ArkUI 的 `@Builder`
+ * **按值传参时不会因参数变化刷新其内部 UI** —— `selected` 永远停在首帧值。
+ * 表现就是用户报的这一处：「点『English』/『插话发送』，选中高亮不动，但功能已经生效」
+ * （`busySendMode` 与系统语言确实都改了，只是画不出来）。
+ * 改成组件 + `@Prop selected` 才走得通：父组件 `SettingsScreen` 重绘时会经
+ * `updateStateVars` 把新值回写到 `@Prop` 成员。机制与坑 24 同源，见 PORT-MAP 坑 27。
+ *
+ * 注：文件头「平台差异 1」原先只写了「不共用一个带数组参数的 `@Builder`」，
+ * 没说清**同样不能传布尔/字符串这类按值参数** —— 这处漏读的规则正是本缺陷的根因。
+ *
+ * `onTap` 保持普通成员：函数成员若被 `@Prop` 会连闭包一起深拷贝坏掉（坑 24）。
+ */
+@Component
+struct ChoicePill {
+  label: ResourceStr = '';
+  @Prop selected: boolean = false;
+  onTap: () => void = (): void => {};
+
+  build() {
+    Text(this.label)
+      .fontSize(13)
+      .fontColor(this.selected
+        ? $r('sys.color.ohos_id_color_foreground_contrary')
+        : $r('sys.color.ohos_id_color_text_primary'))
+      .textAlign(TextAlign.Center)
+      .layoutWeight(1)
+      .padding({ top: 9, bottom: 9 })
+      .backgroundColor(this.selected
+        ? $r('sys.color.ohos_id_color_emphasize')
+        : Color.Transparent)
+      .borderRadius(20)
+      .border({
+        width: 1,
+        color: this.selected ? $r('sys.color.ohos_id_color_emphasize') : $r('sys.color.ohos_id_color_component_normal'),
+      })
+      .margin({ right: 8 })
+      .onClick((): void => {
+        this.onTap();
+      })
+  }
+}
+
 /** 设置分节的宿主。 */
 @Component
 export struct SettingsScreen {
@@ -203,8 +270,27 @@ export struct SettingsScreen {
     this.runSelfCheck();
   }
 
+  /**
+   * 读状态。
+   *
+   * ## 为什么必须在这里读一次 `revision`（本页曾因此整页冻住）
+   *
+   * ArkUI 的**增量更新按元素（elmtId）登记依赖**：编译器把每个 UI 元素的创建包在
+   * `StartGetAccessRecordingFor(elmtId)` … `StopGetAccessRecording()` 之间，**只有在这个元素的
+   * 那次渲染里读到的状态**才算它的依赖；改状态时也只有登记过依赖的元素会重跑。
+   * 所以「在 build 里读过一次」并不等于整页都登记了 —— 读到它的那几个元素才有。
+   *
+   * 本页原先只在 `isEnglish()` 里读了 `revision`（为语言药丸而加），而**其余全部动态节点都经
+   * 本方法取状态**，于是它们一次也没登记过依赖：点「插话发送 / 排队发送」时状态确实变了
+   * （`setBusySendMode` 写了偏好、也 `update()` 通知了），界面却纹丝不动 —— 用户报的
+   * 「功能已启动、图标不变化」正是这个。把它补进本方法，一条链让**所有**取状态的节点都登记上。
+   *
+   * 与 PORT-MAP 坑 12（`@StorageLink` 只声明不读等于没声明）同源；
+   * 「父组件重绘了子组件也未必收到」，另见坑 27 与 `SwitchRow` / `ChoicePill` 的 `@Prop` 说明。
+   */
   private st(): HarnessState {
-    return harnessState() ?? this.fallback;
+    const rev: number = this.revision;
+    return rev >= 0 ? (harnessState() ?? this.fallback) : this.fallback;
   }
 
   private vm(): HarnessViewModel | null {
@@ -578,15 +664,23 @@ export struct SettingsScreen {
   @Builder
   languageSelector() {
     Row() {
-      this.choicePill($r('app.string.chinese'), !this.isEnglish(), (): void => {
-        if (this.isEnglish()) {
-          this.toggleLanguage();
-        }
+      ChoicePill({
+        label: $r('app.string.chinese'),
+        selected: !this.isEnglish(),
+        onTap: (): void => {
+          if (this.isEnglish()) {
+            this.toggleLanguage();
+          }
+        },
       })
-      this.choicePill($r('app.string.english'), this.isEnglish(), (): void => {
-        if (!this.isEnglish()) {
-          this.toggleLanguage();
-        }
+      ChoicePill({
+        label: $r('app.string.english'),
+        selected: this.isEnglish(),
+        onTap: (): void => {
+          if (!this.isEnglish()) {
+            this.toggleLanguage();
+          }
+        },
       })
     }
     .width('100%')
@@ -597,43 +691,21 @@ export struct SettingsScreen {
   @Builder
   sendModeSelector() {
     Row() {
-      this.choicePill($r('app.string.busy_send_mode_queue'), this.isQueueMode(), (): void => {
-        this.setSendMode(SEND_MODE_QUEUE);
+      ChoicePill({
+        label: $r('app.string.busy_send_mode_queue'),
+        selected: this.isQueueMode(),
+        onTap: (): void => {
+          this.setSendMode(SEND_MODE_QUEUE);
+        },
       })
-      this.choicePill($r('app.string.busy_send_mode_steer'), !this.isQueueMode(), (): void => {
-        this.setSendMode(SEND_MODE_STEER);
+      ChoicePill({
+        label: $r('app.string.busy_send_mode_steer'),
+        selected: !this.isQueueMode(),
+        onTap: (): void => {
+          this.setSendMode(SEND_MODE_STEER);
+        },
       })
     }
     .width('100%')
-  }
-
-  /**
-   * 一个药丸选项。
-   *
-   * 选中项用强调色填充 + 白字，未选中项透明底 + 描边 —— 对应源工程
-   * `SingleChoiceSegmentedButtonRow` 里选中段与未选中段的差异。
-   */
-  @Builder
-  choicePill(label: ResourceStr, selected: boolean, onTap: () => void) {
-    Text(label)
-      .fontSize(13)
-      .fontColor(selected
-        ? $r('sys.color.ohos_id_color_foreground_contrary')
-        : $r('sys.color.ohos_id_color_text_primary'))
-      .textAlign(TextAlign.Center)
-      .layoutWeight(1)
-      .padding({ top: 9, bottom: 9 })
-      .backgroundColor(selected
-        ? $r('sys.color.ohos_id_color_emphasize')
-        : Color.Transparent)
-      .borderRadius(20)
-      .border({
-        width: 1,
-        color: selected ? $r('sys.color.ohos_id_color_emphasize') : $r('sys.color.ohos_id_color_component_normal'),
-      })
-      .margin({ right: 8 })
-      .onClick((): void => {
-        onTap();
-      })
   }
 }

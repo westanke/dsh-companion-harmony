@@ -112,6 +112,12 @@
   **同步链的边界（实测踩到）**：`GITHUB_TOKEN` 天生不带 `workflows` 权限，**改动
   `.github/workflows/` 的提交，镜像链一律代推不了**，且会让整条链停摆；这类提交必须直推
   或走 REST 补推。workflow 里已加显式诊断，不许沉默（详见 PORT-MAP 收尾十一 坑 C、RELEASE.md ⑦）。
+  **消除该边界（2026-10-16 用户「写凭据」授权后）**：往仓库 secret `SYNC_PAT` 写入带 `workflow`
+  权限的令牌，并把 `actions/checkout` 改为 `token: ${{ secrets.SYNC_PAT || github.token }}` ——
+  如此**含 workflow 改动的提交也能由镜像链自愈**，不再永久卡链；secret 缺失时退回默认令牌，
+  仅 workflow 提交失败，退化温和。安全提示：本次写入的是 `gh` 的 OAuth 用户令牌，其 `repo`
+  scope 为**账号级**，存进本仓 secrets 意味着本仓 Actions 可读写该账号所有仓库；更稳妥是改用
+  仅限本仓的 fine-grained PAT，已向用户提示待其定夺。
   本次这笔提交因 GitHub 主站不可达，改用 **GitHub REST API 复刻推送**
   （blob → tree → commit → ref，逐层 SHA 断言到与本地 `HEAD` 完全一致）补齐。
   复盘见 `docs/PORT-MAP.md` 收尾十一、`docs/RELEASE.md` ⑦。

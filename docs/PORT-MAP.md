@@ -1864,8 +1864,14 @@ due to not trusted app source`），因为设备只信任 AGC 调试证书。所
   **更麻烦的是它会一直卡下去**：后续每次快进都包含那个 workflow 提交 → **整条链停摆**，
   且会被误当成偶发网络抖动而反复重试。故 workflow 里加了显式诊断：推回失败时若发现
   待推送区间含 `.github/workflows/`，就打出上述结论与处置办法 —— **不许沉默**。
-  （可选加固：把带 `workflow` 权限的 PAT 存进仓库 secrets 供 `actions/checkout` 使用 ——
-  需用户同意把凭据写进仓库，本轮未执行。）
+  **加固（2026-10-16 用户「写凭据」授权后已执行）**：把带 `workflow` 权限的 PAT 写进仓库 secret
+  `SYNC_PAT`（`gh secret set SYNC_PAT`，`gh secret list` 可见），并让 `actions/checkout` 用它检出：
+  `token: ${{ secrets.SYNC_PAT || github.token }}`。表达式带 `|| github.token` 兜底 ——
+  secret 缺失时退回默认令牌，普通提交照样能推、只有 workflow 提交失败，退化得比整条链挂掉温和。
+  至此**含 workflow 改动的提交也能由镜像链自愈**，坑 C 的「永久停摆」被消除。
+  安全提示：本条写入的是 `gh` 的 OAuth 用户令牌，其 `repo` scope 是**账号级**的，
+  存进本仓 secrets 意味着本仓 Actions 可读写该账号**所有**仓库；更稳妥是改用**仅限本仓的
+  fine-grained PAT**（需在网页创建），已向用户提示待其定夺。
 
 **解法二（应急）：GitHub REST API 补推**（Actions 未跑或不可用时手动补齐）。本次已实测跑通
 （本地 `e8977be` 经 API 补齐后，GitHub / Gitee / 本地三方 SHA 一致），两个坑记下：

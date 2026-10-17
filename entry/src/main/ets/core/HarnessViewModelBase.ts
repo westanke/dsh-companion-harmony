@@ -48,6 +48,33 @@ import { HarnessDeps } from './HarnessHelpers';
 import {
   LiveKey,
 } from './HarnessHelpers';
+import { RequestGate } from './RequestGate';
+import { EventDebouncer, TimerPort } from './EventDebouncer';
+
+/** 目录刷新去抖窗口（毫秒）。 */
+export const DIRECTORY_REFRESH_DEBOUNCE_MS: number = 500;
+
+/**
+ * 把注入的 `TimerBridge` 适配成 `EventDebouncer` 要的 `TimerPort`。
+ *
+ * 两个接口几乎一样，但**不能省这一层**：`EventDebouncer` 是纯 core 模块，
+ * 不该认识 `DshClient` 里的 `TimerBridge`；而 `TimerBridge` 也不能为了去抖去改签名。
+ */
+class DepsTimer implements TimerPort {
+  private readonly deps: HarnessDeps;
+
+  constructor(deps: HarnessDeps) {
+    this.deps = deps;
+  }
+
+  after(millis: number, action: () => void): number {
+    return this.deps.timers.schedule(millis, action);
+  }
+
+  cancel(handle: number): void {
+    this.deps.timers.cancel(handle);
+  }
+}
 
 export class HarnessViewModelBase {
   protected deps: HarnessDeps;
@@ -102,9 +129,31 @@ export class HarnessViewModelBase {
   protected timerHandles: number[] = [];
   protected disposed: boolean = false;
 
+  /**
+   * 请求代际闸门（见 `core/RequestGate.ts`）。
+   *
+   * 每次「上下文切换」（换会话 / 换主机 / 断开）都要 `invalidate()`，让还在飞的旧请求
+   * 即使回来了也写不进状态 —— 否则用户在会话 A 点刷新、立刻切到 B，A 的响应后到
+   * 会把 B 的列表覆盖成 A 的内容。
+   */
+  protected requestGate: RequestGate = new RequestGate();
+
+  /**
+   * 目录刷新去抖（`DIRECTORY_REFRESH_DEBOUNCE_MS`）。
+   *
+   * 内核批量改文件时会连续推很多 `file.*` 事件，每个都触发一次目录重取就是请求风暴。
+   * 安静满窗口后只取一次（见 `core/EventDebouncer.ts`）。
+   */
+  protected directoryDebouncer: EventDebouncer;
+
   constructor(deps: HarnessDeps) {
     this.deps = deps;
     this.state = new HarnessState();
+    // 去抖动作走**可覆盖的钩子**：真正的实现在文件层（`loadDirectory`），
+    // 基类直接调它会反向依赖下面的层（与 startRestore 同一个理由）。
+    this.directoryDebouncer = new EventDebouncer(DIRECTORY_REFRESH_DEBOUNCE_MS, (): void => {
+      this.refreshDirectoryNow();
+    }, new DepsTimer(deps));
     this.applyPreferences(this.state);
     // Kotlin 的 init { restoreConnection() }。
     // 注意：实现排在继承链**最后一层**（`HarnessViewModelConnection.restoreConnection`），
@@ -119,6 +168,15 @@ export class HarnessViewModelBase {
    * 单独成方法是为了让"构造时触发恢复"这件事不必把最后一层拉进基类。
    */
   protected startRestore(): void {
+  }
+
+  /**
+   * 目录刷新的钩子 —— 空实现，由**文件层**覆盖成 `loadDirectory(null)`。
+   *
+   * 与 `startRestore` 同一个理由：去抖动作里不能直接写 `this.loadDirectory(...)`，
+   * 那会让基类依赖下面的层。空实现还多一层好处 —— 没接文件层的测试替身也不会因此报错。
+   */
+  protected refreshDirectoryNow(): void {
   }
 
   // ————————————————— 对外订阅 —————————————————
@@ -156,6 +214,9 @@ export class HarnessViewModelBase {
     s.genUiDebug = this.deps.preferences.genUiDebug;
     s.useWebChat = this.deps.preferences.useWebChat;
     s.showContext = this.deps.preferences.showContext;
+    s.fontScale = this.deps.preferences.fontScale;
+    s.fontFollowsSystem = this.deps.preferences.fontFollowsSystem;
+    s.themeMode = this.deps.preferences.themeMode;
   }
 
   /** 放行连接页，进入 App（幂等）。只由用户的主动动作调用。 */
@@ -347,16 +408,28 @@ export class HarnessViewModelBase {
   }
 
   protected async launchOperation(block: () => Promise<void>): Promise<void> {
+    // 领号必须在**调用点**这一行，不能挪进异步块里：挪进去的话，等块真正开跑时
+    // 上下文可能已经切过一次，领到的会是**新**代际 —— 旧结果就又写回来了。
+    const token: number = this.requestGate.current();
     this.update((s: HarnessState): void => {
       s.busy = true;
       s.error = null;
     });
+    // 先跑完、把结果**接住**，再问「这个号还算数吗」：直接在外层 catch 里写 error
+    // 会让过期请求也能改状态，正是要挡的那件事。
+    let failure: Object | null = null;
     try {
       await block();
     } catch (e) {
-      const failure: Object = e as Object;
+      failure = e as Object;
+    }
+    if (!this.requestGate.isCurrent(token)) {
+      return;
+    }
+    if (failure !== null) {
+      const caught: Object = failure;
       this.update((s: HarnessState): void => {
-        s.error = this.messageOf(failure);
+        s.error = this.messageOf(caught);
       });
     }
     this.update((s: HarnessState): void => {

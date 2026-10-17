@@ -184,10 +184,22 @@ export class ChatDisplayItem {
    * 错误码），而 [body] 在所有渲染器里都是「一段 Markdown 正文」。
    */
   failure: ChatTurnFailure | null;
+  /**
+   * 这一条落盘的时刻（毫秒，取自服务端事件帧的 `time`）。
+   *
+   * **`0` 表示「没有时间」**，而不是「1970 年」：流式项还没落盘、以及任何服务端没给 `time`
+   * 的老帧，都会落在这一档。界面靠它决定「不显示时间戳」，所以这个哨兵值必须是一个
+   * 真实时间戳不可能取到的值（毫秒级 epoch 不可能是 0）——源工程用的是 `time: Long?`
+   * 可空类型，ArkTS 这边用 `0` 表达同一件事，省掉每处调用点的判空。
+   *
+   * 为什么专门加这个字段：原来消息流里**没有任何时间信息**，用户翻到昨天的会话时
+   * 无从判断那是今天还是上个月（见 `core/ChatTimeLabel.ts` 的分档理由）。
+   */
+  time: number;
 
   constructor(id: string, seq: number, kind: ChatItemKind, title: string | null = null, body: string = '',
     streaming: boolean = false, attachments: ChatAttachment[] = [], actions: string[] = [],
-    tools: ToolCallDetail[] = [], failure: ChatTurnFailure | null = null) {
+    tools: ToolCallDetail[] = [], failure: ChatTurnFailure | null = null, time: number = 0) {
     this.id = id;
     this.seq = seq;
     this.kind = kind;
@@ -198,6 +210,7 @@ export class ChatDisplayItem {
     this.actions = actions;
     this.tools = tools;
     this.failure = failure;
+    this.time = time;
   }
 
   /**
@@ -206,8 +219,10 @@ export class ChatDisplayItem {
    * 只给合并工具行用，所以只暴露那几个真正会被改的字段，不做通用的 copy 机。
    */
   withMerged(id: string, title: string, body: string, actions: string[], tools: ToolCallDetail[]): ChatDisplayItem {
+    // `time` 跟着第一条走（= 这一批调用的开始时刻）：合并后这一行代表的是整批，
+    // 取第一条才与「什么时候开始干的」对得上。
     return new ChatDisplayItem(id, this.seq, this.kind, title, body, this.streaming,
-      this.attachments, actions, tools, this.failure);
+      this.attachments, actions, tools, this.failure, this.time);
   }
 }
 

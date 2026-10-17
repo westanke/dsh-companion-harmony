@@ -33,8 +33,12 @@ import {
   imagePart,
 } from './ChatContentParts';
 import {
+  displayItemsOf,
   handoffPathOf,
 } from './ChatPresentation';
+import {
+  retryableUserText,
+} from './ChatRetry';
 import {
   isBlank,
   isNotBlank,
@@ -52,6 +56,12 @@ import {
   isHostCommandLine,
   distinctById,
 } from './HarnessHelpers';
+import {
+  normalizeFontScale,
+} from './FontScale';
+import {
+  normalizeThemeMode,
+} from './ThemeMode';
 import { HarnessViewModelSessions } from './HarnessViewModelSessions';
 
 export class HarnessViewModelComposer extends HarnessViewModelSessions {
@@ -140,6 +150,29 @@ export class HarnessViewModelComposer extends HarnessViewModelSessions {
       // 无论成功、失败还是提前返回，闸都要在**这一轮结束**时放开。
       this.sending = false;
     }
+  }
+
+  /**
+   * 重试上一轮：把**最后一条用户消息**原样再发一次。
+   *
+   * 为什么不是「这条失败行对应的那条消息」：`ChatTurnFailure` 里没有 turn/seq
+   * （内核只给失败摘要），拿不到精确归属；而失败行永远紧跟在触发它的用户消息之后，
+   * 所以「最后一条用户消息」就是它。判据与排除条件见 `core/ChatRetry.ts`。
+   *
+   * 找不到（历史上没有带正文的用户消息）时**什么都不做**：这是用户主动点的动作，
+   * 报一个他看不懂的错反而更糟。
+   *
+   * 失败行**只在 `failure.stopped` 为假时才给按钮**（登出停止重试必然再失败一次），
+   * 那一条判据在界面上（`ui/MessageParts.ets` 的 `TurnFailureRow`），不在这里 ——
+   * 这里只管「重试」这个动作本身。
+   */
+  retryLastUserMessage(): void {
+    const history: ChatHistory | null = this.state.history;
+    const text: string | null = history === null ? null : retryableUserText(displayItemsOf(history));
+    if (text === null) {
+      return;
+    }
+    void this.sendMessage(text, false);
   }
 
   /**
@@ -317,6 +350,51 @@ export class HarnessViewModelComposer extends HarnessViewModelSessions {
     this.deps.preferences.genUiDebug = enabled;
     this.update((s: HarnessState): void => {
       s.genUiDebug = enabled;
+    });
+  }
+
+  /**
+   * 改应用内字号倍数（0.8–1.5）。
+   *
+   * **落盘用的是归一化后的值**，不是原样传进来的那个：滑块本身不会给出越界值，
+   * 但一个坏值一旦写进偏好，下次启动就会以 NaN 尺寸测量整屏（白屏且不崩，最难查的一种）。
+   * 归一化放在偏好层与这里各做一次，是刻意重复 —— 读路径与写路径都要挡住坏值。
+   *
+   * **真正生效的那一步在平台层**（`ui/AppRuntime.ets` 调 `platform.applyAppFontScale`）：
+   * core 不能碰 `ApplicationContext`，否则那 531 个单测就没法在 node 下跑。
+   */
+  setFontScale(value: number): void {
+    const normalized: number = normalizeFontScale(value);
+    this.deps.preferences.fontScale = normalized;
+    this.update((s: HarnessState): void => {
+      s.fontScale = normalized;
+    });
+  }
+
+  /**
+   * 「字号跟随系统」开关。
+   *
+   * 打开时应用这层不做任何缩放（`effectiveFontScale` 返回 1.0），
+   * **但已记住的倍数不抹掉**：用户多半是「先试试手动、再想看系统那档是不是更好」，
+   * 回头关掉开关时应该回到他自己调过的那个落点，而不是重置回 1.0。
+   */
+  setFontFollowsSystem(enabled: boolean): void {
+    this.deps.preferences.fontFollowsSystem = enabled;
+    this.update((s: HarnessState): void => {
+      s.fontFollowsSystem = enabled;
+    });
+  }
+
+  /**
+   * 主题档位：`system` / `light` / `dark`。
+   *
+   * 生效的那一步同样在平台层（`applyAppThemeMode`）—— 这里只负责改状态与落盘。
+   */
+  setThemeMode(mode: string): void {
+    const normalized: string = normalizeThemeMode(mode);
+    this.deps.preferences.themeMode = normalized;
+    this.update((s: HarnessState): void => {
+      s.themeMode = normalized;
     });
   }
 

@@ -13,7 +13,12 @@
  * | `MentionSuggestions`（2139–2255） | `ui/ComposerSuggestions.ets` 的 `MentionSuggestions` |
  * | `commandSuggestions`（2264–2274） | `core/ComposerSuggestions.ts` 的 `commandSuggestions` |
  * | `CommandSuggestions`（2276–2326） | `ui/ComposerSuggestions.ets` 的 `CommandSuggestions` |
- * | `ChatThinkBar`（1897–1928） | `ChatDetail.thinkBar` |
+ * | `ChatThinkBar`（1897–1928） | `ui/ChatStatusBar.ets` 的 `ChatStatusBar`（与 AI 标识合并，见该文件头） |
+ * | `ChatStatusBar` / `AiGeneratedNotice`（真机反馈五修） | `ui/ChatStatusBar.ets` |
+ * | `groupChatDisplay`（`data/ChatDisplayGroups.kt`） | `core/ChatDisplayGroups.ts`（纯函数，可单测） |
+ * | `ChatDisplayEntryRow` / `ProcessGroupRow`（`ui/ChatProcessGroup.kt`） | `ui/ProcessGroupRow.ets` |
+ * | `rememberFrozenItems`（`ui/ChatScrollFreeze.kt`） | `ChatDetail.onScrollStarted` / `onScrollStopped` |
+ * | `visibleHistoryItems`（`data/ChatVisibleItems.kt`） | `ChatDetail.computeDisplayItems` |
  * | `TodoPanel`（2045–2125） | `ChatDetail.todoPanel` |
  *
  * ## 拆分说明（切在哪、为什么）
@@ -59,14 +64,21 @@
  *    `danger-full-access` 走二次确认，三条都照抄。
  * 4. **自动滚底的判据自己算条目数**。源工程用 `listState.layoutInfo.totalItemsCount`（框架
  *    给的权威值）；ArkUI 的 `List` 没有等价属性，只有 `onScrollIndex` 的起止下标。所以
- *    这里用 `listItemCount()` 把「加载更早消息 / 空态 / 消息」三类条目算出来，
- *    **改动列表结构时必须同步改它**（少算一项就会在「看着到底了」的位置把用户拽回底部）。
+ *    这里用 `listItemCount()` 把「加载更早消息 / 空态 / **分组后的消息与过程组**」三类条目算出来，
+ *    **改动列表结构时必须同步改它**（少算一项就会在「看着到底了」的位置把用户拽回底部，
+ *    而小组折叠后行数会变少，所以判据必须按分组后的行数算）。
  * 5. **图片缩略图先解码**（`platform/ImageCodec.ets`）：ArkUI 的 `Image()` 只认 `PixelMap`。
  * 6. **「补全面板开着就关掉抽屉手势」那半截在本工程无对应 API**。源工程把 `@`/`/` 面板开着
  *    这个事实告诉外层（`state.composerOverlay`），让 `ModalNavigationDrawer` 停止响应横划
  *    （`gesturesEnabled = !composerOverlay …`）；ArkUI 的 `SideBarContainer` 没有等价的
  *    「禁用手势」属性。所以 `setComposerOverlay` 记下的状态在本工程只作记录 —— 面板内部的
  *    可滚动 `List` 已经把大部分误触挡掉（那正是源工程加这道保险的起因）。
+ * 7. **展开态要存在父组件**。源工程的过程组用 `rememberSaveable` 记住「这一组展开过没有」；
+ *    ArkUI 的 `List` 同样会回收视口外的条目，组件自带的 `@State` 会跟着没。所以展开态落在
+ *    本组件的 `expandedGroups`，用 `@Prop` 下行给子组件（**普通成员不会被重绘回写**，见坑 24/27）。
+ * 8. **`setTimeout` 没有取消机制**。源工程的滚动冻结用 `LaunchedEffect(scrolling)`，
+ *    换 key 会自动取消上一次的协程；ArkUI 侧要自己加滚动代际校验，否则上一次的 80ms
+ *    定时器会在新一轮滑动中错误解冻。
  *
  * ## 五条照抄源工程、不许简化的判据
  *
@@ -90,18 +102,34 @@ import {
   ApprovalUiKind, HarnessState, HarnessViewModel, PendingAttachment,
 } from '../core/HarnessViewModel';
 import {
-  ChatDisplayItem, ChatItemKind, LiveChatState, displayItemsOf, permissionSelectOf, todoItemsOf,
+  ChatDisplayItem, ChatItemKind, LiveChatState, todoItemsOf,
 } from '../core/ChatPresentation';
-import { liveThinkingText, thinkBarText } from '../core/ChatThinkBar';
+import { visibleHistoryItems } from '../core/ChatVisibleItems';
+import {
+  ChatDisplayEntry, chatDisplayEntryKey, groupChatDisplay,
+} from '../core/ChatDisplayGroups';
+import { liveThinkingText } from '../core/ChatThinkBar';
 import { composerOverlayActive } from '../core/ComposerSuggestions';
+import { galleryFileName } from '../core/ImageSave';
+import { SaveOutcome, saveBytes } from '../platform/Pickers';
+import { decodeImageSync } from '../platform/ImageCodec';
 import { harnessState, harnessVm } from './AppRuntime';
-import { ChatMessageView } from './ChatMessage';
+import { ChatDisplayEntryRow } from './ProcessGroupRow';
+import { ChatStatusBar } from './ChatStatusBar';
 import { ApprovalPanel, QuestionCard } from './ChatDetailPanels';
 import { ChatHeaderPanelHost, SHEET_FILES, SHEET_FULL_ACCESS } from './ChatHeader';
+import { TrajectoryScreen } from './TrajectoryScreen';
 import { ChatComposer } from './ChatComposer';
 
 /** 待回答问题区的高度上限：对位源工程 `heightIn(max = 340.dp)`。 */
 const QUESTION_PANEL_MAX_HEIGHT_VP: number = 340;
+
+/**
+ * 停手之后再过多久才解冻渲染快照（毫秒）—— 对位源工程 `ChatScrollFreeze.kt` 的 80ms 窗口。
+ *
+ * 这 80ms 留给**惯性滑动与高度收敛**：立刻解冻会让刚停稳的位置跳一下。
+ */
+const SCROLL_SETTLE_MS: number = 80;
 
 /** 聊天详情页（装配层）：头部面板宿主 + 待办 + 消息流 + 问答 + 思考条 + 审批 / 输入区。 */
 @Component
@@ -123,6 +151,67 @@ export struct ChatDetail {
   @State atBottom: boolean = true;
   /** 待办面板是否展开（源工程 `tasksExpanded`，默认展开）。 */
   @State tasksExpanded: boolean = true;
+  /**
+   * 上一次已经落过底的会话 id —— 用来把「换了个会话」和「同一个会话里来了新消息」分开。
+   * 初值 `null`：首屏进会话也算一次「切换」，会落底一次。
+   *
+   * 普通成员即可：只在 `onRevision` 这个 `@Watch` 回调里读写，不参与渲染依赖，
+   * 所以不需要（也不该）加装饰器（见 PORT-MAP 坑 24 的判据）。
+   */
+  private lastScrolledSessionId: string | null = null;
+
+  // ——— 滚动期冻结流式快照 ———
+  /**
+   * 渲染快照是否已经「稳定」（可以灌入最新数据）。滚动中为 `false`，停手 80ms 后回到 `true`。
+   *
+   * 症状与做法见 `SCROLL_SETTLE_MS` 上方与 `onScrollStarted`：智能体正在流式输出时，
+   * 用户往上翻历史，每一个 token 都会重建整份列表数据源 —— 手指下的滚动一顿一顿，
+   * 而用户此刻压根不在看末尾。做法是滚动中保留**停手那一刻**的快照。
+   */
+  @State scrollSettled: boolean = true;
+
+  /** 冻结中的那份快照；只在「开始滚动」的那一刻写入一次。 */
+  private frozenItems: ChatDisplayItem[] = [];
+
+  // ——— 历史投影缓存 ———
+  /**
+   * 缓存的历史投影（过滤后的历史项）与它的键。
+   *
+   * 缓存什么：`visibleHistoryItems` 是**逐事件映射的纯函数**，而它在渲染路径上每帧都会被
+   * 调到 —— 流式期间每秒几十帧，每帧把几百条历史事件重新映射一遍再跑两趟过滤，纯粹白烧 CPU。
+   * 历史只在「刷新」时才换对象，所以**引用相等就是「没变」的可靠判据**
+   * （照抄源工程 `remember(history, showContext)` 的判据）。
+   *
+   * 刻意不缓存流式项（`liveItems()`）：它每帧都在变，缓存永远 miss，多一层比较与拷贝是**假优化**。
+   *
+   * 键里的 `projHasHistory` 必须与 `projHistory` 一起比：`history` 为 null 也是合法状态
+   * （还没加载），只看引用相等无法区分「null → 懒加载完还是 null」这种情形下的空投影。
+   */
+  private projHistory: ChatHistory | null = null;
+  private projHasHistory: boolean = false;
+  private projShowContext: boolean = false;
+  private projItems: ChatDisplayItem[] = [];
+
+  /**
+   * 滚动代际。停手后延时解冻的定时器要认这个值，**只有当前代际**的定时器才能解冻。
+   *
+   * 为什么必须有：用户快速连续滑动会让上一次的 80ms 定时器在**新一次滚动进行中**到期，
+   * 那一下会错误地解冻 —— 表现就是「刚滑两下，列表又跳了」。
+   * 源工程用 `LaunchedEffect(scrolling)` 天然带这个语义（换 key 会取消上一次的协程），
+   * ArkUI 的 `setTimeout` 没有取消机制，所以这里手动加一道代际校验。
+   */
+  private scrollGeneration: number = 0;
+
+  /**
+   * 已展开的过程组 id 列表（组 id = 组内首项 id）。
+   *
+   * 为什么展开态存在**父组件**而不是组自己：ArkUI 的 `List` 会回收视口外的条目，
+   * 组件自带的 `@State` 会跟着没了 —— 用户展开一组、往下滚两屏再滚回来，它会自己合上。
+   * 源工程用 `rememberSaveable` 解决同一件事（见 `ui/ProcessGroupRow.ets` 文件头）。
+   *
+   * 用数组而不是 `Set`：`@State` 的赋值检测靠「换了个新对象」，数组每次重建一份新的最直白。
+   */
+  @State expandedGroups: string[] = [];
 
   // ——— 面板宿主 ———
   @State sheetOpen: boolean = false;
@@ -134,6 +223,29 @@ export struct ChatDetail {
    */
   @State fullAccessApprovalId: string = '';
   @State fullAccessAck: boolean = false;
+
+  // ——— 图片全屏查看（对位源工程 `ui/chat/ChatImageViewer.kt`） ———
+  /**
+   * 查看器里那张图的字节；`null` = 查看器关着。
+   *
+   * 状态住在**这一层**而不是 `AttachmentImage` 自己：`List` 会回收视口外的消息行，
+   * 图片行滚动出屏幕再把查看器带走，就会变成「刚点开、滑一下就没了」
+   * （与过程组展开态同一个坑，PORT-MAP 坑 29）。
+   */
+  @State viewerBytes: Uint8Array | null = null;
+  /** 已解码的位图；只在 `openImageViewer` 里写一次（解码失败就不打开）。 */
+  @State viewerPixelMap: PixelMap | null = null;
+  /** 保存时的默认文件名（`ChatAttachment.name` 原样带进来）。 */
+  @State viewerName: string = '';
+
+  /**
+   * 执行轨迹页是否打开（全屏覆盖）。
+   *
+   * 状态住在**这一层**、入口在头部菜单（头部只上报 `onOpenTrajectory`）：
+   * 全屏覆盖层挂在详情页的根节点上，`bindContentCover` 的 `isShow` 只有一个来源，
+   * 与图片查看器同一个理由（PORT-MAP 坑 31 / 34）。
+   */
+  @State trajectoryOpen: boolean = false;
 
   /** 消息列表的滚动控制器（自动跟随与「跳到最新」都要它）。 */
   private scroller: Scroller = new Scroller();
@@ -169,6 +281,19 @@ export struct ChatDetail {
     return harnessVm();
   }
 
+  /**
+   * 无参资源 → 字符串。只在**必须拿 string** 的场合用：系统弹窗
+   * （`showAlertDialog` 的 `value` /`message` 传 `Resource` 在部分版本上不渲染）。
+   * 与 `ui/ChatScreen.ets` 的同名助手保持一致。
+   */
+  private resText(res: Resource): string {
+    const ctx = this.getUIContext().getHostContext();
+    if (ctx === undefined) {
+      return '';
+    }
+    return ctx.resourceManager.getStringSync(res.id);
+  }
+
   private scopes(): string[] {
     const device = this.st().device;
     return device === null ? [] : device.scopes;
@@ -187,7 +312,16 @@ export struct ChatDetail {
     if (id === null) {
       return null;
     }
-    const list: ChatSession[] = this.st().sessions;
+    const found: ChatSession | null = ChatDetail.findSession(this.st().sessions, id);
+    if (found !== null) {
+      return found;
+    }
+    // 归档视图里打开的会话**不在** `sessions` 里 —— 不查这一份的话，头部标题会退化成
+    // id 前 12 位（看起来像一条陌生会话），而用户明明是从归档列表点进来的。
+    return ChatDetail.findSession(this.st().archivedSessions, id);
+  }
+
+  private static findSession(list: ChatSession[], id: string): ChatSession | null {
     for (let i = 0; i < list.length; i++) {
       if (list[i].id === id) {
         return list[i];
@@ -199,34 +333,113 @@ export struct ChatDetail {
   // ————————————————— 消息流 —————————————————
 
   /**
-   * 历史 + 流式两段合并后的显示条目。
+   * 当前该渲染的扁平展示项：**滚动中返回冻结快照**，否则重算。
    *
-   * 三层过滤照抄源工程：① 历史里的 REASONING 不显示（翻历史的人不读思考）；
+   * 两条过滤口径已搬进 `core/ChatVisibleItems.ts`（原来是内联在这里的，搬出去是为了能测，
+   * 也为了让「历史投影缓存」有一个明确的缓存单元）：
+   * ① 历史里的 REASONING 不显示（翻历史的人不读思考）；
    * ② 历史里的 CONTEXT 默认隐藏（`showContext` 开关在设置页）；
    * ③ **流式段同样过滤 REASONING** —— 那一段改由底部思考条承载。
+   *
+   * 这里的「冻结」只挡**渲染数据源**：`atBottom` / 「跳到最新」仍然读实时值，
+   * 否则用户滚到底时按钮的显隐会跟着旧快照走。
+   *
+   * 方法名从 `displayItems` 改成 `renderItems`：它是**渲染入口**而不是展示项的产出者 ——
+   * 真正的产出只有 core 层一处（`ChatEventParsers.displayItemsOf` 与过滤核
+   * `ChatVisibleItems.visibleItemsOf`）。名字不该让人以为界面层有第二个出口。
    */
-  private displayItems(): ChatDisplayItem[] {
+  private renderItems(): ChatDisplayItem[] {
+    if (!this.scrollSettled) {
+      return this.frozenItems;
+    }
+    return this.computeDisplayItems();
+  }
+
+  /**
+   * 历史投影：命中缓存就直接复用，没命中才重算。
+   *
+   * 缓存键 = 「history 对象 + 它是不是 null + showContext 开关」，三个都相同才复用。
+   * 这是源工程 `remember(history, showContext)` 的等价物 —— ArkUI 没有 `remember`，
+   * 就用普通成员变量手工记账（普通成员不参与重绘回写，但这里只做**纯计算缓存**、
+   * 不驱动界面，所以不需要 `@State`）。
+   */
+  private historyProjection(history: ChatHistory | null, showContext: boolean): ChatDisplayItem[] {
+    const sameHistory: boolean = history === this.projHistory && (history !== null) === this.projHasHistory;
+    if (sameHistory && showContext === this.projShowContext) {
+      return this.projItems;
+    }
+    this.projHistory = history;
+    this.projHasHistory = history !== null;
+    this.projShowContext = showContext;
+    this.projItems = visibleHistoryItems(history, showContext);
+    return this.projItems;
+  }
+
+  private computeDisplayItems(): ChatDisplayItem[] {
     const history: ChatHistory | null = this.st().history;
     const showContext: boolean = this.st().showContext;
-    const out: ChatDisplayItem[] = [];
-    if (history !== null) {
-      const historyItems: ChatDisplayItem[] = displayItemsOf(history);
-      for (let i = 0; i < historyItems.length; i++) {
-        const item: ChatDisplayItem = historyItems[i];
-        if (item.kind === ChatItemKind.REASONING) {
-          continue;
-        }
-        if (!showContext && item.kind === ChatItemKind.CONTEXT) {
-          continue;
-        }
-        out.push(item);
-      }
-    }
+    const out: ChatDisplayItem[] = this.historyProjection(history, showContext).slice();
     const live: ChatDisplayItem[] = this.liveItems();
     for (let i = 0; i < live.length; i++) {
       out.push(live[i]);
     }
     return out;
+  }
+
+  /**
+   * 把扁平项折成「消息 + 过程组」两类（规则与理由见 `core/ChatDisplayGroups.ts`）。
+   *
+   * 时间从 item 自己身上取（`ChatDisplayItem.time`，历史项有值、流式项为 `0`
+   * → 该组不显示耗时段）。这正是移植批次 1 补 `time` 时预留的那个接缝。
+   */
+  private displayEntries(): ChatDisplayEntry[] {
+    return groupChatDisplay(this.renderItems());
+  }
+
+  private isGroupExpanded(id: string): boolean {
+    return this.expandedGroups.includes(id);
+  }
+
+  /** 切换一组的展开态：重建一份数组再赋值，`@State` 才会认定为「变了」。 */
+  private toggleGroup(id: string): void {
+    const next: string[] = [];
+    let found: boolean = false;
+    for (let i = 0; i < this.expandedGroups.length; i++) {
+      const key: string = this.expandedGroups[i];
+      if (key === id) {
+        found = true;
+      } else {
+        next.push(key);
+      }
+    }
+    if (!found) {
+      next.push(id);
+    }
+    this.expandedGroups = next;
+  }
+
+  /**
+   * 开始滚动：**先把此刻的列表存进快照，再上锁**。
+   *
+   * 顺序不能反：上锁之后 `displayItems()` 就开始返回快照了，那时再取就取到的是上一份快照
+   * （第一次滚动时更是空表）。
+   */
+  private onScrollStarted(): void {
+    this.scrollGeneration++;
+    if (this.scrollSettled) {
+      this.frozenItems = this.computeDisplayItems();
+    }
+    this.scrollSettled = false;
+  }
+
+  /** 停手：等 80ms 解冻（窗口的取舍见 `SCROLL_SETTLE_MS`）。 */
+  private onScrollStopped(): void {
+    const generation: number = this.scrollGeneration;
+    setTimeout((): void => {
+      if (generation === this.scrollGeneration) {
+        this.scrollSettled = true;
+      }
+    }, SCROLL_SETTLE_MS);
   }
 
   /** 当前会话的流式段（不属于本会话的实时状态一律不认）。 */
@@ -254,10 +467,16 @@ export struct ChatDetail {
     return out;
   }
 
-  /** 思考条只承载**流式这一段**：翻历史时 `liveChat` 为 null，这一条自然整条不显示。 */
-  private thinkText(): string {
+  /**
+   * 状态条的**思考原文**：只承载**流式这一段** —— 翻历史时 `liveChat` 为 null，返回空串。
+   *
+   * 返回原文而不是截好的摘要：状态条要在「折叠（尾部摘要）/ 展开（全文）」两个形态之间切换，
+   * 两形态都得有（截断在 `ui/ChatStatusBar.ets` 内部做，见该文件头）。而且思考为空时
+   * 状态条会改显示「内容由 AI 生成」标识 —— 那条判据也在那边。
+   */
+  private rawThinkText(): string {
     const live: LiveChatState | null = this.liveChat();
-    return live === null ? '' : thinkBarText(liveThinkingText(live.blocks));
+    return live === null ? '' : liveThinkingText(live.blocks);
   }
 
   private todos(): TodoItem[] {
@@ -275,13 +494,21 @@ export struct ChatDetail {
    *
    * ArkUI 没有 `layoutInfo.totalItemsCount`，所以这个数只能自己算 —— 它同时是
    * 「是否贴底」与「跳到最新」的判据。**改动列表结构时必须同步改它**（见文件头差异 4）。
+   *
+   * 数的是**分组之后**的行数：分组把「连续的过程项」折成一行，按扁平项数算会让判据
+   * 一直偏大，于是「看着到底了」的位置被算成「还差好几行」，自动跟随就再也开不了火。
+   * 上一段的「加载更早消息」与空态两块照旧各算一行。
    */
   private listItemCount(): number {
-    let count: number = this.displayItems().length;
+    // 只算一次分组：这个函数在 `onScrollIndex` 里被高频调用，多算一遍就是多一趟 O(n)
+    // （分组会新建数组与摘要对象，长会话下这笔开销不该重复付）。
+    // 空态的判据可以直接用条目数 —— 分组不改变「有没有条目」这件事。
+    const entries: number = this.displayEntries().length;
+    let count: number = entries;
     if (this.hasMore()) {
       count += 1;
     }
-    if (this.st().history !== null && this.displayItems().length === 0) {
+    if (this.st().history !== null && entries === 0) {
       count += 1;
     }
     return count;
@@ -309,15 +536,190 @@ export struct ChatDetail {
     }
   }
 
+  /**
+   * 失败行上的「重试上一轮」：把最后一条用户消息再发一次。
+   *
+   * 两条判据都不在这一层：vm 侧的「找不到就静默不动」在
+   * `HarnessViewModelComposer.retryLastUserMessage()`，「`stopped` 不给按钮」在
+   * `ui/MessageParts.ets` 的 `TurnFailureRow`。这里只做转发。
+   */
+  private retryLastTurn(): void {
+    const vm: HarnessViewModel | null = this.vm();
+    if (vm !== null) {
+      vm.retryLastUserMessage();
+    }
+  }
+
+  /**
+   * 消息级分叉的**二次确认**。与归档同理，用系统弹窗（自动套用深浅色）；
+   * 分叉会在电脑上**新建一个会话**，虽然不动原会话，但它是「改真实数据」的动作，
+   * 点一下图标就生效是不行的。
+   *
+   * 确认对话框的状态刻意**不放进子组件**：`List` 会回收视口外的消息行，
+   * 对话框若由 `ChatMessageView` 自己持有，用户点完手指一动就可能把待确认状态带走
+   * （与过程组展开态同一个坑，PORT-MAP 坑 29/30）。这里只有 `atSeq` 一个瞬时参数，
+   * 走一层转发即可，不必引入 `@State` 集合。
+   */
+  private confirmFork(atSeq: number): void {
+    this.getUIContext().showAlertDialog({
+      title: this.resText($r('app.string.fork_confirm_title')),
+      message: this.resText($r('app.string.fork_confirm_body')),
+      primaryButton: {
+        value: this.resText($r('app.string.fork_confirm_action')),
+        action: (): void => {
+          this.forkAt(atSeq);
+        },
+      },
+      secondaryButton: {
+        value: this.resText($r('app.string.close')),
+        action: (): void => {
+        },
+      },
+      cancel: (): void => {
+      },
+    });
+  }
+
+  private forkAt(atSeq: number): void {
+    const vm: HarnessViewModel | null = this.vm();
+    const id: string | null = this.selectedId();
+    if (vm !== null && id !== null) {
+      void vm.forkSession(id, atSeq);
+    }
+  }
+
+  // ————————————————— 图片全屏查看 —————————————————
+
+  /**
+   * 打开全屏查看。**解码失败就不打开**：缩略图能画出来说明这张图曾经解得开，
+   * 这里是二次保险；真解不开时打开只会得到一整屏黑，比「点了没反应」更难解释。
+   */
+  private openImageViewer(bytes: Uint8Array, name: string): void {
+    const decoded: PixelMap | null = decodeImageSync(bytes);
+    if (decoded === null) {
+      return;
+    }
+    this.viewerBytes = bytes;
+    this.viewerPixelMap = decoded;
+    this.viewerName = name;
+  }
+
+  private closeImageViewer(): void {
+    this.viewerBytes = null;
+    this.viewerPixelMap = null;
+    this.viewerName = '';
+  }
+
+  /**
+   * 把查看器里这张图写到用户选的位置。
+   *
+   * ## 为什么是「保存」而不是「存相册」
+   *
+   * 源工程走的是安卓 `MediaStore`（`saveToGallery`）。鸿蒙这边等价的相册写入要
+   * `ohos.permission.WRITE_IMAGEVIDEO`，**与 READ_PASTEBOARD 同一类受限权限**，
+   * 普通应用声明会导致安装失败（本工程已经栽过一次，见项目记忆）。
+   * 所以改用系统「保存」面板（`platform/Pickers.saveBytes`，**零权限**）：
+   * 用户自己在面板里选位置（含相册目录）、还能顺手改名。
+   *
+   * ## 三条与源工程一致的处置
+   *
+   * - **取消不是错误**：`CANCELLED` 一律不弹提示 —— 用户按了取消却收到一句「保存失败」，
+   *   会以为哪里坏了；
+   * - **失败必须可见**（源工程原话）：真失败时给一句提示，否则用户会以为已经存上了；
+   * - 文件名由 `galleryFileName` 按**魔数**补扩展名（会话里的图经常没有扩展名或扩展名是错的）。
+   */
+  private async saveViewedImage(): Promise<void> {
+    const bytes: Uint8Array | null = this.viewerBytes;
+    if (bytes === null) {
+      return;
+    }
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.getUIContext().getPromptAction().showToast({ message: $r('app.string.image_save_failed') });
+      return;
+    }
+    const outcome: SaveOutcome = await saveBytes(context, galleryFileName(this.viewerName, bytes), bytes);
+    if (outcome === SaveOutcome.SAVED) {
+      this.getUIContext().getPromptAction().showToast({ message: $r('app.string.image_saved') });
+    } else if (outcome === SaveOutcome.FAILED) {
+      this.getUIContext().getPromptAction().showToast({ message: $r('app.string.image_save_failed') });
+    }
+  }
+
+  /**
+   * 全屏查看器：黑底 + 居中满屏 + 右上关闭 + 底部保存。
+   *
+   * 用 `bindContentCover` 而不是自绘浮层：它是一个**盖住整页**的系统级模态，
+   * 底部系统手势区、返回键都由系统接管 —— 自绘浮层做不到这两件事，
+   * 用户按返回键会直接退出应用（源工程用 `Dialog` 拿到的正是这套系统行为）。
+   */
+  @Builder
+  imageViewer() {
+    Column() {
+      Stack({ alignContent: Alignment.TopEnd }) {
+        if (this.viewerPixelMap !== null) {
+          Image(this.viewerPixelMap)
+            .objectFit(ImageFit.Contain)
+            .width('100%')
+            .height('100%')
+        }
+
+        Text('✕')
+          .fontSize(20)
+          .width(40)
+          .height(40)
+          .textAlign(TextAlign.Center)
+          .borderRadius(20)
+          .fontColor(Color.White)
+          .backgroundColor('#66000000')
+          .margin({ top: 12, right: 12 })
+          .onClick((): void => {
+            this.closeImageViewer();
+          })
+      }
+      .width('100%')
+      .layoutWeight(1)
+      // 点图片区域关闭；与右上 ✕ 两条路都通，用户不必去找那个小按钮。
+      // 只挂在**图片区**而不是整页：整页的话，点「保存」时事件会先冒到父级把查看器关掉。
+      .onClick((): void => {
+        this.closeImageViewer();
+      })
+
+      Text($r('app.string.save'))
+        .fontSize(15)
+        .fontColor(Color.White)
+        .padding({ left: 20, right: 20, top: 10, bottom: 10 })
+        .borderRadius(20)
+        .backgroundColor('#33FFFFFF')
+        .margin({ top: 12, bottom: 20 })
+        .onClick((): void => {
+          void this.saveViewedImage();
+        })
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor(Color.Black)
+    .justifyContent(FlexAlign.Center)
+  }
+
   private scrollToBottom(): void {
     this.atBottom = true;
     this.scroller.scrollEdge(Edge.Bottom);
   }
 
   /**
-   * 每次 vm 变更都过一遍：① 回填发送失败的原文；② 贴底时自动跟随。
+   * 每次 vm 变更都过一遍：① 回填发送失败的原文；② 落底（换会话 / 贴底跟随）。
    *
-   * 自动跟随用 `setTimeout(…, 0)` 而不是当场滚：revision 变化的这一刻新条目还没完成布局，
+   * **换会话时无论用户在上一个会话里滚到哪儿，都要落在最新一条上** —— 这是「对话性智能体」
+   * 的默认预期（源工程真机反馈第六、八修反复强调）。之前的写法只看 `atBottom`：上一个会话
+   * 滚过历史（`atBottom` 被 `onScrollIndex` 置为 false）之后切到新会话，那个 false 会**带过去**，
+   * 于是一进去就停在顶部。
+   *
+   * 还有一条**顺序上的坑**（源工程三版都栽在这里）：切换时历史往往还没回来，
+   * `renderItems()` 是空的。所以「这个会话已经落过底」这件事**必须等列表真的有内容之后**
+   * 才记下来 —— 否则第一次执行就把它记成已完成，之后再没有第二次机会。
+   *
+   * 滚动用 `setTimeout(…, 0)` 而不是当场滚：revision 变化的这一刻新条目还没完成布局，
    * 当场滚会停在倒数第二条上。延到下一轮事件循环才滚得准。
    */
   private onRevision(): void {
@@ -325,10 +727,17 @@ export struct ChatDetail {
     if (pending.trim().length > 0 && pending !== this.message) {
       this.message = pending;
     }
-    if (this.atBottom && this.displayItems().length > 0) {
-      setTimeout((): void => {
-        this.scroller.scrollEdge(Edge.Bottom);
-      }, 0);
+    const items: ChatDisplayItem[] = this.renderItems();
+    if (items.length > 0) {
+      if (this.selectedId() !== this.lastScrolledSessionId) {
+        this.lastScrolledSessionId = this.selectedId();
+        this.atBottom = true;
+      }
+      if (this.atBottom) {
+        setTimeout((): void => {
+          this.scroller.scrollEdge(Edge.Bottom);
+        }, 0);
+      }
     }
     // 命令清单可能在这次刷新里变了（`@` 补全面板的可见性也依赖它），顺手同步一次。
     this.syncComposerOverlay();
@@ -475,7 +884,7 @@ export struct ChatDetail {
             })
         }
       }
-      if (this.st().history !== null && this.displayItems().length === 0) {
+      if (this.st().history !== null && this.renderItems().length === 0) {
         ListItem() {
           Column() {
             Text('💬').fontSize(28)
@@ -489,13 +898,13 @@ export struct ChatDetail {
           .justifyContent(FlexAlign.Center)
         }
       }
-      ForEach(this.displayItems(), (item: ChatDisplayItem) => {
+      ForEach(this.displayEntries(), (entry: ChatDisplayEntry) => {
         ListItem() {
           // `List` 没有 `space`（源工程 `Arrangement.spacedBy(5.dp)` 的对位），
           // 所以间距改由条目自身的下外边距给。
           Column() {
-            ChatMessageView({
-              item: item,
+            ChatDisplayEntryRow({
+              entry: entry,
               images: this.st().attachmentImages,
               failures: this.st().attachmentFailures,
               genUiDebug: this.st().genUiDebug,
@@ -505,17 +914,40 @@ export struct ChatDetail {
               onAnswer: (text: string): void => {
                 this.answerFromCard(text);
               },
+              onRetry: (): void => {
+                this.retryLastTurn();
+              },
+              onFork: (atSeq: number): void => {
+                this.confirmFork(atSeq);
+              },
+              onOpenImage: (bytes: Uint8Array, name: string): void => {
+                this.openImageViewer(bytes, name);
+              },
+              // 展开态与切换回调由父组件持有（理由见 `expandedGroups` 的注释）。
+              // `expanded` 必须是 `@Prop`：普通成员不会被 ArkUI 重绘回写，
+              // 用户点了箭头却看不到变化 —— 就是 PORT-MAP 坑 24/27 那一类。
+              expanded: this.isGroupExpanded(entry.id),
+              onToggle: (): void => {
+                this.toggleGroup(entry.id);
+              },
             })
           }
           .width('100%')
           .margin({ bottom: 5 })
         }
-      }, (item: ChatDisplayItem) => item.id)
+      }, (entry: ChatDisplayEntry) => chatDisplayEntryKey(entry))
     }
     .width('100%')
     .height('100%')
     .padding({ left: 12, right: 12, top: 9, bottom: 9 })
     .scrollBar(BarState.Off)
+    // 滚动期冻结渲染快照（症状 / 做法 / 80ms 窗口见 `SCROLL_SETTLE_MS` 与 `onScrollStarted`）。
+    .onScrollStart((): void => {
+      this.onScrollStarted();
+    })
+    .onScrollStop((): void => {
+      this.onScrollStopped();
+    })
     .onScrollIndex((_start: number, end: number): void => {
       const bottom: boolean = end >= this.listItemCount() - 3;
       if (bottom !== this.atBottom) {
@@ -582,39 +1014,18 @@ export struct ChatDetail {
   }
 
   /**
-   * 思考条：消息区**下方**、输入区**上方**的固定位置（网页版 `#thinkbar` 的位置）。
+   * 状态条：**思考条与「内容由 AI 生成」标识合成同一条**（真机反馈五修，2026-10-17）。
    *
-   * 没有思考时**整条不渲染** —— 不用零高度占位，那会留下一条带边框的空缝，
-   * 在输入区上方永久挡着一行。
+   * 位置固定在消息区**下方**、输入区**上方**（网页版 `#thinkbar` 的位置）。
+   * 有思考时显示思考（可展开全文），没有思考时才显示标识 ——
+   * 为什么合并、为什么让思考优先、标识的合规依据，全部写在 `ui/ChatStatusBar.ets` 文件头。
+   *
+   * 这一条**恒常渲染**（不再「思考为空就整条不显示」）：标识是常驻合规提示，
+   * 只有它自己在两种形态里挑一个显示，没有「整条消失」这一档。
    */
   @Builder
-  thinkBar() {
-    if (this.thinkText().length > 0) {
-      Column() {
-        Divider()
-          .strokeWidth(1)
-          .color($r('sys.color.ohos_id_color_list_separator'))
-        Row() {
-          LoadingProgress()
-            .width(13)
-            .height(13)
-            .color($r('sys.color.ohos_id_color_text_secondary'))
-          Text(this.thinkText())
-            .fontSize(12)
-            .fontColor($r('sys.color.ohos_id_color_text_secondary'))
-            .layoutWeight(1)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .margin({ left: 7 })
-        }
-        .width('100%')
-        .padding({ left: 14, right: 14, top: 6, bottom: 6 })
-        .alignItems(VerticalAlign.Center)
-      }
-      .width('100%')
-      .backgroundColor($r('sys.color.ohos_id_color_sub_background'))
-      .alignItems(HorizontalAlign.Start)
-    }
+  statusBar() {
+    ChatStatusBar({ rawThinking: this.rawThinkText() })
   }
 
   /** 审批四态分派（见文件头判据 3）。 */
@@ -723,6 +1134,9 @@ export struct ChatDetail {
         onScrollToBottom: (): void => {
           this.scrollToBottom();
         },
+        onOpenTrajectory: (): void => {
+          this.trajectoryOpen = true;
+        },
       })
 
       if (this.currentSession() === null) {
@@ -753,11 +1167,41 @@ export struct ChatDetail {
         if (this.st().questions.length > 0) {
           this.questionsPanel()
         }
-        this.thinkBar()
+        this.statusBar()
         this.approvalArea()
       }
     }
     .width('100%')
     .height('100%')
+    // 图片全屏查看器：`bindContentCover` 是盖住整页的系统级模态，
+    // 返回键与底部手势区由系统接管（见 `imageViewer` 注释）。
+    // `isShow` 走单向：用户用系统返回键关掉时靠 `onDisappear` 复位标志，
+    // 否则标志会留在 true，下一次再设 true 就不再触发（与 `ChatScreen` 的面板宿主同一个坑）。
+    .bindContentCover(this.viewerBytes !== null, this.imageViewer(), {
+      modalTransition: ModalTransition.DEFAULT,
+      onDisappear: (): void => {
+        this.closeImageViewer();
+      },
+    })
+    // 执行轨迹页：同样是全屏系统级模态（见 `ui/TrajectoryScreen.ets` 的平台差异一节）。
+    // 状态用布尔而不是「history 是否为 null」：历史为 null 时轨迹页要显示空态，
+    // 拿 history 当显隐判据会让它在没加载完时根本打不开。
+    .bindContentCover(this.trajectoryOpen, this.trajectorySheet(), {
+      modalTransition: ModalTransition.DEFAULT,
+      onDisappear: (): void => {
+        this.trajectoryOpen = false;
+      },
+    })
+  }
+
+  /** 轨迹页的内容（只转发 history；显隐由上面那个 `bindContentCover` 管）。 */
+  @Builder
+  trajectorySheet() {
+    TrajectoryScreen({
+      history: this.st().history,
+      onClose: (): void => {
+        this.trajectoryOpen = false;
+      },
+    })
   }
 }

@@ -125,8 +125,17 @@ export struct AttachmentImage {
   attachmentId: string = '';
   bytes: Uint8Array | null = null;
   mediaType: string = '';
+  /** 附件原名（服务端给的）；保存到本地时用它当默认文件名。 */
+  name: string = '';
   failure: string | null = null;
   onLoad: (id: string) => void = (): void => {};
+  /**
+   * 点缩略图 → 打开全屏查看（对位源工程 `ChatImageViewer.kt` 的缩略图那半边）。
+   *
+   * **只有解码成功（有 `pixelMap`）才会调**：把字节交给一个连本组件都画不出来的查看器，
+   * 用户只会看到一整屏黑，比「点不动」更迷糊。
+   */
+  onOpen: (bytes: Uint8Array, name: string) => void = (): void => {};
 
   @State pixelMap: PixelMap | null = null;
 
@@ -149,6 +158,12 @@ export struct AttachmentImage {
           .objectFit(ImageFit.Contain)
           .constraintSize({ maxWidth: 260, maxHeight: 340 })
           .borderRadius(8)
+          .onClick((): void => {
+            const raw: Uint8Array | null = this.bytes;
+            if (raw !== null) {
+              this.onOpen(raw, this.name);
+            }
+          })
       } else if (this.bytes !== null) {
         Text($r('app.string.attachment_undecodable'))
           .fontSize(11)
@@ -184,6 +199,8 @@ export struct MessageAttachments {
   /** 取图失败的原因（已本地化），按 attachmentId 索引。 */
   failures: Map<string, string> = new Map();
   onLoadImage: (id: string) => void = (): void => {};
+  /** 点开一张图 → 全屏查看（字节直接带上，避免查看器再走一次 vm 取图）。 */
+  onOpenImage: (bytes: Uint8Array, name: string) => void = (): void => {};
 
   private bytesOf(id: string): Uint8Array | null {
     const found: Uint8Array | undefined = this.images.get(id);
@@ -219,8 +236,12 @@ export struct MessageAttachments {
             attachmentId: attachment.attachmentId,
             bytes: this.bytesOf(attachment.attachmentId),
             mediaType: attachment.mediaType,
+            // `name` 为 null 时给空串：`galleryFileName` 会把空串回落成 `image`，
+            // 这里不必提前替它决定名字。
+            name: attachment.name === null ? '' : attachment.name,
             failure: this.failureOf(attachment.attachmentId),
             onLoad: this.onLoadImage,
+            onOpen: this.onOpenImage,
           })
         }, (attachment: ChatAttachment) => this.keyOf(attachment.attachmentId))
       }
@@ -237,10 +258,22 @@ export struct MessageAttachments {
  * - 标题：「本轮运行失败」/「任务已停止」（后者是登出，不是模型故障）；
  * - 正文：服务端的原话（429 限流那句话就在这里）；命中本地错误码表时换成中文句子；
  * - 错误码：**照原样显示，空串也占位**（行高不忽高忽低）。
+ *
+ * 「重试上一轮」只给**模型故障**那一支（`stopped == false`）：登出/主动停止是用户自己的
+ * 动作，重试必然再失败一次 —— 一个点了只会再错一遍的按钮比没有按钮更糟。
+ * 这条判据在界面上而不在 vm 里：vm 的 `retryLastUserMessage()` 只管「重试」这个动作本身。
  */
 @Component
 export struct TurnFailureRow {
   failure: ChatTurnFailure = new ChatTurnFailure();
+
+  /**
+   * 点「重试上一轮」时做什么（由 `ChatMessageView` 转给 vm 的 `retryLastUserMessage()`）。
+   *
+   * 函数成员**不能**加 `@Prop`（会连闭包一起深拷贝坏掉，见 PORT-MAP 坑 24），
+   * 保持普通成员 —— 它本身也不需要随状态刷新。
+   */
+  onRetry: () => void = (): void => {};
 
   private headline(): ResourceStr {
     return this.failure.stopped ? $r('app.string.turn_stopped_title') : $r('app.string.turn_failed_title');
@@ -300,6 +333,19 @@ export struct TurnFailureRow {
           .width('100%')
           .margin({ top: 2 })
           .copyOption(CopyOptions.LocalDevice)
+      }
+
+      if (!this.failure.stopped) {
+        Text($r('app.string.retry'))
+          .fontSize(12)
+          .fontColor($r('sys.color.ohos_id_color_text_primary_activated'))
+          .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+          .margin({ top: 4 })
+          .borderRadius(6)
+          .border({ width: 1, color: $r('sys.color.ohos_id_color_button_normal') })
+          .onClick((): void => {
+            this.onRetry();
+          })
       }
     }
     .width('100%')

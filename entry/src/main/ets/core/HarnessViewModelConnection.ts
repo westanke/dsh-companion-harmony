@@ -19,6 +19,7 @@
 
 import {
   AgentPreset,
+  ChatHistory,
   ChatSession,
   ChatWorkspace,
   DeviceView,
@@ -32,6 +33,15 @@ import {
   eventDataInt,
   eventDataString,
 } from './Models';
+import {
+  BridgeCapabilities,
+  parseBridgeCapabilities,
+} from './BridgeCapabilities';
+import {
+  SeqVerdict,
+  baselineBehind,
+  seqVerdict,
+} from './ChatSeqMonitor';
 import {
   DshClient,
 } from './DshClient';
@@ -325,6 +335,9 @@ export class HarnessViewModelConnection extends HarnessViewModelComposer {
       const snapshot: HarnessState = await this.loadSnapshot(connection.client, resolved);
       console.info('[DSH] connect snapshot ok');
       this.active = connection;
+      // 换主机 = 换上下文：连上之前发出的请求（上一次连接的快照、目录、历史）结果作废。
+      // 换主机比换会话更彻底 —— 连上限流/配额失败的那次连接，它的在飞响应不该写进新连接的状态。
+      this.requestGate.invalidate();
       this.update((s: HarnessState): void => {
         s.copyFrom(snapshot);
         s.restoring = false;
@@ -411,6 +424,11 @@ export class HarnessViewModelConnection extends HarnessViewModelComposer {
     // 连接又接回去 —— 那是最容易让人以为「断开没用」的 bug。
     this.eventsPaused = false;
     this.active = null;
+    // 断开 = 上下文作废：在飞的目录/历史/快照请求即使回来了，也没有状态可写（state 即将被重建），
+    // 但闸门也要一起打 —— 否则「断开后又立刻连上另一台」时，上一台的响应会写到新连接的状态里。
+    this.requestGate.invalidate();
+    // 去抖里挂着一次目录刷新时，断开后它到点会拿一个空 `active` 去发请求 —— 先取消掉。
+    this.directoryDebouncer.cancel();
     const next: HarnessState = new HarnessState();
     next.restoring = false;
     next.hosts = this.deps.hostStore.loadHosts();
@@ -596,9 +614,77 @@ export class HarnessViewModelConnection extends HarnessViewModelComposer {
         // 否则流式文字要等消息落盘才出现。scheduleChatRefresh 自带 400ms 去抖 + 单飞。
         this.scheduleChatRefresh();
       }
+    } else if (event.type === 'connection.ready') {
+      // 服务端连上就自报版本与能力位。读到就存：缺关键能力时界面要**明说**，
+      // 因为「卡片不弹」与「本来就没有待审批」在屏幕上完全一样（源工程踩过，
+      // 见 `core/BridgeCapabilities.ts` 文件头）。
+      //
+      // 读不到（`parseBridgeCapabilities` 返回 null）时**什么都不做**，保持上一次的值 ——
+      // 不把「未知」写成「空清单」，那样会让归档入口与警告横幅给出假结论。
+      const reported: BridgeCapabilities | null = parseBridgeCapabilities(event.dataMap());
+      if (reported !== null) {
+        const caps: BridgeCapabilities = reported;
+        this.update((s: HarnessState): void => {
+          s.bridgeVersion = caps.bridgeVersion === null ? s.bridgeVersion : caps.bridgeVersion;
+          s.bridgeCapabilities = caps.capabilities;
+        });
+      }
     } else if (event.type.startsWith('chat.')) {
       const sessionId: string | null = eventDataString(event, 'sessionId');
-      if (event.type === 'chat.message.committed') {
+      // ——— 断档检测 ———
+      //
+      // WS 是「订阅之后才收得到」，REST 历史是「发请求那一刻的快照」——
+      // 两者的时间差里发生的事件**谁都管不着**，除非客户端能自己发现「我漏了一段」。
+      // 判据、以及「为什么重复和倒退不算断档」，见 `core/ChatSeqMonitor.ts`。
+      //
+      // 只对**当前会话**计数：别的会话有自己的序号序列，混在一起必然误判。
+      const incomingSeq: number | null = eventDataInt(event, 'seq');
+      if (incomingSeq !== null && sessionId === this.state.selectedSessionId) {
+        const seq: number = incomingSeq;
+        if (seqVerdict(this.state.lastEventSeq, seq) === SeqVerdict.RESYNC) {
+          // 重取历史。`scheduleChatRefresh` 自带 400ms 去抖 + 单飞，连续跳号也只会合并成一次。
+          this.chatSessionRefreshPending = true;
+          this.scheduleChatRefresh();
+        }
+        this.update((s: HarnessState): void => {
+          s.lastEventSeq = seq;
+        });
+      }
+      if (event.type === 'chat.session.snapshot') {
+        // 订阅基线：服务端告诉我们「这条订阅从哪个持久 seq 开始接增量」。
+        // 本地历史落后于它 ⇒「拉历史」与「订阅」之间的窗口**真漏了**事件，重取一次。
+        const cursor: number | null = eventDataInt(event, 'cursor');
+        if (cursor !== null && sessionId !== null) {
+          const value: number = cursor;
+          this.update((s: HarnessState): void => {
+            s.baselineCursor = value;
+          });
+          if (sessionId === this.state.selectedSessionId) {
+            const history: ChatHistory | null = this.state.history;
+            let localMax: number | null = null;
+            if (history !== null) {
+              for (let i = 0; i < history.events.length; i++) {
+                const seq: number = history.events[i].event.seq;
+                if (localMax === null || seq > localMax) {
+                  localMax = seq;
+                }
+              }
+            }
+            if (baselineBehind(localMax, value)) {
+              this.chatSessionRefreshPending = true;
+              this.scheduleChatRefresh();
+            }
+          }
+        }
+      } else if (event.type === 'chat.deliverables.presented') {
+        // 交付物（内核 `present` 工具）：卡片数据在**历史**里，收到这条就刷新一次，
+        // 新交付物立刻出现在会话文件卡片里。此前这个事件名客户端不认识 ——
+        // 数据一直在历史里原样透传，只是要等下一次消息完成才顺带刷到。
+        if (sessionId === this.state.selectedSessionId) {
+          this.chatSessionRefreshPending = true;
+          this.scheduleChatRefresh();
+        }
+      } else if (event.type === 'chat.message.committed') {
         if (sessionId !== null && sessionId === this.state.selectedSessionId) {
           if (eventDataString(event, 'role') === 'assistant') {
             const turn: number | null = eventDataInt(event, 'turn');
@@ -656,7 +742,9 @@ export class HarnessViewModelConnection extends HarnessViewModelComposer {
       }
     }
     if (event.type.startsWith('file.')) {
-      void this.loadDirectory(null);
+      // 内核批量改文件时会连着推很多帧（构建产物、批量格式化），每帧都重取一次目录
+      // 就是请求风暴。去抖到「安静 500ms」后只取一次（见 `core/EventDebouncer.ts`）。
+      this.directoryDebouncer.trigger();
     }
   }
 
@@ -768,6 +856,9 @@ export class HarnessViewModelConnection extends HarnessViewModelComposer {
     }
     this.timerHandles = [];
     this.chatRefreshActive = false;
+    // 去抖里还挂着一次「目录刷新」时，页面已经销毁了 —— 让它到点后再跑一次
+    // 网络请求没有任何意义，而且会往一个已经无人监听的状态里写值。
+    this.directoryDebouncer.cancel();
     if (this.eventSubscription !== null) {
       this.eventSubscription.close();
       this.eventSubscription = null;

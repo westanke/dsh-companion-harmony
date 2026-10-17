@@ -54,6 +54,17 @@ import { HarnessViewModelCatalog } from './HarnessViewModelCatalog';
 export class HarnessViewModelFiles extends HarnessViewModelCatalog {
   // ————————————————— 文件浏览与编辑 —————————————————
 
+  /**
+   * 基类去抖动作的落点（`file.*` 事件安静 500ms 后触发一次）。
+   *
+   * 为什么不直接在基类写 `loadDirectory(null)`：那会让基类依赖这一层。
+   * 这里转发一次，转发而不是重复实现，保证「事件驱动的目录刷新」与
+   * 用户手动点刷新走的是**同一条**路径 —— 两条路径就会有两套取数口径。
+   */
+  protected refreshDirectoryNow(): void {
+    void this.loadDirectory(null);
+  }
+
   async selectRoot(id: string): Promise<void> {
     this.update((s: HarnessState): void => {
       s.selectedRootId = id;

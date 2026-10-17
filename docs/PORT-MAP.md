@@ -1613,6 +1613,323 @@ entry/src/main/resources/base/media/
 ① 这个元素**自己**读到状态了吗（没读到就没依赖，参考坑 12）？
 ② 中间隔着子组件吗，那个成员是 `@Prop` 吗（隔了就要装饰器，参考坑 21 / 24）？
 
+**坑 28：资源文件在 FUSE 挂载点上的字节级损坏 —— `Read` 是真相、`Grep` 会骗人（2026-10-17）**
+
+**症状**：`entry/src/main/resources/en_US/element/string.json` 读出来出现**字符插入/缺失型**
+错乱 —— `"vaiue"`（`value` 少个字母）、多一个 `"name": "a_lgenerated_notice"` 的**重复键**、
+`"workspaceefiles_ewpty"`（名字被塞进字符）、`"value": "Zoom text out""`（多一个引号），
+文件尾部还残留一段错位片段（重复的四条 `workspace_files_*` + 一对多余的 `]` / `}`）。
+
+**怎么确认这是「磁盘上的字节」而不是读缓存骗人**：拿最干净的一处（`ai_generated_notice`
+那两条重复键）试一次 `Edit` —— 若 Edit 能**精确匹配**这段乱码并改写成功，就说明磁盘字节与
+读出的字符**逐字相同**，损坏是真的。本次匹配成功，故后续修复一律按「读到的就是磁盘上的」处理。
+
+**为什么它「只坏了被我编辑过的地方」**：两处损坏区（`ai_generated_notice` 与
+`command_*` / `workspace_files_*` 尾部）恰好都是**上一次用文本插入改过的地方**。
+所以这是**写入路径**的问题，不是文件内容本身的问题 —— 排查时应先问「这段最近被改过吗」，
+而不是怀疑整个文件。
+
+**关键教训（这是工具层的，与坑 12 的「读依赖」不是一回事）**：
+- 在这台机器的 FUSE 挂载点上，**`Grep` 报的行数与内容可能是过期的**（ripgrep 拿到的是旧的
+  `stat` 尺寸，看到的是一份被截断的视图），而 **`Read` 读到的是当前真实内容**。两者冲突时
+  **以 `Read` 为准**。本轮就出现过「Grep 说 1440 行、找不到新键；Read 说 1488 行、新键在」的分歧。
+- 因此**不能用 `Grep` 验证刚完成的编辑**，必须回读复核。修完之后 Grep 又能对上了，所以这不是
+  「Grep 永久坏了」，而是**写入后的一段时间窗口内**它读到旧尺寸。
+
+**修复路线（可复用）**：
+1. **中文 `base` 文件是键序与结构的权威对照** —— 它同位置完好（两侧本应逐键对应）。先读出
+   base 的对应段落，得到「这里应当有哪些键、按什么顺序」。
+2. **英文取值以编译产物里的一手原文为准**：`entry/build/default/intermediates/res/default/
+   resources.index`（Restool 5.1.0.007 的索引，**明文可读**）保留了构建时从源文件读到的英文串
+   —— `restool` 的产物反过来成了源文件被写坏时的**唯一可靠副本**（与 memory 里记的
+   「resources.index 是恢复一手原文的唯一可靠来源」是同一条经验）。
+3. 用 `Read`（**不要用 Grep**）在「最后一个干净锚点」处回读、核对、再改；改完**再 Read 复核**。
+
+**为什么必须修而不能「先放着」**：重复键与未闭合字符串会让 `restool` 解析失败、**整包构建
+起不来**；而且这些键（斜杠命令面板的全部文案 + 工作目录四条）在英文界面下缺一条就是一处空白。
+
+**坑 29：过程组的展开态不能存在组内 —— `List` 会回收视口外的条目（2026-10-17，本轮 B 批 ①）**
+
+**症状（预期会踩的坑，本轮提前规避，真机待复测）**：把「过程组是否展开」做成
+`ProcessGroupRow` 自己的 `@State`，一旦这一组被滚出屏幕再滚回来，展开态**凭空复位**；
+更糟的是滚动过程中 `ForEach` 复用出的新实例带着旧的 `@State`，出现「同一组一会儿开一会儿关」。
+
+**根因**：ArkUI 的 `List` 对**视口外**条目做回收复用（源工程 Compose 的 `LazyColumn` 同理）。
+`@State` 是**组件实例**级的，条目被回收后实例与其状态一起消失。源工程用的是
+`rememberSaveable`（会话级保存，跨重组与回收都在），所以那边天然不会有这个问题。
+
+**修复**：展开态上移到**父组件** `ChatDetail.expandedGroups: string[]`，
+通过 `@Prop expanded` 下行、`onToggle` 回调上行。父组件在 `List` 之外、不参与回收，
+所以状态天然是会话级的 —— 与源工程 `rememberSaveable` 的语义对齐。
+`expandedGroups` 用**数组**而不是 `Set`：ArkUI 的 `@State` 对 `Set` 的变更检测不进入
+重绘（内置容器只认 `Array` 的增删与整体重赋值），数组的「重建再赋值」才是能触发刷新的写法。
+
+**教训**：凡是「条目自己的临时 UI 状态」（展开/选中/输入框内容）都要问一句
+**这条目会不会被滚出屏幕**。会 → 状态不能住条目里，必须住到不参与回收的那一层。
+
+**坑 30：过程组的两条「身份」陷阱 —— 列表 key 会撞、`setTimeout` 无法取消（2026-10-17，本轮 B 批 ①④）**
+
+**陷阱一：过程组的 id 取组内首项 id，会与「展开后那一条」撞 key。**
+源工程 `ChatDisplayEntry` 的 `processGroup` 用**组内首项的 id** 作组 id，这是刻意的
+（这样「同一批过程项」永远算出同一个 id，重组不会导致组件重建）。但在 ArkUI 这边有个
+源工程没有的连带：**单项的过程组会被平铺**（`flatSingle()`），平铺后那一条**以消息身份**
+出现在列表里，它的 `ForEach` key 若直接用 `item.id`，就与「组」的 key 一模一样 ——
+`List` 会认为两者是同一条目，出现错位与状态串味。
+
+**修复**：过程组的 key 统一加 `process-` 前缀（`chatDisplayEntryKey(entry)`），
+前缀只加在**列表 key**上、不改组内数据；组内 `ForEach` 仍按 `item.id` 编 key。
+两条 key 空间彼此隔离，平铺与成组两种形态不再互相干扰。
+
+**陷阱二：`setTimeout` 没有取消机制，滚动冻结的解冻回调可能「迟到」。**
+源工程 `ChatScrollFreeze.kt` 用 `LaunchedEffect` 起一个 `delay(80)` 协程，**协程随 key 变化
+自动取消**：滚动再次开始时，上一次「停手后解冻」的定时器会被连带取消，不会迟到。
+ArkUI 的 `setTimeout` **没有等价的取消语义** —— 用户快速反复滑动时，前几次滑动留下的
+80ms 定时器仍会在各自到期时触发，与后续滑动交错，出现「还在滑，列表却已经解冻并跳了一下」。
+
+**修复**：加一个 `scrollGeneration: number`，每次 `onScrollStart` 自增并把当前代际号
+封进闭包；`onScrollStopped` 的 `setTimeout` 到期时**先比对代际号**，不是最新一代就直接返回。
+另外 `onScrollStart` 里的动作顺序必须是**先快照、后上锁**：先 `frozenItems = computeDisplayItems()`
+再置 `scrollSettled = false`；反过来会在「上锁」与「快照」之间留出一帧，那一帧里列表已经
+冻结但冻结的是空数据。
+
+**教训**：从 Compose/协程迁到 ArkUI 时，「定时器 + 可取消」是一类**结构性缺失**，
+不是写法问题。凡源工程靠 `LaunchedEffect` / `rememberUpdatedState` / 协程作用域拿到的
+「随状态变化自动作废」，在 ArkUI 都要显式做一遍（代际号 / 令牌 / 显式 clear）。
+
+**坑 31：ArkUI 的全屏态要用 `bindContentCover` —— 自绘浮层拿不到系统返回键（2026-10-17，本轮 C 批 ①）**
+
+图片全屏查看器（`ui/ChatDetail.ets` 的 `imageViewer()`）用
+`.bindContentCover(isShow, builder, { modalTransition, onDisappear })`：它是一个**盖住整页**
+的系统级模态，返回键与底部手势区都由系统接管。自绘浮层（`Stack` + 绝对定位铺满）做不到
+这两件事 —— 用户按返回键会**直接退出应用**，而不是关掉查看器。源工程用 `Dialog` 拿到的
+正是这套系统行为。
+
+两条连带：
+
+- **`isShow` 走单向**：用户用系统返回键关掉模态时**不会**回写标志位，必须靠 `onDisappear`
+  复位（与 `bindSheet` 同一个坑，见 `ui/ChatHeader.ets` / `ui/ChatScreen.ets`）。不复位的话
+  标志会留在 `true`，下一次再置 `true` 就不再触发。
+- **「点空白关闭」不要挂在整页上**：那样点底部「保存」时事件会先冒到父级、把查看器关掉。
+  只把该手势挂在图片区即可（右上 ✕ 与图片区两条路都通）。
+
+**坑 32：鸿蒙「写相册」是受限权限 —— 图片保存改走零权限的系统面板（2026-10-17，本轮 C 批 ①）**
+
+源工程的 `MediaStore` 写入（`saveToGallery`）在鸿蒙的对位是
+`ohos.permission.WRITE_IMAGEVIDEO`，**与 `READ_PASTEBOARD` 同一类受限权限**：普通应用
+一旦声明，安装就会被系统拒绝（本工程已因同类权限栽过一次，见坑 26）。所以改走
+`platform/Pickers.saveBytes` —— 系统「保存」面板返回一个已授权的 URI，`fs` 直接写，
+**零权限**。代价是「不会自动进相册」，因此文案写成「保存」而不是「存到相册」：
+不承诺做不到的事。
+
+面板的**三档结果必须分开处置**（`SaveOutcome.SAVED` / `CANCELLED` / `FAILED`）：
+
+- 取消 → **静默**。用户主动按取消，却收到一句「保存失败」，会以为哪里坏了；
+- 失败 → **必须给提示**。保存是个很少用的动作，用户点它时是专门为了存下来，
+  静默失败会让他以为已经存上了。
+
+混成一个布尔量就必然在「取消」那一档误报。
+
+**坑 33：能力位「未知」不等于「缺失」—— 未知时一律按「不显示 / 不警告」处理（2026-10-17，本轮 C 批 ③）**
+
+服务端在 `connection.ready` 自报 `bridgeVersion` 与 `capabilities`；旧插件不报这些字段，
+于是客户端读到的是**没有**。此时必须按**未知**处理（`core/BridgeCapabilities.ts` 里的
+`parseBridgeCapabilities` 返回 `null`），**不能**当成「空清单」：
+
+- 当成空清单 → 每个稍旧的服务端都弹出「插件过旧」的**假警告**。假警告比没有警告更坏 ——
+  它教会用户忽略警告；
+- 同理，清单为空数组也要读成未知：真实服务端不会声明「我一条能力都没有」，空数组只可能
+  来自字段被误删/降级。
+
+**能力位守卫必须放在发请求之前**：老 bridge 会**忽略** `archived=true` 并照常返回未归档列表，
+于是「请求成功、列表为空」会被读成「一条归档都没有」这个**假结论** —— 用户会以为自己在
+电脑上归档的东西丢了。所以 `loadArchivedSessions()` 第一句就是 `supportsArchiveListing()`
+不通过直接 `return`，界面入口同样由它把关（能力位未知时**不显示入口**）。
+
+**坑 34：消息级动作的确认框与状态也必须住父组件（2026-10-17，本轮 C 批 ①②）**
+
+分叉确认（`ChatDetail.confirmFork`）与图片查看器（`ChatDetail.viewerBytes` /
+`viewerPixelMap`）的状态都落在 `ChatDetail`，子组件（`ChatMessageView` /
+`AttachmentImage`）只**上报参数**（`atSeq`、字节 + 文件名），不自己持有状态。
+
+原因与坑 29 完全相同：`List` 会回收视口外的消息行。状态若住子组件，用户点开一张图、
+往下滑两屏再滑回来，查看器就自己关掉了（消息行被回收时连同它的 `@State` 一起没）。
+
+**坑 35：`resources/base` 的资源文件在本机写入会被覆盖 —— 关键条目最终集中在文件尾部（2026-10-17，本轮 C 批）**
+
+本轮往 `entry/src/main/resources/base/element/string.json` 追加 10 条新文案
+（`archived_empty` / `archived_sessions_hint` / `fork_confirm_action` / `fork_confirm_body` /
+`fork_confirm_title` / `fork_from_here` / `image_save_failed` / `image_saved` /
+`show_active_sessions` / `show_archived_sessions`）时，观察到**连续写入互相覆盖**：
+每次写入后能读到的只有最后一次写进去的那几条，前几次的会消失；而 `en_US` 侧同一批改动
+**全部保留**。
+
+**处置**：把这批新条目**一次性**写进同一次编辑、并锚在文件**尾部**
+（`workspace_files_unavailable` 之后），写入后逐条 `Read` 复核，确认各出现一次、
+无重复键（重复键会让 `restool` 直接解析失败，见坑 28 同类的字节级事故）。
+
+**2026-10-17（第 4 批）追加观察 —— 本坑没消失，且暴露了一个真实缺陷，还揭示了更深一层机制**：
+移植第 1/2 批把文案只写进 `en_US`，`base` 侧的追加**被同一机制覆盖丢失**，导致 `base` **缺了 33 个
+界面正在引用的键**（第 1/2 批 21 条 + 第 3/4 批 12 条，清单见 `docs/CHANGELOG.md` 修复段）。
+
+**更深一层：本文件在本机 `Edit` 里有两条独立故障叠加。**
+①**文件末尾检索不到** —— `Read` 明明是真相（尾部确有内容），`Edit` 对尾部锚点却报
+「String to replace not found」；实验中只有 `etag_conflict` 一带能稳定命中。
+②**每次 `Edit` 都从冻结的原始快照重写整文件** —— 同一个锚点分两次写，**第二次会把第一次写入的整段丢掉**
+（实测：先写 12 条 → 再写 21 条，结果是「只有 21 条、12 条全没」）。所以 33 条必须
+**在同一次编辑里一次写全**，并锚在 `etag_conflict` 之后。
+**这两点都是坑 28「读写视图都滞后」的更深一层，不是新坑。**
+
+**2026-10-17（真跑一回合后的事实核对 —— 上面描述的那次「33 条追加」从未落到盘上）**：
+真跑 `strings-parity` 门禁时实测 `base` 只有 **359 键**（`en_US` 392 键），那批文案始终只躺在 `en_US` 里。
+所以「33 条挤在 `etag_conflict` 之后」这句话**当初就是工具回显造成的假象**，不是盘上状态 —— 与坑 28 同源。
+**定论：本机写入回显不足以作为「写成功了」的证据，资源文件只认读盘复核（`Read` / `node`）。**
+
+**修法（已完成）**：不再用 `Edit` 逐条搬，改用一个**一次性脚本**（读两份 JSON → 按名合并 →
+**全表字母序重排** → 写入前跑三项自检：待补键确实缺 / 清单无遗漏 / 占位符数量与 `en_US` 一致），
+写完再 `node` 读盘复核计数 ⇒ `base` / `en_US` 各 **392 键**、一一对应、且恢复字母序。
+脚本与日志放 `/tmp`（一次性工具，不入库）。
+
+> 关于上文那条②「同一锚点分两次写会丢掉前一次」：本轮**复现不了它作为「丢数据」的原因** ——
+> 真相更简单、也更该警惕：**那两次写入都没有生效**，只是回显说生效了。
+> 两种解释都指向同一条纪律：**改完必须读盘复核，且复核要走与写入不同的通道**。
+
+**教训**：资源文件的写入**不能只看工具回显**，必须 `Read` 复核 —— 与坑 28 同源：
+本机 FUSE 挂载点上，读写视图都会滞后，回显说「成功」不等于盘上真的变了。
+
+**坑 36：把「只活在文档里的纪律」变成会红的断言时，门禁自己必须先「自检盘面」（2026-10-17，本轮 B 批）**
+
+对位源工程 `ArchitectureGuardTest.kt`：本仓新增 `test/cases/architecture-guard.test.ts`
+（行数预算 + 台账登记 / 唯一网络边界 / `ui/` 不读偏好 / 会话展示单一出口）与
+`test/cases/strings-parity.test.ts`（中英键集与占位符一致）。三条踩过或差点踩的判据细节：
+
+1. **门禁最可怕的失败不是「太严」，是「路径解析错、什么都没扫到、于是全绿」** —— 那比没有门禁
+   更坏，因为它**冒充证据**。所以每个用例开头先跑「盘面自检」：扫到的文件数 / 命中数低于阈值就
+   **直接红**，绝不静默跳过。
+2. **判据取「符号」还是「字面串」，取决于它会不会恒绿**：源工程原打算按 `getSharedPreferences(`
+   字面串扫，但本仓 `ui/` 下该字面串**零命中**（恒绿的空转断言），故改取 `PrefsStore` /
+   `SharedPreferences` / `@ohos.data.preferences` **符号**；同理网络边界取 **`import` 行**而不是
+   裸符号 —— `core/` 下有多处**注释**在解释 `@ohos.net.http` 的错误码来源，取裸符号会把正确的
+   注释判成违规。**放行整行注释、行尾注释仍报错**：宁可让人把说明挪到独立一行，也不要在
+   「行内注释剥离」这种半吊子解析上漏掉真实代码。
+3. **门禁读真相、不读工具回显**：两条门禁都用 `readFileSync` **直读磁盘**（与坑 28 同一教训：
+   FUSE 上 `Grep` 会读到过期视图）。这也是「中英资源门禁」能抓出 `base` 缺 12 键的原因。
+4. **三条刻意不引入的文档门禁**（已写进 `AGENTS.md` §8）：①**坑位索引 ↔ 正文双向一致** ——
+   源工程正文标题与索引**同名**才可双向比对，本仓索引是**触发词**（「布局溢出系统手势区」）、
+   正文是**编号**（「坑 13：…」），硬比对只会恒红或逼人删掉有检索价值的触发词；②**`@patch` 五要素**
+   —— 本仓全仓 0 处 `// @patch`，写成断言是永不触发的空转门禁；③**「测试数字多处一致」** ——
+   本轮用例总数待跑测后回填，此刻引入即恒红，**留待跑测后连同真实数字一起做**。
+
+**坑 37：接缝只替换「最容易飘的那一维」，保命逻辑不许被替身绕过（2026-10-17，本轮 B 批 + 收口）**
+
+对位源工程 B 批「Clock/Transport 接缝」（源工程 `DEBT-007`：`ConnectionCoordinatorTest` 一条
+延迟容差用例偶发红、单跑即绿）。病根是选路比较的**实测延迟来自墙钟** —— 源工程用真实延迟
+（`MockResponse.setBodyDelay`）造「局域网 300ms vs 虚拟网 220ms」，机器带编译负载时两次实测
+**一起飘**，1.5× 容差判定就偶发翻面。
+
+源工程的修法是加 `measureOverride: (suspend (DshClient) -> ProbeOutcome)?` 构造参数
+（默认 null = 原墙钟实现，原逻辑逐字搬进 `probeWithWallClock`）。**本仓换成更干净的一维**：
+`ConnectionCoordinator` 的构造参数加 `clock: () => number`（默认 `defaultClock()`，即 `Date.now`），
+单测注入「手动推进的假时钟」（`test/cases/connection-coordinator.test.ts` 的 `rig()`），
+于是那三条依赖精确延迟比较的用例**完全不等待真实时间** —— 而且因为延迟本身就由假时钟决定，
+连「同时在建的微任务调度抖动」也一并消掉，比源工程注入 `measureOverride` 更彻底。
+
+**接缝边界（这一条是坑，不是实现细节）**：接缝只替换「**怎么读时间**」。
+**超时、关闭、取消语义仍由协调器负责** —— 那些是「保证不挂死」的部分（挂死地址到点即返回、
+`close()` 立刻叫醒在途探活、关闭后不再新建客户端），被测试替身绕过去就等于把最有价值的保护测没了。
+源工程原文也有同一句：接缝的边界画得很清楚，它只替换「怎么测这一次」。
+
+**2026-10-17（收口）两处一并补记**：
+
+- **连接即重放**落在 `HarnessViewModelConnection.handleConnection`：`connected = true` 时
+  自动 `scheduleChatRefresh()` + 拉待审批 / 待答问题 / 命令清单。与 `resumeEvents`（熄屏恢复）同一链。
+  判据理由见 `docs/CHANGELOG.md` 新增条目 10。
+- **主题三档**（对位源工程 `data/InterfaceStyle`）：落点 `core/ThemeMode.ts` / `AppPreferences.themeMode` /
+  vm `setThemeMode` / `ui/SettingsScreen.ets` 的 `themeSelector` / `platform/Platform.ets` 的
+  `applyAppThemeMode` / `ui/AppRuntime.ets`。**平台侧陷阱**：`ConfigurationConstant.ColorMode` 三个枚举
+  值容易记反（`COLOR_MODE_DARK = 0`、`COLOR_MODE_LIGHT = 1`、`COLOR_MODE_NOT_SET = -1`），
+  且**认不出的档位若原样传给 `setColorMode`，平台会在点击回调里抛参数错误 ⇒ 表现为「点一下就闪退」**，
+  所以取值在 `ThemeMode` / 偏好 / 平台**三处都归一化**。枚举记反那条与 `EntryAbility` 的
+  `onConfigurationUpdate` 同源（见上文 §4 深浅色一节）。
+
+**坑 38：`/tmp` 被写满自动清除，会让「直连 Shell」整条通道失效 —— 要横向换通道，不要纵向重试（2026-10-17，本轮收口）**
+
+现象：`Shell` 工具任何命令（哪怕 `pwd`）都返回
+`unexpect error: transport exception: entity not found: No such file or directory (os error 2)`，
+而同一时刻 `Read` / `Glob` / `Edit` 全部正常。根因**不在被执行的命令**：这个工具宿主把每个作业
+落在 `/tmp/trae-agent-toolhost-<uid>/jobs/` 下，`/tmp` 被写满后由系统清空，宿主的作业目录连同
+`cwd` 一起被删，于是它去 `chdir` 一个**已经不存在的目录**，`os error 2` 就是这个 `chdir` 报的。
+
+**处置：不要原地重跑同一通道** —— 纵向重试三次的结果逐字相同（同一个坏宿主）。**横向换通道**即可：
+在 `code_mode` 的 `Exec` 里写 `await tools.Shell({ command, cwd })`，它从**另一个宿主**起 shell，
+作业目录是新建的，一次即通（回包 `file_path` 仍指向 `…/jobs/`，但目录存在）。
+**同源教训**：工具报错先判「是命令错还是通道错」—— 若**任何命令都失败**、而**读类工具正常**，
+就是通道错，换通道，别去改命令。这与坑 28（`Grep` 读 FUSE 过期视图，改用 `readFileSync` 直读）
+是同一种病：**故障在通道层、不在你要做的事上**。
+
+**附带一条纪律**：`cmd | tail` 这类管道会**吃掉退出码**（拿到的是 `tail` 的 0），
+判「编译/测试到底成没成」要写成 `cmd > /tmp/log 2>&1; echo "EXIT=$?"`，
+或直接 grep 权威标志（`BUILD SUCCESSFUL` / `tests N / fail 0`），别信管道末尾的退出码。
+
+**坑 39：两处 ArkTS 编译期语法差异，静态审查看不出来、只有真编译才报（2026-10-17，本轮收口）**
+
+本轮首次把代码送上真编译，立刻抓出两处**写的时候完全不觉得有问题**的违规 —— 记下来备查：
+
+1. **`arkts-no-func-apply-call`：禁 `Function.apply` / `Function.call`**（报
+   `At Platform.ets:240:11`）。起因是 `applyAppFontScale` 里要做**运行时存在性探测**
+   —— 低版本设备上 `ApplicationContext.setFontSizeScale` 可能不存在（编译期有声明 ≠ 真机一定有，
+   同坑 28 的教训）。当时的写法是把方法取出来再 `probe.call(application, target)`，
+   结果直接编译不过；而**就算能过也仍是错的**：`as object` 取出函数再调用会**丢掉 `this`**。
+   正解是「探测 + 方法语法」两步分开：
+   ```ts
+   if (typeof (application as object)['setFontSizeScale'] !== 'function') { return; }
+   application.setFontSizeScale(target);   // 方法调用，this 正确
+   ```
+2. **`config` 只声明在 `UIAbilityContext` 上，不在基类 `Context` 上**（报
+   `Property 'config' does not exist on type 'Context'`）。`systemFontScale(context)` 里
+   直接 `context.config.fontSizeScale` 编不过 —— 基类 `Context` 没有 `config`。正解是在平台层
+   内部**显式收窄**：`const uiContext: common.UIAbilityContext = context as common.UIAbilityContext;`
+   再读 `uiContext.config.fontSizeScale`。**注意该字段本身是「可选」**（`Configuration.fontSizeScale?: number`），
+   所以取值前必须判空并回落 `1.0` —— 这台设备没上报档位时，当成「用户就是要 1.0×」是唯一安全解。
+
+**教训**：ArkTS 的编译期约束（`arkts-no-*` 一族）**静态读代码抓不到**，它们不是「风格问题」，
+是**硬编译错**。凡涉及 `Function.call/apply`、`obj['key']` 动态取函数、跨基类读衍生类字段这类
+「绕一下就能写」的写法，都要预料到编译会翻脸 —— **能真编译时，务必先编译再谈其它**；
+本轮若继续只靠 `Read` 静态审查，这两处会一路带到真机白屏。
+
+**坑 40：`@Prop` 的审计单元是「成员」不是「组件」—— 同一页上修了开关却漏了说明（2026-10-17，真机复查 + 全仓审计）**
+
+真机取证很直白：设置页**同一帧**里步进器已经是 `1.3×`，紧挨着的那行说明仍写「应用字号 1.2×」——
+一屏之上两个控件互相打脸。机制与坑 21 / 24 / 27 完全同源，**错的是修补的范围**：
+
+- 坑 27 的审计单元是**组件**：点到了 `SwitchRow`，就把 `checked` 改成 `@Prop`，收工。
+- 而 `title` / `description` 是同一个组件上的**另外两个成员**，同样是下行数据；
+  `description` 更是随字号档现算的动态值（`fontScaleDesc()`）。普通成员不参与
+  `updateStateVars(params)`，于是它永远停在首帧那条文案上。
+
+**修法**：`SwitchRow.title` / `description` 补 `@Prop`。（`ResourceStr` 是联合类型也能作 `@Prop`
+—— `SettingRow.title` 早就这么写、编译器认。）
+
+**验证口径（关键）**：必须在**同一个页面实例内**改档，看说明文字是否**同帧**跟随：
+点「＋」→ 步进器 `1.4×` → `1.5×`，说明同步到「应用字号 1.5×」，落盘 `font_scale` 同步为 `1.5`。
+「退出再进来才一致」**不算**验证 —— 那只能证明初始帧正确，证明不了更新路径。
+
+**全仓审计（判据三元组：成员是下行数据 × 宿主实例存活 × 值会变；逐个调用点确认）**：
+
+| 结论 | 对象 | 硬证据 |
+|---|---|---|
+| 本轮新修 | `SwitchRow.title` / `description` | 上述真机同帧复验 |
+| 本轮新修 | `SessionRow.session` / `selected` / `rowEnabled` | `ForEach` 键 = `session.id`，**键里不含** `running` / `pendingInteraction` / 标题 —— 坑 21 同型；`ArchivedSessionRow` 的 `session` / `title` / `selected` / `rowEnabled` 同理 |
+| 本轮新修 | `WarningBanner.message` | 三个调用点传的是**会变**的参数化文案（`PluginsScreen.problemCount()` / `unavailableReason()`、`SettingsScreen.bridgeVersionText()`），而警示条一旦出现就留在分支里 |
+| 已合格 | `StatusLabel.label` / `active`、`SettingRow.title` / `subtitle`、`ChoicePill.selected`、`ProcessGroupRow.expanded`、`ChatStatusBar.rawThinking`、`ModelRowView` / `AgentPresetRow`、两个补全面板 | 坑 21 / 24 / 27 已修 |
+| **不是**缺陷 | 全部函数成员（`onSelect` / `onTap` / `onCheckedChange` …） | `@Prop` 深拷贝会连闭包一起拷坏（坑 24 已证），它们也不随父状态变化 |
+| **不是**缺陷 | 组件私有字段（缓存 / `Scroller` / `fallback` 兜底对象） | 不是父侧下行数据 |
+| **不是**缺陷 | `ForEach` 键里**已含**该动态数据的子组件 | 键变即重建实例，自然自愈：`AttachmentImage` 的键含 `bytes` / `fail`，`MarkdownView` 的块键含正文长度（坑 22） |
+| 记账待查 | `QuestionCard.answered` / `ApprovalPanel.submitting` 等**分支内**动态布尔 | 卡片随分支出现/消失，只在「出现期间值又变」时才暴露；本轮无真机证据，登记在 `docs/TECH-DEBT.md` |
+
+**教训（口诀升级）**：坑 21 的口诀是「键里没有的信息，不能靠普通成员传」。本轮再补一条 ——
+**审计的最小单元是「成员」，不是「组件」**：一个组件上只要漏了一个动态成员，
+整条链路就还是死的。以组件为单位打勾，会精确地漏掉「只改了一半」这种情形。
+
 ### UI 迭代顺序（已全部走完）
 
 连接页（并发探活 / DSH1 导入 / 手动配对）→ 会话列表 → 聊天页（以 ChatPresentation 为接缝，

@@ -149,12 +149,13 @@ ui/     ← 只消费 HarnessState，调 HarnessViewModel 动作；不持有协�
 | 借鉴项 | 本项目 |
 |---|---|
 | 工程宪法 + 文档路由表 | 保留，命令换为 hvigor / hap-sign-tool |
-| 债务台账（TECH-DEBT） | **已立账**：`docs/TECH-DEBT.md`，行数预算 900 行/文件，本轮 7 文件拆清、台账清零 |
+| 债务台账（TECH-DEBT） | **已立账**：`docs/TECH-DEBT.md`，行数预算 900 行/文件。2026-10-15 把 7 个文件拆清；2026-10-17 移植批次又把 `ui/ChatDetail.ets`(1207) / `ui/SettingsScreen.ets`(967) 顶出预算，**已入台账待拆**（须在能编译的环境里做，理由见该文件「待拆」小节） |
 | 能力对等矩阵（PARITY） | **已建立**：`docs/PARITY.md`（能力 / 插件 API / 本工程 / 状态） |
 | 任务台账（ROADMAP） | **已建立**：`docs/ROADMAP.md`（阶段、进行中、待办池） |
 | 架构决策记录（ADR） | **已建立**：`docs/decisions/`（一事一文件） |
 | 发版说明 | **已建立**：`artifacts/RELEASE_NOTES_<版本>.md` |
 | 坑位索引 | 保留，内容为 HarmonyOS 特有坑 |
-| `@patch` 四要素 | 暂未引入 |
+| 架构纪律可执行门禁 | **部分引入**：`test/cases/architecture-guard.test.ts`（行数预算 + 台账登记 / 唯一网络边界 / `ui/` 不读偏好 / 会话展示单一出口）+ `test/cases/strings-parity.test.ts`（中英键与占位符一致）。**刻意未引入两条**：①「坑位索引 ↔ 正文双向一致」——源工程正文标题与索引同名才可双向比对，本仓索引是**触发词**、正文是**编号**，硬比对恒红或逼人删掉有检索价值的触发词；②「`@patch` 五要素」——本仓全仓 0 处 `// @patch`，写成断言是永不触发的空转门禁。 |
+| `@patch` 四要素 | 暂未引入（理由见上一行②） |
 
 **刻意没抄的**：CDP 探针体系（本项目无 WebUI 宿主）、README 双站对账（当前仅中文）。

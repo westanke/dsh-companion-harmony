@@ -1,8 +1,12 @@
 # 当前状态
 
-- **日期**：2026-10-16
-- **阶段**：**1.0.2 已打包**，待上传 AGC（1.0.0 送审被驳回；1.0.1 因改名而作废，未上传）
-- **版本**：1.0.2 / `versionCode` 1000002
+- **日期**：2026-10-17
+- **阶段**：**1.0.3 待出包**。追平 Android 源工程 v2.2.42 的新增内容**已全部落盘**，
+  已**编译 + 跑测通过**（`BUILD SUCCESSFUL` + `684 用例全绿`），并已**真机逐项验证**；
+  真机验证中**新发现并修复**设置页说明文字不随字号档更新（`SwitchRow.title/description`
+  缺 `@Prop`，坑 40），修后复跑编译 + 单测全绿。此前 **1.0.2 已打包但未上传 AGC**
+  （1.0.0 送审被驳回；1.0.1 因改名而作废，未上传）。见文末「2026-10-17 移植补齐」。
+- **版本**：1.0.3 / `versionCode` 1000003
 - **bundleName**：`com.dsh.westanke`
   > 2026-10-16 换掉：旧的 `com.Deepseek_Harness_client.westanke` 因**含 DeepSeek 字样**被判「与
   > DeepSeek 应用名称相似、无商标权属证明」。拿不到授权，只能在 AGC **重建应用**并改
@@ -19,12 +23,27 @@
 - **兼容**：HarmonyOS 6.0 及以上（`compatibleSdkVersion` = 5.1.0(18)）
 - **设备类型**：phone / tablet / 2in1
 - **插件基线**：`dsh-remote-bridge` **≥ 2.0.4**（旧名 `dsh-workspace`）
-- **最近验证**：`531 用例全绿`（`cd test && npm test`）+ `BUILD SUCCESSFUL`
-- **真机**：ICL-AL10（API 26，HarmonyOS 7.0）已装 1.0.2 调试签名包，
-  `bm dump` 实测 `versionCode = 1000002`；改名后界面（标题「DSH 伴侣」）、
-  连接页「连接服务端」、助手消息底部「内容由 AI 生成」标识**均已真机确认**。
-- **发布产物**（2026-10-16 出 **1.0.2**，含改名去品牌 + 换 bundleName + AI 生成内容显式标识；
-  内外层均 `verify-app` → `Verify success`）：
+- **最近验证**：`684 用例全绿`（`cd test && npm test`，43 个用例文件）+ `BUILD SUCCESSFUL`
+  （首跑 4 条红已全部修掉，其中 1 条是门禁抓出的真缺陷，详见文末）
+- **真机**：ICL-AL10（HarmonyOS 7.0.0.109）已装 **1.0.3 调试签名包**（同调试签名
+  **覆盖安装**，`wangke-PC` 配对数据**保住**——局域网 / 虚拟网两地址俱在）。
+  已逐项上机确认：会话列表（共 48 个会话）、消息时间戳（`12:50` / `12:51`）、
+  **合并后的会话级状态条**（底部单条「内容由 AI 生成」）+ 工具行（`🔧 执行了命令 · <命令名> ›`）
+  与「滚动到底部」按钮、设置页**构建水印**行与**平台层自检**
+  （`prefs:ok · aesgcm:ok · hosts:0 · send:queue · lang:zh-Hans-CN · tz:Asia/Shanghai`；
+  `hosts:0` 是探针空表往返、**不是**真实主机库计数，符合设计）、
+  **主题三档**点「深色」即时整页转深并持久化（重启仍 `dark`）、**字号档**步进并落盘
+  （`hdc` 直读 `dsh_settings` 偏好核对 `font_scale`）。
+  > **真机复查发现并修复**：设置页「完全跟随系统字号」那行说明文字不随字号档更新
+  > （`SwitchRow.title/description` 缺 `@Prop`，坑 40）—— 同一帧里步进器已 `1.3×`、
+  > 说明仍写「应用字号 1.2×」。修后同页实例内点「＋」说明**同帧**跟随（`1.4×` → `1.5×`）。
+  > **措辞纪律**：**未上机的项不写成「真机通过」** —— 39 条新能力中**其余项仍为
+  > 「编译 + 单测通过，未逐条上机」**。
+- **发布产物**：
+  > **1.0.3 待出包** —— 出包与回填流程见 `docs/RELEASE.md`；出包后本表与下方「产物校验」表
+  > 回填 **1.0.3** 实测值，下表 **1.0.2** 保留为历史（其 Profile 已随改名后的应用重签，不再代表现状）。
+  > 下表 `1.0.2`（2026-10-16 出，含改名去品牌 + 换 bundleName + AI 生成内容显式标识；
+  > 内外层均 `verify-app` → `Verify success`）：
 
   | 产物 | 说明 |
   |---|---|
@@ -69,15 +88,137 @@
 - **阻塞项**：**无代码阻塞**。AGC 侧待办（非代码）：
   ①「分发 > 版本信息 > **AI 功能声明**」改正为「涉及 AI 生成合成服务」；
   ②「应用审核信息 > **自测文件**」上传演示录屏；
-  ③「应用截图」换成 1.0.2 新图；
+  ③「应用截图」：1.0.2 的 6 张已因 1.0.3 界面变化（设置页新增「外观」组、会话级状态条合并）
+     **过期，需重拍**；`ai-generated-label-evidence.png` 同理需重截；
   ④ 实名认证口径：本应用**自身不运营生成服务**（生成发生在用户自建服务端），
      走申诉说明还是补手机号认证，**待用户拍板**。
-- **本轮改动**：①**改名去 DeepSeek** + 换 bundleName + 全部签名材料重签（详见 PORT-MAP 坑 26）；
-  ②助手消息底部新增「内容由 AI 生成」显式标识；
-  ③录制遍历演示录屏（连接管理 / 会话浏览 / 交互操作 / 文件查看）；
-  ④重拍上架截图 6 张；
-  ⑤**修复设置页点药丸「功能生效但选中高亮不动」**（用户真机反馈）——
-  `SettingsScreen.st()` 漏读 `revision` 导致该页动态节点未登记依赖，叠加子组件成员缺 `@Prop`，
-  详见 PORT-MAP 坑 27；修复后已真机复测通过并**重新出包**（故产物哈希已变）。
-- **下一步**：上传 `dsh-companion-harmony-1.0.2-release-signed.app` 到 AGC，
-  并按上「AGC 侧待办」补材料
+- **本轮改动（1.0.3）**：①**追平 Android v2.2.42 的 39 条新能力**（第 1 / 2 / 3 / 4 批 +
+  主题三档，代码全部落盘，见文末「2026-10-17 移植补齐」）；
+  ②**真机逐项验证**并**修复**设置页说明文字不随字号档更新（`SwitchRow.title/description`
+  缺 `@Prop`，坑 40）；同类审计另修 3 处（`SessionRow` / `ArchivedSessionRow` / `WarningBanner`
+  成员补 `@Prop`）；③补 `base` 缺 33 个界面引用键的中文取值（`base` / `en_US` 各 392 键）。
+  > 前序 **1.0.2 的本轮改动**（改名去 DeepSeek + 换 bundleName + AI 生成内容标识 +
+   > 重录演示录屏 + 重拍截图 6 张 + 修设置页药丸不刷新，详见 PORT-MAP 坑 26 / 坑 27）见 CHANGELOG。
+- **下一步**：出 **1.0.3** 上架包（先签 hap → 组装 `.app` → 里外双签 → `verify-app` 双层验）
+  与真机调试包 → 回填体积与 SHA-256 → 上传 `.app` 到 AGC，并按上「AGC 侧待办」补材料
+
+---
+
+## 2026-10-17 移植补齐（追平 Android v2.2.42）
+
+**一句话**：把源工程 v2.2.42 相对本工程的全部新增内容补齐。按「纯增益 → 体感 → 功能 → 工程」
+分 4 批推进，外加第 5 批「主题三档」；**四批 + 第 5 批代码已全部落盘，无剩余代码项**
+（架构守卫单测 / 中英资源门禁 / 请求代际隔离 / 目录事件去抖 / 投影缓存 / 断档检测 / 订阅基线 /
+交付物实时事件 / 会话统计 / 轨迹页 / Clock 接缝 / 连接即重放 / 主题三档）。
+
+> ✅ **本轮改动已于 2026-10-17 编译 + 跑测通过**（工具链恢复后实测）：
+> `bash scripts/package.sh` → **`BUILD SUCCESSFUL`**，产出未签名 HAP
+> `dist/entry-default-unsigned.hap`（3 004 508 字节，SHA-256
+> `ef3ecbbe84147d4a4fdb8c7fd0f4ad864a85e6453c0e19df9a17a480b7b78e9e`；
+> `SignHap` 因无 `signingConfigs` 跳过 —— 本工程按 `signing/README.txt` 手工签名，属预期）；
+> `cd test && npm test` → **684 用例全绿**（43 个用例文件）。
+> 首跑 **4 条红**：2 条是用例自身写错（哨兵值 `0` 误当起点时间戳）、1 条是门禁
+> `strings-parity` 抓出的真缺陷（`base` 缺 33 个界面引用键的中文取值）—— 全部修掉后复跑全绿。
+> **真机验证已于 2026-10-17 补做**（真机中途断开后重连）：本批**已上机的项**见主表
+> 「真机」一节；真机复查**新发现并修复**坑 40（`SwitchRow.title/description` 缺 `@Prop`），
+> 修后**复跑编译 + 单测全绿**。**未上机的项仍记为「编译 + 单测通过，未逐条上机」** ——
+> 措辞纪律照旧：**没上过真机的，不说「真机通过」**。
+
+**第 1 批（纯增益、低风险）**
+
+| 项 | 落点 | 状态 |
+|---|---|---|
+| 构建水印（版本 / 构建时间显示在关于处） | `ui/SettingsScreen.ets` | 已验证（编译 + 单测，未真机） |
+| 消息时间戳 | `core/ChatTimeLabel.ts` + `ChatDisplayItem.time` 接缝 | 已验证（编译 + 单测，未真机） |
+| 字号缩放 | `MarkdownView(textScale)` 全链路 | 已验证（编译 + 单测，未真机） |
+| 失败行重试 | `TurnFailureRow` + `onRetry` | 已验证（编译 + 单测，未真机） |
+
+**第 2 批（体感）**
+
+| 项 | 落点 | 状态 |
+|---|---|---|
+| 思考条与 AI 标识**合并为会话级状态条** | `ui/ChatStatusBar.ets`（新） | 已验证（编译 + 单测，未真机）。**注意**：AGC 已提交的 `ai-generated-label-evidence.png` 因形态变化而**过期，需重截** |
+| 过程分组（工具/上下文/思考折叠成组）+ 组级耗时 | `core/ChatDisplayGroups.ts`（新）+ `ui/ProcessGroupRow.ets`（新） | 已验证（编译 + 单测，未真机） |
+| 表格「像一张表」（边框 + 列间竖线 + 表头深底） | `ui/MarkdownView.ets` | 已验证（编译 + 单测，未真机） |
+| 代码块高亮（零依赖，逐字符原文不变） | `core/CodeHighlight.ts`（新）+ `ui/MarkdownView.ets` | 已验证（编译 + 单测，未真机） |
+| 滚动中冻结列表（不再跟着流式乱跳） | `ui/ChatDetail.ets`（`onScrollStarted` / `onScrollStopped`） | 已验证（编译 + 单测，未真机） |
+
+**第 3 批（功能）**
+
+| 项 | 落点 | 状态 |
+|---|---|---|
+| 消息内图片全屏查看 + 保存（**零权限**，不写相册） | `ui/MessageParts.ets` + `ui/ChatDetail.ets`（`imageViewer` / `bindContentCover`）+ `core/ImageSave.ts`（新） | 已验证（编译 + 单测，未真机） |
+| 消息级 `atSeq` 分叉（入口在时间戳那一行、二次确认） | `core/ChatFork.ts`（新）+ `ui/ChatMessage.ets` + `ui/ChatDetail.ets` | 已验证（编译 + 单测，未真机） |
+| 已归档会话入口（**按能力位守卫**，明说不能恢复） | `ui/ArchivedSessionRow.ets`（新）+ `ui/ChatScreen.ets` + `HarnessState.archivedSessions` + `DshClient.sessions(archived)` | 已验证（编译 + 单测，未真机） |
+| 服务端能力位 / 版本读入（归档入口的前置） | `core/BridgeCapabilities.ts`（新）+ `HarnessViewModelConnection` 的 `connection.ready` | 已验证（编译 + 单测，未真机） |
+
+**第 4 批（工程 / 客户端侧数据管线）**
+
+| 项 | 落点 | 状态 |
+|---|---|---|
+| 请求代际隔离（切会话 / 重连 / 断开时作废旧请求） | `core/RequestGate.ts`（新）+ `HarnessViewModelBase` / `Sessions` / `Connection` | 已验证（编译 + 单测，未真机） |
+| 目录事件去抖（`file.*` 风暴 → 安静 500ms 后一次） | `core/EventDebouncer.ts`（新，`TimerPort` 接缝）+ `HarnessViewModelConnection` + `Files.refreshDirectoryNow()` | 已验证（编译 + 单测，未真机） |
+| 历史投影缓存 + 展示口径抽取 | `core/ChatVisibleItems.ts`（新）+ `ui/ChatDetail.ets`（`renderItems()` 改名） | 已验证（编译 + 单测，未真机） |
+| 断档检测 + 订阅基线 | `core/ChatSeqMonitor.ts`（新）+ `HarnessViewModelConnection`（`chat.*` / `chat.session.snapshot`） | 已验证（编译 + 单测，未真机） |
+| 交付物实时事件（`chat.deliverables.presented`） | `HarnessViewModelConnection` | 已验证（编译 + 单测，未真机） |
+| 执行统计面板（**不显示 Token / 上下文占用**，如实说明原因） | `core/SessionStats.ts`（新）+ `ui/SessionStatsSheet.ets`（新）+ `ui/ChatHeader.ets` 菜单 | 已验证（编译 + 单测，未真机） |
+| 执行轨迹页（按轮次分组、`OTHER` 显示事件类型原名） | `core/Trajectory.ts`（新）+ `ui/TrajectoryScreen.ets`（新）+ `ui/ChatDetail.ets` 覆盖层 | 已验证（编译 + 单测，未真机） |
+| 服务端能力位 / 版本读入的界面侧（过旧警告横幅） | `ui/SettingsScreen.ets` + `core/BridgeCapabilities.ts` | 已验证（编译 + 单测，未真机） |
+| **Clock·Transport 接缝**（延迟测量可注入，清源工程 `DEBT-007` 那类 flaky） | `core/ConnectionCoordinator.ts`（构造参数 `clock: () => number`）+ `test/cases/connection-coordinator.test.ts` | 已运行（单测全绿） |
+| **连接即重放**（重连成功即补拉断线期间错过的状态） | `HarnessViewModelConnection.handleConnection` | 已验证（编译 + 单测，未真机） |
+| **架构纪律可执行门禁**（行数预算 + 台账 / 唯一网络边界 / `ui/` 不读偏好 / 展示单一出口） | `test/cases/architecture-guard.test.ts`（新） | 已运行（单测全绿） |
+| **中英资源一致性门禁**（键集一一对应 / 占位符一致 / 无重复键） | `test/cases/strings-parity.test.ts`（新） | 已运行（单测全绿） |
+| **修复 `base` 缺 33 个界面引用键** | `entry/src/main/resources/base/element/string.json` | 已补齐（`base` / `en_US` 各 **392** 键），`strings-parity` 门禁复跑通过 |
+
+> 第 4 批**已全部落盘**：**Clock·Transport 接缝**的落点是 `core/ConnectionCoordinator.ts` 的构造
+> 参数 `clock: () => number`（默认 `Date.now` 包装），单测注入「手动推进的假时钟」⇒ 那三条依赖
+> 精确延迟比较的用例**不再等待真实时间**，源工程 `DEBT-007` 那类 flaky 在结构上消失
+> （详见 `docs/CHANGELOG.md` 新增条目 9、`docs/PORT-MAP.md` 坑 37）；**「连接即重放」**落在
+> `handleConnection`：`connected = true` 时补拉当前会话历史 + 会话列表 + 待审批 + 待答问题 +
+> 命令清单（与 `resumeEvents` 同一条链，详见 CHANGELOG 条目 10）。
+
+**第 5 批（主题三档，= 源工程「设置页外观选项合并」的样式一档）**
+
+| 项 | 落点 | 状态 |
+|---|---|---|
+| 主题三档：跟随系统 / 浅色 / 深色 | `core/ThemeMode.ts`（已有）+ `AppPreferences.themeMode` + vm `setThemeMode` + `ui/SettingsScreen.ets`（`themeSelector`）+ `platform/Platform.ets`（`applyAppThemeMode`）+ `ui/AppRuntime.ets` | 已验证（编译 + 单测，未真机） |
+| 取值三处归一化（`ThemeMode` / 偏好 / 平台） | 同上 | 已验证（编译 + 单测，未真机） |
+
+> 对位源工程 v2.2.42 的 `data/InterfaceStyle`。存的是**线上取值** `'system'`/`'light'`/`'dark'`，
+> 不是枚举序数（升级安全）；认不出的取值一律回落「跟随系统」；**原样传给 `setColorMode`
+> 会在点击回调里抛参数错误（表现为「点一下就闪退」）**，故必须归一化。详见 CHANGELOG 条目 11。
+
+**新增单测**（**已跑**）：`test/cases/chat-display-groups.test.ts`、
+`test/cases/code-highlight.test.ts`、`test/cases/chat-fork.test.ts`、
+`test/cases/bridge-capabilities.test.ts`、`test/cases/image-save.test.ts`；
+第 4 批再增 `test/cases/request-gate.test.ts`、`test/cases/event-debouncer.test.ts`、
+`test/cases/chat-seq-monitor.test.ts`、`test/cases/session-stats.test.ts`、
+`test/cases/trajectory.test.ts`、`test/cases/chat-visible-items.test.ts`，以及两条**文档门禁**
+`test/cases/architecture-guard.test.ts`、`test/cases/strings-parity.test.ts`；
+收口再补 `test/cases/appearance-preferences.test.ts`（对位源工程 `AppearancePreferencesTest.kt`，
+覆盖字号边界 / 非法值兜底 / 主题三档判定与回落 / 偏好读写往返）。
+用例总数**已从 531 增至 684（43 个用例文件）并全绿**，数字已回填
+`TESTING.md` 的「用例数演进」表；首跑 4 条红的原因与修法见该文件。
+
+**新增 / 修改的平台坑**：PORT-MAP 坑 29（`List` 回收 ⇒ 组展开态必须住父组件）、
+坑 30（组 id 撞列表 key；`setTimeout` 无取消 ⇒ 冻结解冻需代际校验）、
+坑 31（全屏态用 `bindContentCover`，自绘浮层拿不到系统返回键）、
+坑 32（写相册是受限权限 ⇒ 图片保存改走零权限系统面板）、
+坑 33（能力位「未知」≠「缺失」）、
+坑 34（消息级确认框 / 查看器状态必须住父组件）、
+坑 35（`resources/base` 资源文件在本机写入会被覆盖、工具回显不可信 ⇒ 一律以 `Read` 复核取真相；
+**更深一层**：本机 `Edit` 每次从**冻结的原始快照**重写整文件、且文件末尾锚点检索不到 ⇒ 多次追加必须
+**合并在同一次编辑**里。本轮据此补齐了 `base` 缺失的 **33 个**界面引用键，见「修复」段）、
+坑 37（**接缝只替换「最容易飘的那一维」，保命逻辑不许被替身绕过** —— Clock 接缝只换「怎么读时间」，
+超时 / 关闭 / 取消语义仍由协调器负责）、
+坑 38（`/tmp` 被写满自动清除 ⇒ 直连 `Shell` 整条通道失效：任何命令都报 `entity not found`，
+**换通道** `Exec` 内 `await tools.Shell(...)` 一次即通；顺带记「管道会吃掉退出码」的判成败纪律）、
+坑 39（两处只有**真编译**才报的 ArkTS 硬错：`arkts-no-func-apply-call` 禁 `Function.call/apply`；
+`config` 只声明在 `UIAbilityContext` 上、不在基类 `Context` 上）。
+
+**剩余代码项：无。** 编译 + 单测已真实通过（见上 ✅ 块）；真机验证已补做（部分项上机，
+未上机项如实标注）。待办剩两件：①**把两个超 900 行预算的文件拆回线内**
+（`ui/ChatDetail.ets`(1207) / `ui/SettingsScreen.ets`(979)），**必须在能编译的环境里做**，
+理由见 `docs/TECH-DEBT.md`；②`@Prop` 审计中**拿不到真机时序证据**的几处分支内动态成员
+（`DEBT-004`，待逐处造时序取证）。
+> 源工程里的「上下文用量环」**有意不做**（见 CHANGELOG 里的说明）。

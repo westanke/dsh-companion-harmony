@@ -40,8 +40,15 @@ export struct BrandMark {
  */
 @Component
 export struct WarningBanner {
-  /** 已解析好的文案（调用方用 `$r` 的参数化形式或普通 `$r` 传进来）。 */
-  message: ResourceStr = '';
+  /**
+   * 已解析好的文案（调用方用 `$r` 的参数化形式或普通 `$r` 传进来）。
+   *
+   * **`@Prop` 而非普通成员**：多数调用点传的是常量（`$r('app.string.http_warning')`），
+   * 但有三个点传的是会变的参数化文案 —— `PluginsScreen` 的 `problemCount()` /
+   * `unavailableReason()`、`SettingsScreen` 的 `bridgeVersionText()`。这些警示条一旦出现
+   * 就会留在分支里，普通成员会让它停在首帧那条文案上。见 PORT-MAP 坑 40。
+   */
+  @Prop message: ResourceStr = '';
 
   build() {
     Row() {

@@ -62,6 +62,8 @@ export function toolItem(entry: HistoryEntry, toolResults: Map<string, ToolResul
     [],
     actions,
     [detail],
+    null,
+    event.time,
   );
 }
 

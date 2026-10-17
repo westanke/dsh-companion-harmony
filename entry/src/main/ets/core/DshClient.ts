@@ -398,8 +398,15 @@ export class DshClient {
 
   // --- 会话与工作区 ----------------------------------------------------------
 
-  sessions(): Promise<ChatSession[]> {
-    return this.getJson('chat/sessions', true).then((map: JsonMap | null): ChatSession[] => {
+  /**
+   * 会话列表；`archived = true` 时**只列已归档**的那批（`?archived=true`）。
+   *
+   * 老服务端会**忽略**这个参数并返回未归档列表 —— 所以调用方（`loadArchivedSessions`）
+   * 必须先按能力位 `session-archive-list-v1` 把关，否则会展示出「一条归档都没有」的假结论。
+   */
+  sessions(archived: boolean = false): Promise<ChatSession[]> {
+    const path: string = archived ? 'chat/sessions?archived=true' : 'chat/sessions';
+    return this.getJson(path, true).then((map: JsonMap | null): ChatSession[] => {
       const raw: JsonMap[] = itemsOf(map);
       const out: ChatSession[] = [];
       for (let i = 0; i < raw.length; i++) {

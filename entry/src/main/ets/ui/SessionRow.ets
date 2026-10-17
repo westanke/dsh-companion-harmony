@@ -20,8 +20,21 @@ import { StatusLabel } from './Components';
  */
 @Component
 export struct SessionRow {
-  session: ChatSession = new ChatSession();
-  selected: boolean = false;
+  /**
+   * 本行的会话快照。**必须**是 `@Prop`。
+   *
+   * 这一行由 `ChatScreen` 用 `ForEach`（键 = `session.id`）渲染，而**键里不含**
+   * `running` / `pendingInteraction` / `title` / `workspaceTitle` —— 刷新列表时键不变，
+   * ArkUI 复用本行实例，普通成员就会一直停在首帧的那份快照上：状态点永远不翻、
+   * 重命名后标题不变。与坑 21（`ModelRowView.selected`）完全同型，见 PORT-MAP 坑 40。
+   *
+   * `@Prop` 会深拷贝，但坑 24 已确证深拷贝保留原型（`Object.setPrototypeOf` + `Object.keys`），
+   * 且 `ChatSession` 的字段全是原始类型（见 `core/ModelsChat.ts`），拷贝代价可忽略。
+   * 本行只读字段、不比较对象身份，故拷贝不影响「重命名 / 归档」回调（它们只用 `id`）。
+   */
+  @Prop session: ChatSession = new ChatSession();
+  /** 选中高亮。同样是 `ForEach` 复用后不会回写的下行数据（键里没有它）。 */
+  @Prop selected: boolean = false;
   /**
    * 本行是否可操作（对应源工程的 `enabled = !state.busy`）。
    *
@@ -29,7 +42,7 @@ export struct SessionRow {
    * 同名的通用属性方法 `enabled(value)`，同名会报
    * 「Property 'enabled' ... is not assignable to the same property in base type」（10505001）。
    */
-  rowEnabled: boolean = true;
+  @Prop rowEnabled: boolean = true;
   onSelect: (id: string) => void = (): void => {};
   onRename: (session: ChatSession) => void = (): void => {};
   onFork: (id: string) => void = (): void => {};

@@ -25,6 +25,8 @@
 
 import { KeyValueStore } from './HostStore';
 import { SEND_MODE_QUEUE, SEND_MODE_STEER, oppositeSendMode } from './ComposerSendPolicy';
+import { FONT_SCALE_DEFAULT, normalizeFontScale } from './FontScale';
+import { THEME_MODE_SYSTEM, normalizeThemeMode } from './ThemeMode';
 
 /** 偏好文件名。刻意与凭据库（`dsh_connection`）分开。 */
 export const SETTINGS_PREFERENCES_NAME: string = 'dsh_settings';
@@ -33,6 +35,9 @@ const KEY_BUSY_SEND_MODE: string = 'busy_send_mode';
 const KEY_GEN_UI_DEBUG: string = 'gen_ui_debug';
 const KEY_USE_WEB_CHAT: string = 'use_web_chat';
 const KEY_SHOW_CONTEXT: string = 'show_context';
+const KEY_FONT_SCALE: string = 'font_scale';
+const KEY_FONT_FOLLOWS_SYSTEM: string = 'font_follows_system';
+const KEY_THEME_MODE: string = 'theme_mode';
 
 export class AppPreferences {
   private store: KeyValueStore;
@@ -105,6 +110,50 @@ export class AppPreferences {
 
   set showContext(value: boolean) {
     this.putBool(KEY_SHOW_CONTEXT, value);
+  }
+
+  /**
+   * 应用内字号倍数（0.8–1.5，步进 0.1）。
+   *
+   * 与源工程同一取向：**这一层是与「跟随系统」互斥的乘数**，勾了跟随系统时它只是个
+   * 被记住的落点值（见 `FontScale.effectiveFontScale`）。
+   *
+   * 读取一律过 `normalizeFontScale`：坏值（NaN / 越界 / 非数字）回落到 1.0 ——
+   * 一个坏偏好绝不能变成「整个界面用 NaN 尺寸测量」（白屏且不崩，最难查的一种）。
+   */
+  get fontScale(): number {
+    const raw: string | null = this.store.getString(KEY_FONT_SCALE);
+    if (raw === null) {
+      return FONT_SCALE_DEFAULT;
+    }
+    return normalizeFontScale(Number.parseFloat(raw));
+  }
+
+  set fontScale(value: number) {
+    this.store.putString(KEY_FONT_SCALE, `${normalizeFontScale(value)}`);
+  }
+
+  /**
+   * 字号是否跟随系统。默认 **true**。
+   *
+   * 默认跟随而不是默认 1.0：一个刚装上的应用**不该**擅自把用户调大的系统字号缩回去 ——
+   * 那是用户在系统设置里明确要的效果，应用这层的默认立场就该是「不插嘴」。
+   */
+  get fontFollowsSystem(): boolean {
+    return this.getBool(KEY_FONT_FOLLOWS_SYSTEM, true);
+  }
+
+  set fontFollowsSystem(value: boolean) {
+    this.putBool(KEY_FONT_FOLLOWS_SYSTEM, value);
+  }
+
+  /** 主题档位（`system` / `light` / `dark`），默认跟随系统。 */
+  get themeMode(): string {
+    return normalizeThemeMode(this.store.getString(KEY_THEME_MODE));
+  }
+
+  set themeMode(value: string) {
+    this.store.putString(KEY_THEME_MODE, normalizeThemeMode(value));
   }
 
   /** 布尔读取：键缺失用 `fallback`，其余只认字面量 `'true'`。 */

@@ -117,6 +117,14 @@
       "value": "The chat disappears from the list; its history stays on your computer."
     },
     {
+      "name": "archived_empty",
+      "value": "No archived chats"
+    },
+    {
+      "name": "archived_sessions_hint",
+      "value": "Archived chats can still be opened. This plugin cannot unarchive yet — use the WebUI on your computer."
+    },
+    {
       "name": "attachment_file_too_large",
       "value": "The file is larger than %s and cannot be uploaded as a message attachment."
     },
@@ -469,6 +477,22 @@
       "value": "Fork"
     },
     {
+      "name": "fork_confirm_action",
+      "value": "Fork"
+    },
+    {
+      "name": "fork_confirm_body",
+      "value": "A new chat is created with everything up to this message. The original chat is unaffected."
+    },
+    {
+      "name": "fork_confirm_title",
+      "value": "Fork from this message?"
+    },
+    {
+      "name": "fork_from_here",
+      "value": "Fork from here"
+    },
+    {
       "name": "fork_session",
       "value": "Fork chat"
     },
@@ -515,6 +539,14 @@
     {
       "name": "http_warning",
       "value": "HTTP sends the device token and content in clear text. Use it only on a trusted network, VPN, or tunnel."
+    },
+    {
+      "name": "image_save_failed",
+      "value": "Could not save the image, try another location"
+    },
+    {
+      "name": "image_saved",
+      "value": "Saved"
     },
     {
       "name": "import_and_connect",
@@ -1237,6 +1269,14 @@
       "value": "Manage connection, model providers, device permissions, and language"
     },
     {
+      "name": "show_active_sessions",
+      "value": "Active chats"
+    },
+    {
+      "name": "show_archived_sessions",
+      "value": "Archived"
+    },
+    {
       "name": "show_context_desc",
       "value": "Blocks the system pushes in every turn: runtime context, time context, background job notices. Hidden by default — they put a row of collapsed blocks between every message. Turn on when debugging."
     },
@@ -1435,6 +1475,98 @@
     {
       "name": "workspace_files_unavailable",
       "value": "Can't read this session's working directory"
+    },
+    {
+      "name": "retry",
+      "value": "Retry last turn"
+    },
+    {
+      "name": "build_stamp",
+      "value": "build %s"
+    },
+    {
+      "name": "appearance",
+      "value": "Appearance"
+    },
+    {
+      "name": "font_scale_follows_title",
+      "value": "Follow system font size"
+    },
+    {
+      "name": "font_scale_follows_desc",
+      "value": "Use the font size from system settings"
+    },
+    {
+      "name": "font_scale_desc",
+      "value": "App font size %s"
+    },
+    {
+      "name": "font_scale_footnote",
+      "value": "Turn off “Follow system font size” to zoom this app's text up or down on its own (0.8 to 1.5 times)."
+    },
+    {
+      "name": "theme_title",
+      "value": "Theme"
+    },
+    {
+      "name": "theme_desc",
+      "value": "Light or dark appearance"
+    },
+    {
+      "name": "theme_system",
+      "value": "Follow system"
+    },
+    {
+      "name": "theme_light",
+      "value": "Light"
+    },
+    {
+      "name": "theme_dark",
+      "value": "Dark"
+    },
+    {
+      "name": "bridge_outdated_warning",
+      "value": "The desktop plugin is too old (%s); approval and question cards won't appear. Update the plugin on your computer, then reconnect."
+    },
+    {
+      "name": "session_stats_empty",
+      "value": "No countable events in this session yet"
+    },
+    {
+      "name": "session_stats_title",
+      "value": "Run stats"
+    },
+    {
+      "name": "stats_assistant",
+      "value": "Assistant replies"
+    },
+    {
+      "name": "stats_events",
+      "value": "Total events"
+    },
+    {
+      "name": "stats_last_seq",
+      "value": "Data through event #%s"
+    },
+    {
+      "name": "stats_token_unknown",
+      "value": "Token usage and context occupancy come from the kernel, which this plugin can't read — so they aren't shown."
+    },
+    {
+      "name": "stats_tools",
+      "value": "Tool calls"
+    },
+    {
+      "name": "stats_turns",
+      "value": "User turns"
+    },
+    {
+      "name": "trajectory_empty",
+      "value": "No events to inspect in this session yet"
+    },
+    {
+      "name": "trajectory_title",
+      "value": "Execution trajectory"
     }
   ]
 }

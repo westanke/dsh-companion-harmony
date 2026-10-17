@@ -15,11 +15,45 @@
  * 2. **表格要横向滚、列宽要自己定**：ArkUI 的 `Scroll` 只支持单方向，所以横向滚动**只加在
  *    最外层** —— 套在表格外面，列宽才不会被无界宽度约束带偏（`GenUiCard` 踩过同一个坑）。
  *    列宽由 `markdownTableColumnWidths` 按内容估，估出来的宽度被 `width()` 定死。
+ *
+ * ## 表格的「像一张表」（真机反馈四修，2026-10-17）
+ *
+ * 前三版表格被连反馈三次「**表格不像表**」：截图里那些「证据 / 结果」行看起来就是普通文字
+ * 行。根因是**只有单元格文字、没有表的结构**。第四版补上四件东西，缺一件都还是「一段文字」：
+ * 外框一道边（+ 圆角）、表头行（深底，与数据行分明）、行与行之间的分隔线、
+ * 列与列之间的竖线。折行与表格感**两个都要**，不是二选一 —— 这是前三版反复的教训。
+ *
+ * 列宽仍然按内容估（本工程的做法，比源工程的「第一列固定上限」更能容纳多列表格）；
+ * 总宽超出屏幕时横向滚。估出的单列上限是 `MARKDOWN_TABLE_MAX_COLUMN_VP`，所以长句会在
+ * 列内折行，而不是把表撑成无限宽。
+ *
+ * ## 代码块高亮（真机反馈三修，2026-10-17）
+ *
+ * 代码块走 `core/CodeHighlight.ts`：`highlightCode` 算出区间、`codeSegments` 摊成
+ * 「一段文字 + 一个类别」，这里再把每段包成一个 `Span`。
+ *
+ * **拼起来必须逐字符等于原文**（高亮只加样式，不改字符）—— 界面按原文排版与复制，
+ * 少一个字符，行号与剪贴板内容就全歪了。所以这里不 trim、不补换行。
+ *
+ * 源工程用 `remember(code, language)` 缓存高亮结果（文本没变的重组直接复用）。
+ * ArkUI 的 `@Builder` 里没有等价的「按 key 记忆」，所以本组件自己留一份有界缓存
+ * （见 `codeSegmentsOf`）—— 语义与源工程一致：**只省「文本没变」的那次重算**。
  */
 
 import { inlineMarkup } from '../core/GenUiBlocks';
 import { MARKDOWN_TABLE_MIN_COLUMN_VP, markdownTableColumnWidths, MdBlock, MdBlockKind, MdTable,
   markdownBlocks } from '../core/MarkdownLite';
+import { CodeSegment, CodeTokenKind, codeSegments, highlightCode } from '../core/CodeHighlight';
+import { writeClipboardText } from '../platform/Clipboard';
+
+/**
+ * 高亮缓存的容量上限（条数）。
+ *
+ * 会话页里同时存在的代码块数量有限，8 条足够覆盖「一屏里的几个代码块」（工具详情另走
+ * `MessageParts.ToolTextBlock`，不经过这里）；满了整体清空，而不是按访问时间淘汰 ——
+ * 前者实现只有一行，后者要维护一个访问队列，而后者省下的那点重算不值得。
+ */
+const CODE_CACHE_LIMIT: number = 8;
 
 /**
  * 极简 Markdown 渲染（块级）。
@@ -134,13 +168,73 @@ export struct MarkdownView {
     return `${index}:${block.kind}:${block.text.length}`;
   }
 
+  /** 高亮缓存：`语言 + 原文` → 分段（见文件头「代码块高亮」与 `CODE_CACHE_LIMIT`）。 */
+  private codeCache: Map<string, CodeSegment[]> = new Map();
+
+  private codeSegmentsOf(text: string, lang: string): CodeSegment[] {
+    const key: string = `${lang}\u0000${text}`;
+    const cached: CodeSegment[] | undefined = this.codeCache.get(key);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const segments: CodeSegment[] = codeSegments(text, highlightCode(text, lang));
+    if (this.codeCache.size >= CODE_CACHE_LIMIT) {
+      this.codeCache.clear();
+    }
+    this.codeCache.set(key, segments);
+    return segments;
+  }
+
+  /**
+   * 高亮类别的配色。
+   *
+   * 全部走**系统色**（`sys.color.*`）而不是写死的十六进制：应用支持浅色 / 深色 / 跟随系统
+   * 三档主题，系统色会跟着主题自动换；写死一套色板，深色模式下必然有一头读不清。
+   *
+   * 五类归到三种颜色：关键字 / 键 / 字面量同色（它们在阅读上是同一类「语法骨架」），
+   * 字符串与数字同色，注释压到第三级灰 —— 注释本来就该退到背景里去。
+   */
+  private tokenColor(kind: CodeTokenKind): Resource {
+    if (kind === CodeTokenKind.COMMENT) {
+      return $r('sys.color.ohos_id_color_text_tertiary');
+    }
+    if (kind === CodeTokenKind.STRING || kind === CodeTokenKind.NUMBER) {
+      return $r('sys.color.ohos_id_color_warning');
+    }
+    if (kind === CodeTokenKind.PLAIN) {
+      return $r('sys.color.ohos_id_color_text_primary');
+    }
+    return $r('sys.color.ohos_id_color_emphasize');
+  }
+
+  /**
+   * 列与列之间的竖线。
+   *
+   * 用「1vp 宽的色块 + `alignSelf(Stretch)`」而不是 `Divider().vertical(true)`：
+   * Divider 竖直时要显式给高，而这里每行的高度由文字折行决定、算不出来；
+   * `Stretch` 让这根线自动长到行高 —— 与引用块那条左边线是同一套做法（见 QUOTE 分支）。
+   *
+   * `alignSelf` 会**覆盖**行容器的 `alignItems`，所以文字那一侧仍然是顶对齐。
+   */
+  @Builder
+  cellSeparator() {
+    Column()
+      .width(1)
+      .alignSelf(ItemAlign.Stretch)
+      .backgroundColor($r('sys.color.ohos_id_color_list_separator'))
+  }
+
   @Builder
   tableView(table: MdTable) {
-    // 横向滚动只加在最外层（见文件头平台差异 4）。
+    // 横向滚动只加在最外层（见文件头平台差异 2）。
     Scroll() {
       Column() {
+        // ── 表头行：深底 + 加粗，一眼看出「这是列名」而不是数据 ──
         Row() {
           ForEach(table.header, (cell: string, columnIndex: number) => {
+            if (columnIndex > 0) {
+              this.cellSeparator()
+            }
             Text(inlineMarkup(cell))
               .fontSize(this.headerCellSize())
               .fontWeight(FontWeight.Medium)
@@ -150,17 +244,28 @@ export struct MarkdownView {
         }
         .width(this.tableWidthOf(table))
         .backgroundColor($r('sys.color.ohos_id_color_sub_background'))
+        .alignItems(VerticalAlign.Top)
 
+        // 表头下那条线用**更重**的一笔：它是「列名 / 数据」的分界，与行间线同粗会看不出来。
         // 宽度必须显式给：横向滚动的子级拿到的是**无界**宽度约束，
         // Divider 默认铺满 —— 无界下会塌成 0 宽，这条线整个不见。
         Divider()
-          .strokeWidth(1)
+          .strokeWidth(2)
           .width(this.tableWidthOf(table))
           .color($r('sys.color.ohos_id_color_list_separator'))
 
         ForEach(table.rows, (cells: string[], rowIndex: number) => {
+          if (rowIndex > 0) {
+            Divider()
+              .strokeWidth(1)
+              .width(this.tableWidthOf(table))
+              .color($r('sys.color.ohos_id_color_list_separator'))
+          }
           Row() {
             ForEach(table.header, (column: string, columnIndex: number) => {
+              if (columnIndex > 0) {
+                this.cellSeparator()
+              }
               Text(columnIndex < cells.length ? inlineMarkup(cells[columnIndex]) : '')
                 .fontSize(this.cellSize())
                 .width(this.columnWidthAt(table, columnIndex))
@@ -168,14 +273,80 @@ export struct MarkdownView {
             }, (column: string, columnIndex: number) => `td-${rowIndex}-${columnIndex}`)
           }
           .width(this.tableWidthOf(table))
+          .alignItems(VerticalAlign.Top)
         }, (cells: string[], rowIndex: number) => `tr-${rowIndex}-${cells.length}`)
       }
+      .width(this.tableWidthOf(table))
+      // 外框一道边 + 圆角：没有这道边，内部再多分隔线也还是一段文字。
+      // 同时设了 `.clip(true)`：表头那块底色会被裁进圆角里，否则四个直角会戳出边框。
+      .clip(true)
+      .border({
+        width: 1,
+        color: $r('sys.color.ohos_id_color_list_separator'),
+        radius: 6,
+      })
       .alignItems(HorizontalAlign.Start)
     }
     .scrollable(ScrollDirection.Horizontal)
     .width('100%')
     .align(Alignment.TopStart)
     .margin({ top: 4, bottom: 6 })
+  }
+
+  /** 复制**原始代码原文**（不是屏幕上带标签的整块）：多一行 ```kotlin 粘进编辑器就是语法错。 */
+  private copyCode(code: string): void {
+    writeClipboardText(code);
+    this.getUIContext().getPromptAction().showToast({ message: $r('app.string.copied') });
+  }
+
+  @Builder
+  codeView(block: MdBlock) {
+    Column() {
+      // ── 顶栏：语言标签在左、复制键在右 ──
+      //
+      // 语言为空时**照样保留整条顶栏**（只空着标签）：顶栏高度若随语言有无上下跳，
+      // 复制键就会在消息之间错位，用户按肌肉记忆点下去会点到隔壁去（源工程原话）。
+      Row() {
+        Text(block.lang)
+          .fontSize(11)
+          .fontColor($r('sys.color.ohos_id_color_text_secondary'))
+          .layoutWeight(1)
+        Text($r('app.string.tool_detail_copy'))
+          .fontSize(11)
+          .fontColor($r('sys.color.ohos_id_color_text_primary_activated'))
+          .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+          .onClick((): void => {
+            this.copyCode(block.text);
+          })
+      }
+      .width('100%')
+      .padding({ left: 10, right: 4, top: 4 })
+      .alignItems(VerticalAlign.Center)
+
+      // 横向 Scroll 包一层：终端输出与 diff 经常是「很宽的一行 + 很多行」，
+      // 硬折行会把缩进层次全打乱（源工程 `softWrap = false` 的同一件事）。
+      Scroll() {
+        Text() {
+          ForEach(this.codeSegmentsOf(block.text, block.lang), (segment: CodeSegment, segmentIndex: number) => {
+            Span(segment.text)
+              .fontColor(this.tokenColor(segment.kind))
+          }, (segment: CodeSegment, segmentIndex: number) => `${segmentIndex}:${segment.kind}:${segment.text.length}`)
+        }
+        .fontSize(this.scaled(12))
+        .fontFamily('monospace')
+        // 兜底色：`Span` 只覆盖被认出来的区间，未着色的部分靠这一行定色。
+        .fontColor($r('sys.color.ohos_id_color_text_primary'))
+        .padding({ left: 10, right: 10, top: 2, bottom: 10 })
+        .copyOption(CopyOptions.LocalDevice)
+      }
+      .scrollable(ScrollDirection.Horizontal)
+      .width('100%')
+      .align(Alignment.TopStart)
+    }
+    .width('100%')
+    .borderRadius(6)
+    .backgroundColor($r('sys.color.ohos_id_color_sub_background'))
+    .alignItems(HorizontalAlign.Start)
   }
 
   @Builder
@@ -233,19 +404,7 @@ export struct MarkdownView {
       .width('100%')
       .padding({ top: 2, bottom: 2 })
     } else if (block.kind === MdBlockKind.CODE) {
-      // 横向 Scroll 包一层：终端输出与 diff 经常是「很宽的一行 + 很多行」，
-      // 硬折行会把缩进层次全打乱。
-      Scroll() {
-        Text(block.text)
-          .fontSize(this.scaled(12))
-          .fontFamily('monospace')
-          .padding(8)
-          .copyOption(CopyOptions.LocalDevice)
-      }
-      .scrollable(ScrollDirection.Horizontal)
-      .width('100%')
-      .borderRadius(6)
-      .backgroundColor($r('sys.color.ohos_id_color_sub_background'))
+      this.codeView(block)
     } else if (block.kind === MdBlockKind.TABLE) {
       if (block.table !== null) {
         this.tableView(block.table as MdTable)

@@ -35,7 +35,9 @@
 import { common } from '@kit.AbilityKit';
 import { AgentPreset, ChatSession, ChatWorkspace } from '../core/Models';
 import { HarnessState, HarnessViewModel } from '../core/HarnessViewModel';
+import { supportsArchiveListing } from '../core/BridgeCapabilities';
 import { harnessState, harnessVm } from './AppRuntime';
+import { ArchivedSessionRow } from './ArchivedSessionRow';
 import { ChatDetail } from './ChatDetail';
 import { SessionRow } from './SessionRow';
 import { SHEET_CREATE, SHEET_RENAME, SHEET_WORKSPACES, SessionSheetBodies } from './SessionSheets';
@@ -65,6 +67,15 @@ export struct ChatScreen {
   @State renameTargetId: string = '';
   @State renameDraft: string = '';
 
+  // ——— 归档视图 ———
+  /**
+   * 当前是否在看「已归档」列表。
+   *
+   * **切换时不做本地合并过滤**，而是切到另一份数据（`state.archivedSessions`）——
+   * 归档状态是服务端的事实，本地过滤只能过滤出「本机曾经拉过的那批」。
+   */
+  @State showArchived: boolean = false;
+
   /** vm 还没装配时的兜底状态，避免 getter 里到处判空。 */
   private fallback: HarnessState = new HarnessState();
 
@@ -89,6 +100,22 @@ export struct ChatScreen {
   /** 只有拿到 `chat.write` 的设备才显示「新建会话」「管理工作区」两个入口。 */
   private canWriteChat(): boolean {
     return this.scopes().includes('chat.write');
+  }
+
+  /**
+   * 服务端是否声明了「列出已归档会话」的能力位（`session-archive-list-v1`）。
+   *
+   * **能力位未知时一律不显示入口**（`supportsArchiveListing` 内部把 null 判成 false）。
+   * 这是安全方向：老 bridge 会忽略 `archived` 参数并返回未归档列表，展示入口只会
+   * 让用户看到一个「一条归档都没有」的**假结论** —— 他会以为自己在电脑上归档的东西丢了。
+   */
+  private canListArchived(): boolean {
+    return supportsArchiveListing(this.st().bridgeCapabilities);
+  }
+
+  /** 当前列表数据：归档视图读 `archivedSessions`，否则读 `sessions`。 */
+  private listOf(): ChatSession[] {
+    return this.showArchived ? this.st().archivedSessions : this.st().sessions;
   }
 
   private selectedId(): string | null {
@@ -212,6 +239,26 @@ export struct ChatScreen {
     }
   }
 
+  /**
+   * 切换「已归档 / 活动会话」视图。进入归档视图时**每次重拉**。
+   *
+   * 为什么不缓存：归档状态可能在电脑端被改过；缓存会让手机端长期显示过期结果，
+   * 而用户不会想到「要重启应用才会更新」。代价是每次进视图多一次请求 —— 值得。
+   *
+   * **刻意不清当前选中**：宽屏右栏里正开着的会话不该因为左栏换了个列表就被关掉 ——
+   * 切列表与关会话是两件事。归档会话被点开时 `ChatDetail.currentSession()` 会去
+   * `archivedSessions` 里找它（见该函数），标题因此不会退化成 id。
+   */
+  private toggleArchived(): void {
+    this.showArchived = !this.showArchived;
+    if (this.showArchived) {
+      const vm: HarnessViewModel | null = this.vm();
+      if (vm !== null) {
+        void vm.loadArchivedSessions();
+      }
+    }
+  }
+
   private fork(id: string): void {
     const vm: HarnessViewModel | null = this.vm();
     if (vm !== null) {
@@ -249,7 +296,7 @@ export struct ChatScreen {
   // ————————————————— 新建会话面板的数据 —————————————————
 
   private sessionCountText(): string {
-    return this.fmt1($r('app.string.session_count'), this.st().sessions.length);
+    return this.fmt1($r('app.string.session_count'), this.listOf().length);
   }
 
   // ————————————————— 视图 —————————————————
@@ -338,7 +385,24 @@ export struct ChatScreen {
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Start)
 
-        if (this.canWriteChat()) {
+        if (this.canListArchived()) {
+          // 「已归档 / 返回会话」切换。文案随当前视图变，而不是做成两个并列的 tab：
+          // 这是一个**返回动作**，不是两个平级视图（用户只在「我的东西去哪了」时才来这儿）。
+          Text(this.showArchived
+            ? $r('app.string.show_active_sessions')
+            : $r('app.string.show_archived_sessions'))
+            .fontSize(12)
+            .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+            .borderRadius(14)
+            .backgroundColor($r('sys.color.ohos_id_color_component_normal'))
+            .fontColor($r('sys.color.ohos_id_color_text_primary'))
+            .margin({ right: 4 })
+            .onClick((): void => {
+              this.toggleArchived();
+            })
+        }
+
+        if (this.canWriteChat() && !this.showArchived) {
           Text('📁')
             .fontSize(18)
             .padding(10)
@@ -369,11 +433,47 @@ export struct ChatScreen {
       .padding({ top: 16, bottom: 10 })
       .alignItems(VerticalAlign.Bottom)
 
-      if (this.st().sessions.length === 0) {
+      if (this.showArchived) {
+        if (this.listOf().length === 0) {
+          this.emptyState('🗂️', $r('app.string.archived_empty'))
+        } else {
+          List() {
+            ForEach(this.listOf(), (session: ChatSession) => {
+              ListItem() {
+                Column() {
+                  ArchivedSessionRow({
+                    session: session,
+                    title: this.displayTitleOf(session),
+                    selected: this.selectedId() === session.id,
+                    rowEnabled: !this.st().busy,
+                    onSelect: (id: string): void => {
+                      this.select(id);
+                    },
+                  })
+                  Divider()
+                    .strokeWidth(1)
+                    .color($r('sys.color.ohos_id_color_list_separator'))
+                }
+                .width('100%')
+              }
+            }, (session: ChatSession) => session.id)
+          }
+          .layoutWeight(1)
+          .width('100%')
+          .scrollBar(BarState.Off)
+        }
+        // 界面上**明说**不能恢复归档：能力位只覆盖「列出」，取消归档在插件侧还没有实现。
+        // 不写这一句的话，用户会一直找「恢复」按钮，最后只能当作是应用坏了。
+        Text($r('app.string.archived_sessions_hint'))
+          .fontSize(11)
+          .fontColor($r('sys.color.ohos_id_color_text_secondary'))
+          .width('100%')
+          .margin({ top: 8, bottom: 6 })
+      } else if (this.listOf().length === 0) {
         this.emptyState('💬', $r('app.string.no_sessions'))
       } else {
         List() {
-          ForEach(this.st().sessions, (session: ChatSession) => {
+          ForEach(this.listOf(), (session: ChatSession) => {
             ListItem() {
               Column() {
                 SessionRow({

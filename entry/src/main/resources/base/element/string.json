@@ -81,6 +81,10 @@
       "value": "DSH 伴侣"
     },
     {
+      "name": "appearance",
+      "value": "外观"
+    },
+    {
       "name": "approval_command_preview",
       "value": "脱敏命令预览"
     },
@@ -115,6 +119,14 @@
     {
       "name": "archive_session_warning",
       "value": "归档后会话会从列表里消失，历史仍保留在电脑上。"
+    },
+    {
+      "name": "archived_empty",
+      "value": "没有已归档的会话"
+    },
+    {
+      "name": "archived_sessions_hint",
+      "value": "已归档的会话仍可打开；本插件暂不支持恢复归档，需在电脑端 WebUI 调整。"
     },
     {
       "name": "attachment_file_too_large",
@@ -165,6 +177,10 @@
       "value": "授权根"
     },
     {
+      "name": "available_commands",
+      "value": "可用命令"
+    },
+    {
       "name": "awaiting_approval",
       "value": "等待审批"
     },
@@ -183,6 +199,14 @@
     {
       "name": "brand_subtitle",
       "value": "移动开发工作台"
+    },
+    {
+      "name": "bridge_outdated_warning",
+      "value": "这台电脑的插件版本较旧（%s），审批与问答卡片不会出现 —— 请在电脑端把 dsh-remote-bridge 升级到最新版，然后重新连接。"
+    },
+    {
+      "name": "build_stamp",
+      "value": "构建 %s"
     },
     {
       "name": "busy_send_mode",
@@ -239,6 +263,34 @@
     {
       "name": "collapse",
       "value": "收起"
+    },
+    {
+      "name": "command_compact_description",
+      "value": "压缩较早的会话历史"
+    },
+    {
+      "name": "command_export_description",
+      "value": "将当前会话日志下载为 ZIP 文件"
+    },
+    {
+      "name": "command_feedback_description",
+      "value": "记录当前会话的反馈"
+    },
+    {
+      "name": "command_goal_description",
+      "value": "设置或查看长期任务目标"
+    },
+    {
+      "name": "command_input_hint",
+      "value": "参数：%s"
+    },
+    {
+      "name": "command_permission_description",
+      "value": "切换权限预设（沙箱与审批策略）"
+    },
+    {
+      "name": "command_plan_description",
+      "value": "进入或退出计划模式"
     },
     {
       "name": "confirm",
@@ -465,8 +517,40 @@
       "value": "文件"
     },
     {
+      "name": "font_scale_desc",
+      "value": "应用字号 %s"
+    },
+    {
+      "name": "font_scale_follows_desc",
+      "value": "打开后忽略上面的倍数，只用系统设置里的字号。"
+    },
+    {
+      "name": "font_scale_follows_title",
+      "value": "完全跟随系统字号"
+    },
+    {
+      "name": "font_scale_footnote",
+      "value": "关掉「完全跟随系统字号」后，可单独放大或缩小本应用的字号（0.8 至 1.5 倍）。"
+    },
+    {
       "name": "fork",
       "value": "分支"
+    },
+    {
+      "name": "fork_confirm_action",
+      "value": "分叉"
+    },
+    {
+      "name": "fork_confirm_body",
+      "value": "会新建一个会话，保留到这条消息为止的内容；原会话不受影响。"
+    },
+    {
+      "name": "fork_confirm_title",
+      "value": "从这条消息分叉？"
+    },
+    {
+      "name": "fork_from_here",
+      "value": "从这条分叉"
     },
     {
       "name": "fork_session",
@@ -515,6 +599,14 @@
     {
       "name": "http_warning",
       "value": "HTTP 会明文传输设备令牌和内容，仅建议在可信网络、VPN 或隧道中使用。"
+    },
+    {
+      "name": "image_save_failed",
+      "value": "图片保存失败，换个位置再试"
+    },
+    {
+      "name": "image_saved",
+      "value": "已保存"
     },
     {
       "name": "import_and_connect",
@@ -1057,6 +1149,10 @@
       "value": "恢复"
     },
     {
+      "name": "retry",
+      "value": "重试"
+    },
+    {
       "name": "root_directory",
       "value": "授权根目录"
     },
@@ -1221,6 +1317,14 @@
       "value": "运行中"
     },
     {
+      "name": "session_stats_empty",
+      "value": "这个会话还没有可统计的事件"
+    },
+    {
+      "name": "session_stats_title",
+      "value": "会话统计"
+    },
+    {
       "name": "sessions",
       "value": "会话"
     },
@@ -1237,12 +1341,44 @@
       "value": "管理连接、模型供应商、设备权限和语言"
     },
     {
+      "name": "show_active_sessions",
+      "value": "返回会话"
+    },
+    {
+      "name": "show_archived_sessions",
+      "value": "已归档"
+    },
+    {
       "name": "show_context_desc",
       "value": "运行上下文、时间上下文、后台任务通知等系统每轮塞进来的块。默认不显示——它们会在每条消息之间插一排折叠块。排查问题时再打开。"
     },
     {
       "name": "show_context_title",
       "value": "显示上下文注入"
+    },
+    {
+      "name": "stats_assistant",
+      "value": "助手消息"
+    },
+    {
+      "name": "stats_events",
+      "value": "事件总数"
+    },
+    {
+      "name": "stats_last_seq",
+      "value": "数据截至事件 #%s"
+    },
+    {
+      "name": "stats_token_unknown",
+      "value": "Token 用量与上下文占用由内核提供，本插件读不到，所以这里不显示。"
+    },
+    {
+      "name": "stats_tools",
+      "value": "工具调用"
+    },
+    {
+      "name": "stats_turns",
+      "value": "轮次"
     },
     {
       "name": "steer",
@@ -1271,6 +1407,26 @@
     {
       "name": "test_connection",
       "value": "测试连接"
+    },
+    {
+      "name": "theme_dark",
+      "value": "深色"
+    },
+    {
+      "name": "theme_desc",
+      "value": "深色或浅色外观"
+    },
+    {
+      "name": "theme_light",
+      "value": "浅色"
+    },
+    {
+      "name": "theme_system",
+      "value": "跟随系统"
+    },
+    {
+      "name": "theme_title",
+      "value": "主题"
     },
     {
       "name": "think",
@@ -1319,6 +1475,14 @@
     {
       "name": "tool_detail_pending",
       "value": "运行中"
+    },
+    {
+      "name": "trajectory_empty",
+      "value": "这个会话还没有可回溯的历史"
+    },
+    {
+      "name": "trajectory_title",
+      "value": "轨迹"
     },
     {
       "name": "trash",
@@ -1373,54 +1537,6 @@
       "value": "工作目录"
     },
     {
-      "name": "workspace_root",
-      "value": "根目录"
-    },
-    {
-      "name": "workspace_select_preset",
-      "value": "选择智能体预设"
-    },
-    {
-      "name": "zoom_in",
-      "value": "放大文字"
-    },
-    {
-      "name": "zoom_out",
-      "value": "缩小文字"
-    },
-    {
-      "name": "available_commands",
-      "value": "可用命令"
-    },
-    {
-      "name": "command_compact_description",
-      "value": "压缩较早的会话历史"
-    },
-    {
-      "name": "command_export_description",
-      "value": "将当前会话日志下载为 ZIP 文件"
-    },
-    {
-      "name": "command_feedback_description",
-      "value": "记录当前会话的反馈"
-    },
-    {
-      "name": "command_goal_description",
-      "value": "设置或查看长期任务目标"
-    },
-    {
-      "name": "command_input_hint",
-      "value": "参数：%s"
-    },
-    {
-      "name": "command_permission_description",
-      "value": "切换权限预设（沙箱与审批策略）"
-    },
-    {
-      "name": "command_plan_description",
-      "value": "进入或退出计划模式"
-    },
-    {
       "name": "workspace_files",
       "value": "工作目录文件"
     },
@@ -1435,6 +1551,22 @@
     {
       "name": "workspace_files_unavailable",
       "value": "读不到这个会话的工作目录"
+    },
+    {
+      "name": "workspace_root",
+      "value": "根目录"
+    },
+    {
+      "name": "workspace_select_preset",
+      "value": "选择智能体预设"
+    },
+    {
+      "name": "zoom_in",
+      "value": "放大文字"
+    },
+    {
+      "name": "zoom_out",
+      "value": "缩小文字"
     }
   ]
 }

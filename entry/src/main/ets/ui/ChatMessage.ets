@@ -50,6 +50,9 @@ import { GenUiDebugLine, GenUiSegment, MessageAttachments, ToolCallDetailBlock,
   TurnFailureRow } from './MessageParts';
 import { MarkdownView } from './MarkdownView';
 import { writeClipboardText } from '../platform/Clipboard';
+import { systemLanguageTag } from '../platform/Platform';
+import { chatTimeLabel } from '../core/ChatTimeLabel';
+import { forkPointOf } from '../core/ChatFork';
 
 /** 助手正文的最大宽度（vp）：对位源工程的 `widthIn(max = 720.dp)`。 */
 const ASSISTANT_MAX_WIDTH_VP: number = 720;
@@ -116,13 +119,11 @@ struct AssistantBody {
           GenUiDebugLine({ diagnosis: this.diagnosis() as GenUiDiagnosis })
         }
       }
-      // 《人工智能生成合成内容标识办法》要求在生成内容上做**显式标识**：
-      // 助手正文一律带一行可见提示，供用户与审核一眼辨认（AGC 2026-10-16 驳回项「未提交
-      // 人工智能生成合成内容标识相关材料」的代码侧整改）。
-      Text($r('app.string.ai_generated_notice'))
-        .fontSize(11)
-        .fontColor($r('sys.color.ohos_id_color_text_secondary'))
-        .margin({ top: 6 })
+      // 《人工智能生成合成内容标识办法》要求的显式标识**已挪到状态条**
+      // （`ui/ChatStatusBar.ets`，跟思考条合并成同一条，见该文件头）。
+      // 原来每条助手正文下方各挂一行 —— 长会话里同一句提示重复几十遍，
+      // 用户根本不会读；改成会话级常驻一条之后，「可以被用户明显感知」这条反而更成立。
+      // 注意：标识**不是**从这个界面消失了，只是不再逐条重复。
     }
     .width('100%')
     .constraintSize({ maxWidth: ASSISTANT_MAX_WIDTH_VP })
@@ -325,6 +326,22 @@ export struct ChatMessageView {
   genUiDebug: boolean = false;
   onLoadImage: (id: string) => void = (): void => {};
   onAnswer: (text: string) => void = (): void => {};
+  /** 点消息里的图片 → 全屏查看（查看器与落点在 `ChatDetail`）。 */
+  onOpenImage: (bytes: Uint8Array, name: string) => void = (): void => {};
+  /**
+   * 「重试上一轮」：由 `ChatDetail` 转给 vm 的 `retryLastUserMessage()`。
+   *
+   * 函数成员**不能**加 `@Prop`（见 PORT-MAP 坑 24），保持普通成员 —— 它不随状态刷新。
+   */
+  onRetry: () => void = (): void => {};
+
+  /**
+   * 「从这条分叉」：由 `ChatDetail` 转给 vm 的 `forkSession(sessionId, atSeq)`。
+   *
+   * 与 `onRetry` 同理，函数成员**不能**加 `@Prop`（见 PORT-MAP 坑 24）—— 它不随状态刷新。
+   * 点击这里只上报**事件序号**；确认对话框由 `ChatDetail` 持有（同一时刻只可能有一个待确认的分叉）。
+   */
+  onFork: (atSeq: number) => void = (): void => {};
 
   /** 双击复制整条正文（见文件头平台差异 3：绝不能改成声明长按）。 */
   private copyBody(): void {
@@ -338,6 +355,64 @@ export struct ChatMessageView {
 
   private failure(): ChatTurnFailure {
     return this.item.failure as ChatTurnFailure;
+  }
+
+  /**
+   * 这条消息的分叉点；`null` = 不给入口（判据见 `core/ChatFork.ts`：只给**用户消息**且 `seq > 0`）。
+   *
+   * 「只给用户消息」不是省事：真实场景几乎总是「这次提问的走向不对，从这儿重来」，
+   * 每条消息都挂一个按钮会让消息流变得毛糙（源工程原话）。
+   */
+  private forkSeq(): number | null {
+    return forkPointOf(this.item);
+  }
+
+  /**
+   * 消息气泡下方的**元信息与次要动作**：时间戳，以及「从这条分叉」。
+   *
+   * 两条照抄源工程的判据：
+   * - `time === 0`（流式项还没落盘）不显示。这是本工程用 `0` 而不是 `null` 表示「没有时间」
+   *   的那条约定（见 `core/ChatPresentationTypes.ts` 里 `ChatDisplayItem.time` 的说明）。
+   * - 刻意**不设** `width('100%')`：Text 默认包裹内容，行高只包住文字本身。一旦拉成全宽，
+   *   这条 Text 的行高会跨出条目边界、压到下一条消息的气泡顶上 —— 源工程为此被用户连续
+   *   反馈五次，见 `ui/chat/ChatMessageFooter.kt` 的文件头判据 1。
+   *   同理这里的 Row 也**不设**全宽：左右对齐由父级 Column 的 `alignItems` 完成
+   *   （用户 End / 助手 Start），与源工程用 `Arrangement` 得到的结果一致。
+   *
+   * `Date.now()` 在渲染时现取：本函数刻意不用 `Intl`（见 `core/ChatTimeLabel.ts` 取舍 1），
+   * 一次 `Date` 构造加字符串拼接，开销可忽略。
+   */
+  @Builder
+  footerRow() {
+    Row() {
+      if (this.item.time > 0) {
+        Text(chatTimeLabel(this.item.time, Date.now(), systemLanguageTag()))
+          .fontSize(11)
+          .fontColor($r('sys.color.ohos_id_color_text_secondary'))
+          .padding({ left: 4, right: 4, top: 6, bottom: 8 })
+      }
+      if (this.forkSeq() !== null) {
+        Row() {
+          // 用 emoji 而不是 Unicode 的「⑂」：那种冷门符号在部分设备字体里没有字形，
+          // 会渲染成一个方框 —— 而这一行本来就短，一个方框就很打眼。
+          Text('🔀')
+            .fontSize(11)
+            .fontColor($r('sys.color.ohos_id_color_text_secondary'))
+          Text($r('app.string.fork_from_here'))
+            .fontSize(11)
+            .fontColor($r('sys.color.ohos_id_color_text_secondary'))
+            .margin({ left: 4 })
+        }
+        .padding({ left: 8, right: 8, top: 6, bottom: 8 })
+        .onClick((): void => {
+          const seq: number | null = this.forkSeq();
+          if (seq !== null) {
+            this.onFork(seq);
+          }
+        })
+      }
+    }
+    .alignItems(VerticalAlign.Center)
   }
 
   build() {
@@ -360,7 +435,9 @@ export struct ChatMessageView {
               images: this.images,
               failures: this.failures,
               onLoadImage: this.onLoadImage,
+              onOpenImage: this.onOpenImage,
             })
+            this.footerRow()
           }
           .width(USER_BUBBLE_WIDTH)
           .alignItems(HorizontalAlign.End)
@@ -368,15 +445,25 @@ export struct ChatMessageView {
         .width('100%')
         .justifyContent(FlexAlign.End)
       } else if (this.item.kind === ChatItemKind.ASSISTANT) {
-        AssistantBody({
-          body: this.item.body,
-          streaming: this.item.streaming,
-          genUiDebug: this.genUiDebug,
-          onAnswer: this.onAnswer,
-        })
+        // 时间戳与正文**同一列**（见源工程 `ChatMessageFooter.kt` 的文件头判据 1）：
+        // 挂在气泡外面会让这条 Text 的行高跨出 item 边界，压到下一条消息的气泡上。
+        Column() {
+          AssistantBody({
+            body: this.item.body,
+            streaming: this.item.streaming,
+            genUiDebug: this.genUiDebug,
+            onAnswer: this.onAnswer,
+          })
+          this.footerRow()
+        }
+        .width('100%')
+        .alignItems(HorizontalAlign.Start)
       } else if (this.item.kind === ChatItemKind.FAILURE) {
         if (this.item.failure !== null) {
-          TurnFailureRow({ failure: this.failure() })
+          TurnFailureRow({
+            failure: this.failure(),
+            onRetry: this.onRetry,
+          })
         }
       } else {
         ActivityRow({ item: this.item, onAnswer: this.onAnswer })

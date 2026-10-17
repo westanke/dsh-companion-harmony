@@ -46,9 +46,21 @@ export function liveThinkingText(blocks: LiveChatBlock[]): string {
  * 折叠用窄集、裁剪用宽集，两处不同是源工程本身就有的差异。
  */
 export function thinkBarText(raw: string, maxChars: number = 140): string {
-  const text: string = trimText(raw.replace(THINK_WHITESPACE, ' '));
+  const text: string = thinkBarFullText(raw);
   if (text.length <= maxChars) {
     return text;
   }
   return `…${text.substring(text.length - maxChars)}`;
+}
+
+/**
+ * 展开态用的**全文**：同样折空白、去首尾，但**不截断**。
+ *
+ * 与 `thinkBarText` 同一套折空白与裁剪口径（宽度必须一致，否则展开后的第一行会与
+ * 折叠态对不上，看起来像换了段文字）；差别只在「留不留尾巴」。
+ * 单列一个函数而不是传 `Number.MAX_SAFE_INTEGER`：那是「用参数上限冒充不截断」，
+ * 读代码的人得反推语义。
+ */
+export function thinkBarFullText(raw: string): string {
+  return trimText(raw.replace(THINK_WHITESPACE, ' '));
 }

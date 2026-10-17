@@ -46,17 +46,22 @@ source "${TOOLCHAIN_ENV}"
 
 cd "${PROJECT_DIR}"
 
-echo "==> [1/3] 构建 HAP（hvigorw assembleHap）"
+# 水印必须**先**写：`core/BuildStamp.ets` 是要被编译进包的普通源文件，
+# 构建完再改就来不及了（见那个文件的文件头）。非 git 环境会退化成空串，不算失败。
+echo "==> [1/4] 写入构建水印（scripts/build-stamp.sh）"
+"${PROJECT_DIR}/scripts/build-stamp.sh"
+
+echo "==> [2/4] 构建 HAP（hvigorw assembleHap）"
 hvigorw assembleHap --no-daemon
 
 if [[ "${RUN_TEST}" -eq 1 ]]; then
-  echo "==> [2/3] 离线单测（test/ 下纯逻辑层用例）"
+  echo "==> [3/4] 离线单测（test/ 下纯逻辑层用例）"
   ( cd "${PROJECT_DIR}/test" && npm test )
 else
-  echo "==> [2/3] 跳过单测（--no-test）"
+  echo "==> [3/4] 跳过单测（--no-test）"
 fi
 
-echo "==> [3/3] 归集产物到 dist/"
+echo "==> [4/4] 归集产物到 dist/"
 mkdir -p "${DIST_DIR}"
 shopt -s nullglob
 HAPS=("${OUT_DIR}"/*.hap)

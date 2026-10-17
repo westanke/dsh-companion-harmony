@@ -41,12 +41,15 @@ import { harnessState, harnessVm, requestFilesSection } from './AppRuntime';
 import { StatusLabel } from './Components';
 import { SessionFilesSheet } from './SessionFilesSheet';
 import { SessionConfigSheet } from './ModelSheet';
+import { SessionStatsSheet } from './SessionStatsSheet';
 
-/** 面板宿主的三态。定义在**被导入的一侧**（见文件头「状态与装饰器」最后一条）——
+/** 面板宿主的四态（会话文件 / 会话配置 / 完整访问确认 / 执行统计）。
+ * 定义在**被导入的一侧**（见文件头「状态与装饰器」最后一条）——
  * 父组件要用 `SHEET_FULL_ACCESS` 直接写 `sheetKind`，两边互相 import 会形成循环依赖。 */
 export const SHEET_FILES: number = 0;
 export const SHEET_CONFIG: number = 1;
 export const SHEET_FULL_ACCESS: number = 2;
+export const SHEET_STATS: number = 3;
 
 /** 聊天详情页头部 + 三个面板宿主（会话文件 / 会话配置 / 完整访问确认）。 */
 @Component
@@ -75,6 +78,14 @@ export struct ChatHeaderPanelHost {
   onDecide: (approval: PendingApproval, allowOnce: boolean) => void = (): void => {};
   /** 滚到会话尾部（原 `ChatDetail.scrollToBottom`）：插话提交成功后要用。 */
   onScrollToBottom: () => void = (): void => {};
+  /**
+   * 打开执行轨迹页（全屏）。
+   *
+   * 做成回调而不是让头部自己开：轨迹页是**全屏覆盖**，它的显隐状态必须住在
+   * `ChatDetail`（覆盖层挂在详情页的根节点上）。头部只是入口，不持有它的状态 ——
+   * 与图片查看器同一个理由（见 PORT-MAP 坑 34）。
+   */
+  onOpenTrajectory: () => void = (): void => {};
 
   /** 自订阅 vm 的 revision，理由同 `ChatDetail.st()`。 */
   @StorageLink('dshRevision') revision: number = 0;
@@ -283,6 +294,23 @@ export struct ChatHeaderPanelHost {
         this.steer();
       },
     });
+
+    // 下面两项是**只读的查看入口**（统计 / 轨迹），不改任何状态，所以一直可用。
+    // 放在菜单末尾：它们是排查用的次要动作，不该挤占模型与权限的位置。
+    out.push({
+      value: this.resText($r('app.string.session_stats_title')),
+      enabled: true,
+      action: (): void => {
+        this.openSheet(SHEET_STATS);
+      },
+    });
+    out.push({
+      value: this.resText($r('app.string.trajectory_title')),
+      enabled: true,
+      action: (): void => {
+        this.onOpenTrajectory();
+      },
+    });
     return out;
   }
 
@@ -444,7 +472,12 @@ export struct ChatHeaderPanelHost {
     // —— 源工程的 Compose `ModalBottomSheet` 默认就是**按内容自适应高度**，`FIT_CONTENT`
     // 才是对位写法；内容长了它同样会撑满并滚动。
     // 全访问二次确认面板是固定短内容（一个勾选框 + 两行文案），继续用固定高度 380。
-    return this.sheetKind === SHEET_FULL_ACCESS ? 380 : SheetSize.FIT_CONTENT;
+    // 统计面板（`SHEET_STATS`）内容比它还短（四行数字 + 两段说明），也给 380 ——
+    // `FIT_CONTENT` 下这块会在底部留出一段空白，看起来像"没加载完"。
+    if (this.sheetKind === SHEET_FULL_ACCESS || this.sheetKind === SHEET_STATS) {
+      return 380;
+    }
+    return SheetSize.FIT_CONTENT;
   }
 
   private openSessionFile(path: string): void {
@@ -510,6 +543,8 @@ export struct ChatHeaderPanelHost {
             }
           },
         })
+      } else if (this.sheetKind === SHEET_STATS) {
+        SessionStatsSheet({ history: this.st().history })
       } else {
         Column() {
           Text($r('app.string.permission_full_access_title'))

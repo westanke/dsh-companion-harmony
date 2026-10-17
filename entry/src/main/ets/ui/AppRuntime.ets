@@ -22,7 +22,7 @@
 
 import { common } from '@kit.AbilityKit';
 import { HarnessState, HarnessViewModel } from '../core/HarnessViewModel';
-import { createHarnessDeps } from '../platform/Platform';
+import { applyAppFontScale, applyAppThemeMode, createHarnessDeps } from '../platform/Platform';
 
 /** AppStorage 里放 revision 的键名。 */
 export const REVISION_KEY: string = 'dshRevision';
@@ -54,6 +54,19 @@ export function requestFilesSection(): void {
 let instance: HarnessViewModel | null = null;
 let unsubscribe: (() => void) | null = null;
 
+/** 装配时的 Ability 上下文；「字号倍数 / 主题档位」变更时要拿它下发到平台。 */
+let appContext: common.Context | null = null;
+
+/**
+ * 上一次已经下发给平台的外观三件套。
+ *
+ * 初值刻意**不可能等于任何真实取值**（`-1` / 空串 / 假），否则「首次装配」会被误判成
+ * 「没变化」而整体跳过下发 —— 那表现就是「设置了主题，重启后又回跟随系统」。
+ */
+let appliedFontScale: number = -1;
+let appliedFontFollowsSystem: boolean = false;
+let appliedThemeMode: string = '';
+
 /**
  * 装配并启动（幂等：重复调用直接返回已有实例）。
  *
@@ -64,16 +77,58 @@ export function initHarness(context: common.Context): void {
   if (instance !== null) {
     return;
   }
+  appContext = context;
   const vm: HarnessViewModel = new HarnessViewModel(createHarnessDeps(context));
   unsubscribe = vm.subscribe((): void => {
     AppStorage.setOrCreate(REVISION_KEY, vm.revision);
+    syncAppearance();
   });
   instance = vm;
   AppStorage.setOrCreate(REVISION_KEY, vm.revision);
+  // 冷启动时把「字号倍数 / 主题档位」落到平台上。**必须在 vm 建好之后**：
+  // 偏好是在 vm 构造里读进 state 的（`applyPreferences`），在那之前读 state 只会拿到默认值。
+  syncAppearance();
   // 注意：**不要**在这里再调 restoreConnection()。`HarnessViewModel` 的构造函数末尾
   // 已经 `void this.restoreConnection()`（对应 Kotlin 的 init 块），重复调用会读两遍盘、
   // 并且把「正在恢复」那一态闪两次。
 }
+
+/**
+ * 把「字号倍数 / 主题档位」推给平台（幂等：值没变就一个系统调用都不发）。
+ *
+ * ## 为什么挂在 `subscribe` 里而不是各设置项的点击回调里
+ *
+ * `setFontScale` 等 vm 方法只改状态与落盘，**不知道界面层存在**（core 不碰平台 API）。
+ * 挂在订阅回调上，任何一条改到这两个字段的路径都会自动生效 —— 点击设置项、切主题药丸、
+ * 甚至冷启动恢复偏好，都走同一处。反过来若写在点击回调里，将来多一条修改路径就会漏一处。
+ *
+ * ## 为什么要比对「上次已应用的三个值」
+ *
+ * `update()` 的语义是「有状态变了」，它**不告诉你是哪个字段**：一次流式增量、
+ * 一次工具输出刷新都会触发订阅。若不加这道闸，就会在每条 token 到达时都调一次
+ * `setFontSizeScale` / `setColorMode` —— 两个系统级调用，代价不小，且反复重设
+ * 极可能让界面持续重排（肉眼可见的抖动）。所以只在真正变化时下发。
+ */
+function syncAppearance(): void {
+  const vm: HarnessViewModel | null = instance;
+  const context: common.Context | null = appContext;
+  if (vm === null || context === null) {
+    return;
+  }
+  const state: HarnessState = vm.state;
+  if (state.fontScale === appliedFontScale
+    && state.fontFollowsSystem === appliedFontFollowsSystem
+    && state.themeMode === appliedThemeMode) {
+    return;
+  }
+  appliedFontScale = state.fontScale;
+  appliedFontFollowsSystem = state.fontFollowsSystem;
+  appliedThemeMode = state.themeMode;
+  // 字号：跟随系统时由平台层取当前系统档位（原因见 `applyAppFontScale` 的注释）。
+  applyAppFontScale(context, state.fontScale, state.fontFollowsSystem);
+  applyAppThemeMode(context, state.themeMode);
+}
+
 
 /** 当前实例；未装配时为 null（页面里不要假设它一定在）。 */
 export function harnessVm(): HarnessViewModel | null {
@@ -114,4 +169,5 @@ export function disposeHarness(): void {
   }
   vm.dispose();
   instance = null;
+  appContext = null;
 }

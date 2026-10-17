@@ -16,12 +16,14 @@
  * | `now` / `newId` / `languageTag` / `timers` | `Date.now` / UUID / 系统区域 / `setTimeout` |
  */
 
-import { common } from '@kit.AbilityKit';
+import { common, ConfigurationConstant } from '@kit.AbilityKit';
 import { util } from '@kit.ArkTS';
 import { i18n } from '@kit.LocalizationKit';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { CryptoBridge, HostStore, KeyValueStore, SecretBox } from '../core/HostStore';
 import { utf8Decode, utf8Encode } from '../core/Codec';
 import { AppPreferences, SETTINGS_PREFERENCES_NAME } from '../core/AppPreferences';
+import { THEME_MODE_DARK, THEME_MODE_LIGHT } from '../core/ThemeMode';
 import {
   CONNECTION_PREFERENCES_NAME, HOSTS_KEY_ALIAS, LEGACY_DEVICE_TOKEN_ALIAS,
 } from '../core/ConnectionStorage';
@@ -44,6 +46,10 @@ const SELF_CHECK_PREF_KEY: string = 'dsh-selfcheck-probe';
 const SELF_CHECK_PREFERENCES_NAME: string = 'dsh_selfcheck';
 /** 自检明文，用来验证 AES-GCM 往返。 */
 const SELF_CHECK_PLAIN: string = 'DSH 平台自检';
+
+/** 日志域与标签：与 `EntryAbility` 保持一致，便于一次 `hilog` 过滤看全一条链。 */
+const DOMAIN: number = 0x0000;
+const TAG: string = 'DSH';
 
 /**
  * 客户端的外部依赖（时区 / 语言 / id / WS / 定时器）。
@@ -206,3 +212,83 @@ export function systemTimeZoneId(): string {
   }
   return 'UTC';
 }
+
+/**
+ * 把「应用内字号倍数」真正交给平台。
+ *
+ * ## 为什么勾了「跟随系统」不是简单地把倍数设成 1.0
+ *
+ * `setFontSizeScale` 设的是**应用自己的**倍数，它会覆盖系统那一档。所以「跟随系统」的正确
+ * 实现是把这个值设成**当前系统那一档**（`context.config.fontSizeScale`），而不是 1.0 ——
+ * 设 1.0 等于把用户在系统设置里调大的字号**缩回去**，用户看到的是「这个 App 不认我的设置」。
+ *
+ * ## 失败一律吞掉，只写日志
+ *
+ * 字号缩放是**锦上添花**的能力：`setFontSizeScale` 是 API 13 起的接口，低版本设备上不存在。
+ * 在这里抛出去会随调用栈冒到 `initHarness` / 设置页的点击回调里，把整个界面一起带走 ——
+ * 一个可选的显示偏好，绝不能有能力让应用起不来。
+ */
+export function applyAppFontScale(context: common.Context, scale: number, followsSystem: boolean): void {
+  const target: number = followsSystem ? systemFontScale(context) : scale;
+  const application: common.ApplicationContext = context.getApplicationContext();
+  // 运行时探测：低版本设备上这个方法不存在（编译期有声明 ≠ 真机一定有，见 PORT-MAP 坑 28）。
+  // 探到之后必须走**方法调用**去调它 —— 不能写成 `probe.call(application, target)`：
+  // ArkTS 的 `arkts-no-func-apply-call` 禁止 `Function.apply` / `Function.call`，
+  // 那种写法会直接编译不过（`as object` 取出函数再调用还会丢掉 `this`）。
+  if (typeof (application as object)['setFontSizeScale'] !== 'function') {
+    return;
+  }
+  try {
+    application.setFontSizeScale(target);
+  } catch (e) {
+    hilog.warn(DOMAIN, TAG, 'setFontSizeScale failed: %{public}s', JSON.stringify(e));
+  }
+}
+
+/**
+ * 当前系统字号档位；读不到时回落 1.0。
+ *
+ * `Configuration.fontSizeScale` 在 API 12 起才存在（本工程 compatibleSdkVersion 是 18，
+ * 但真机上仍可能读到 `undefined` —— 该字段在 SDK 里本来就叫 `fontSizeScale?: number`），
+ * 所以要显式判空，不能直接当数字用。
+ *
+ * ## 为什么要收窄到 `UIAbilityContext`
+ *
+ * `config` 只声明在 `UIAbilityContext` 上，基类 `common.Context` **没有**这个属性 ——
+ * 不收窄写成 `context.config.fontSizeScale` 会编译不过（`Property 'config' does not exist
+ * on type 'Context'`）。收窄是安全的：装配时传进来的本来就是页面宿主上下文，
+ * 见 `ui/AppRuntime.ets` 的 `initHarness` 说明与 `appContext` 的类型。
+ */
+function systemFontScale(context: common.Context): number {
+  const uiContext: common.UIAbilityContext = context as common.UIAbilityContext;
+  const raw: number | undefined = uiContext.config.fontSizeScale;
+  if (raw === undefined || !(raw > 0)) {
+    return 1.0;
+  }
+  return raw;
+}
+
+/**
+ * 把「主题档位」交给平台：跟随系统 / 强制浅色 / 强制深色。
+ *
+ * `COLOR_MODE_NOT_SET` 对位「跟随系统」—— 与 `EntryAbility` 启动时写的是同一个值，
+ * 两处口径必须一致（那里是「不锁定、跟系统走」，这里只是同一条链上的后一次写入）。
+ *
+ * 取值**在三处都做了归一化**（`ThemeMode` / 偏好 / 这里）：一个认不出的档位若原样传给
+ * `setColorMode`，平台会抛参数错误，而它抛在点击回调里 —— 表现为「点一下就闪退」。
+ */
+export function applyAppThemeMode(context: common.Context, mode: string): void {
+  const application: common.ApplicationContext = context.getApplicationContext();
+  let colorMode: ConfigurationConstant.ColorMode = ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET;
+  if (mode === THEME_MODE_LIGHT) {
+    colorMode = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT;
+  } else if (mode === THEME_MODE_DARK) {
+    colorMode = ConfigurationConstant.ColorMode.COLOR_MODE_DARK;
+  }
+  try {
+    application.setColorMode(colorMode);
+  } catch (e) {
+    hilog.warn(DOMAIN, TAG, 'setColorMode failed: %{public}s', JSON.stringify(e));
+  }
+}
+

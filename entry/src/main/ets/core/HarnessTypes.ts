@@ -43,6 +43,12 @@ import {
 import {
   SEND_MODE_QUEUE,
 } from './ComposerSendPolicy';
+import {
+  FONT_SCALE_DEFAULT,
+} from './FontScale';
+import {
+  THEME_MODE_SYSTEM,
+} from './ThemeMode';
 
 /** 文本编辑的内存闸：与 Kotlin `MAX_EDIT_BYTES` 一致（2 MiB）。 */
 export const MAX_EDIT_BYTES: number = 2 * 1024 * 1024;
@@ -244,8 +250,40 @@ export class HarnessState {
   /** 界面上被选中查看/编辑的电脑（不一定是当前连上的那台）。 */
   selectedHostId: string | null = null;
   device: DeviceView | null = null;
+  /** 服务端在 `connection.ready` 自报的插件版本（仅诊断展示，不作功能判据）；null = 还没读到。 */
+  bridgeVersion: string | null = null;
+  /**
+   * 服务端自报的能力位；**null = 未知**（旧服务端不报、或清单为空）。
+   *
+   * 未知与「空清单」刻意分开：把未知当成「什么都缺」会弹出假警告，
+   * 而假警告比没有警告更坏（详见 `core/BridgeCapabilities.ts`）。
+   */
+  bridgeCapabilities: Set<string> | null = null;
+  /**
+   * 事件流里**已经并进来的最大序号**；null = 还没有起点。
+   *
+   * 用途只有一个：发现「历史与事件流之间有洞」时触发一次 resync（见
+   * `core/ChatSeqMonitor.ts`）。它不参与任何渲染判据 —— 所以既不必进 `copyFrom`，
+   * 也不必被快照重建覆盖（重建时会被清零，而清零等于「重新找一个起点」，语义正确）。
+   */
+  lastEventSeq: number | null = null;
+  /**
+   * 订阅时服务端给的**游标**（`chat.session.snapshot.cursor`）；null = 服务端没给。
+   *
+   * 它是「REST 拉历史」与「WS 订阅」之间那个时间洞的参照点：本地历史落后于它，
+   * 就说明中间那段谁都没管，必须重取一次。
+   */
+  baselineCursor: number | null = null;
   roots: RootView[] = [];
   sessions: ChatSession[] = [];
+  /**
+   * **已归档**会话（对位源工程 `HarnessState.archivedSessions`）。
+   *
+   * 与 `sessions` 分开存、不在本地合并过滤：归档视图是**独立入口**（不是过滤器），
+   * 而且这个列表只在服务端声明了 `session-archive-list-v1` 能力位时才会被填充 ——
+   * 老 bridge 会忽略 `archived` 参数返回未归档列表，合并展示会得到「一条归档都没有」的假结论。
+   */
+  archivedSessions: ChatSession[] = [];
   chatWorkspaces: ChatWorkspace[] = [];
   agentPresets: AgentPreset[] = [];
   workspacePickerRootId: string | null = null;
@@ -300,6 +338,18 @@ export class HarnessState {
   /** 是否显示上下文注入块。 */
   showContext: boolean = false;
   /**
+   * 应用内字号倍数（0.8–1.5，步进 0.1）。
+   *
+   * 与 `composerText`（输入框原文）**刻意分开**：这一个不是输入框，而是滑块 ——
+   * 滑块的拖动过程中每一帧都会被写成新值，若与输入框共用字段，
+   * 拖动一次就会把用户没发出去的草稿洗掉。
+   */
+  fontScale: number = FONT_SCALE_DEFAULT;
+  /** 字号是否跟随系统（true 时应用这层不做任何缩放）。默认 true，见 `AppPreferences`。 */
+  fontFollowsSystem: boolean = true;
+  /** 主题档位：`system` / `light` / `dark`，默认跟随系统。 */
+  themeMode: string = THEME_MODE_SYSTEM;
+  /**
    * 发送中的输入框原文；发送成功后清空，失败时保留以便还回输入框。
    *
    * 为什么需要它：输入框是本地 UI 状态，发请求在异步里，两者对不上时
@@ -334,8 +384,11 @@ export class HarnessState {
     this.connecting = other.connecting;
     this.selectedHostId = other.selectedHostId;
     this.device = other.device;
+    this.bridgeVersion = other.bridgeVersion;
+    this.bridgeCapabilities = other.bridgeCapabilities;
     this.roots = other.roots;
     this.sessions = other.sessions;
+    this.archivedSessions = other.archivedSessions;
     this.chatWorkspaces = other.chatWorkspaces;
     this.agentPresets = other.agentPresets;
     this.workspacePickerRootId = other.workspacePickerRootId;
@@ -367,6 +420,9 @@ export class HarnessState {
     this.genUiDebug = other.genUiDebug;
     this.useWebChat = other.useWebChat;
     this.showContext = other.showContext;
+    this.fontScale = other.fontScale;
+    this.fontFollowsSystem = other.fontFollowsSystem;
+    this.themeMode = other.themeMode;
     this.pendingText = other.pendingText;
     this.attachmentImages = other.attachmentImages;
     this.attachmentFailures = other.attachmentFailures;

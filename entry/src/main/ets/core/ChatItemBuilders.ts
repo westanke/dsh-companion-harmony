@@ -97,7 +97,7 @@ export function turnEndItem(event: SessionEvent): ChatDisplayItem | null {
     return null;
   }
   return new ChatDisplayItem(`${event.seq}-turn-failure`, event.seq, ChatItemKind.FAILURE,
-    null, '', false, [], [], [], failure);
+    null, '', false, [], [], [], failure, event.time);
 }
 
 export function userItems(event: SessionEvent): ChatDisplayItem[] {
@@ -153,10 +153,10 @@ export function userItems(event: SessionEvent): ChatDisplayItem[] {
       return [];
     }
     return [new ChatDisplayItem(`${event.seq}-user`, event.seq, ChatItemKind.USER,
-      null, body, false, attachments)];
+      null, body, false, attachments, [], [], null, event.time)];
   }
   return [new ChatDisplayItem(`${event.seq}-context`, event.seq, ChatItemKind.CONTEXT,
-    contextLabel(source), body, false, attachments)];
+    contextLabel(source), body, false, attachments, [], [], null, event.time)];
 }
 
 /**
@@ -281,7 +281,7 @@ export function assistantItems(event: SessionEvent): ChatDisplayItem[] {
     const text: string = contentText(content);
     if (isNotBlank(text)) {
       return [new ChatDisplayItem(`${event.seq}-assistant`, event.seq, ChatItemKind.ASSISTANT,
-        null, text)];
+        null, text, false, [], [], [], null, event.time)];
     }
     return [];
   }
@@ -305,19 +305,19 @@ export function assistantItems(event: SessionEvent): ChatDisplayItem[] {
     } else if (type === 'reasoning') {
       if (prose.length > 0) {
         result.push(new ChatDisplayItem(`${event.seq}-assistant-${result.length}`, event.seq,
-          ChatItemKind.ASSISTANT, null, prose.join('\n\n')));
+          ChatItemKind.ASSISTANT, null, prose.join('\n\n'), false, [], [], [], null, event.time));
         prose.length = 0;
       }
       const reasoning: string | null = ChatJson.str(value, 'text');
       if (reasoning !== null && isNotBlank(reasoning)) {
         result.push(new ChatDisplayItem(`${event.seq}-reasoning-${result.length}`, event.seq,
-          ChatItemKind.REASONING, null, reasoning));
+          ChatItemKind.REASONING, null, reasoning, false, [], [], [], null, event.time));
       }
     }
   }
   if (prose.length > 0) {
     result.push(new ChatDisplayItem(`${event.seq}-assistant-${result.length}`, event.seq,
-      ChatItemKind.ASSISTANT, null, prose.join('\n\n')));
+      ChatItemKind.ASSISTANT, null, prose.join('\n\n'), false, [], [], [], null, event.time));
   }
   return result;
 }

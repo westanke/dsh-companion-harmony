@@ -26,6 +26,9 @@ import {
   SessionModels,
 } from './Models';
 import {
+  supportsArchiveListing,
+} from './BridgeCapabilities';
+import {
   DshClient,
 } from './DshClient';
 import {
@@ -60,12 +63,20 @@ export class HarnessViewModelSessions extends HarnessViewModelFiles {
   // ————————————————— 会话 —————————————————
 
   async selectSession(id: string | null): Promise<void> {
+    // 换会话 = 换上下文：在飞的历史 / 模型 / 命令请求的结果从此作废。
+    // 不作废的话，用户从 A 切到 B 时会看到 A 的历史（A 的响应后到、把 B 的覆盖了）——
+    // 标题写着 B、内容却是 A，比「转圈久一点」坏得多。
+    this.requestGate.invalidate();
     this.update((s: HarnessState): void => {
       s.selectedSessionId = id;
       s.history = null;
       s.liveChat = null;
       s.sessionModels = null;
       s.commands = [];
+      // 序号序列是**每个会话各自**的，换会话必须把起点清零：
+      // 拿 A 的序号去比 B 的事件必然误判（见 `core/ChatSeqMonitor.ts`）。
+      s.lastEventSeq = null;
+      s.baselineCursor = null;
       s.approvalState = id === null ? ApprovalUiState.none() : ApprovalUiState.loading();
       // 换会话就把问答状态清干净：上一组的草稿/已答标记留在界面上会张冠李戴。
       s.questions = [];
@@ -431,9 +442,15 @@ export class HarnessViewModelSessions extends HarnessViewModelFiles {
     });
   }
 
-  async forkSession(sessionId: string): Promise<void> {
+  /**
+   * 分叉会话。`atSeq` 非 null 时 = **从那条消息**分叉（消息级分叉入口把它传进来）。
+   *
+   * 为什么默认参数是 null 而不是 0：`null` 才是「整体分叉」，而 `0` 是内核不认识的
+   * 事件序号（传过去只会换回一个报错弹窗）。判据见 `core/ChatFork.ts`。
+   */
+  async forkSession(sessionId: string, atSeq: number | null = null): Promise<void> {
     await this.withClient(async (api: DshClient): Promise<void> => {
-      const forkedId: string = await api.forkSession(sessionId);
+      const forkedId: string = await api.forkSession(sessionId, atSeq);
       const sessions: ChatSession[] = await api.sessions();
       const history: ChatHistory = await api.history(forkedId);
       const models: SessionModels = await api.sessionModels(forkedId);
@@ -446,6 +463,27 @@ export class HarnessViewModelSessions extends HarnessViewModelFiles {
         s.commands = commands;
         s.approvalState = ApprovalUiState.none();
         s.liveChat = null;
+      });
+    });
+  }
+
+  /**
+   * 拉取**已归档**会话（归档视图的入口动作）。对位源工程 `loadArchivedSessions`。
+   *
+   * 两道闸：
+   * ① **能力位不支持就直接返回** —— 老 bridge 会忽略 `archived` 参数并返回未归档列表，
+   *    那样展示出来的「没有归档会话」是**假结论**（比不显示入口更坏）；
+   * ② **每次进视图都重拉、不做本地缓存** —— 归档状态可能在电脑端被改过，
+   *    缓存会让手机端长期显示过期结果。
+   */
+  async loadArchivedSessions(): Promise<void> {
+    if (!supportsArchiveListing(this.state.bridgeCapabilities)) {
+      return;
+    }
+    await this.withClient(async (api: DshClient): Promise<void> => {
+      const archived: ChatSession[] = await api.sessions(true);
+      this.update((s: HarnessState): void => {
+        s.archivedSessions = archived;
       });
     });
   }

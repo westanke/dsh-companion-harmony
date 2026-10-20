@@ -201,6 +201,9 @@ def main():
                     print("    ↑ 已上传：%s（%d 字节）%s"
                           % (shown, len(blob),
                              "" if shown == asset_name else "（Gitee 原名：%s）" % asset_name))
+                    # 记进已有集合：Gitee 同一 Release 里可能存在**同名重复资产**
+                    # （手工删旧传新会留下两份），不记的话第二份会再传一次 → 422 already_exists。
+                    existing[target_name] = {"name": target_name, "id": 0}
             except Exception as e:  # 单个失败不拖垮其余
                 failures += 1
                 print("::error::%s 同步失败：%r" % (tag, e))

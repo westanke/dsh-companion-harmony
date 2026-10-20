@@ -2355,7 +2355,7 @@ entry/build/default/cache/default/default@CompileArkTS/esmodule/release/entry/sr
 
 | 源提交 | 标题 | 处置 |
 | --- | --- | --- |
-| `a96f5e7` | 工具调用专用块 + 权限档位 Pill | 数据层已移植（`core/ToolBlocks.ts`）；界面接入与权限档位随后 |
+| `a96f5e7` | 工具调用专用块 + 权限档位 Pill | 数据层 + **界面接入已完成**（`core/ToolBlocks.ts` + `ui/ToolBlockBody.ets`）；权限档位 Pill 随后 |
 | `a344e3f` | 会话页九条交互整改 + 权限档位打通 + 文件链接可打开 | 文件链接部分已移植（`core/PathLinks.ts` + `ChatLinkTarget.classify` 剥壳）；其余随后 |
 | `9863579` | 存量改动（错误文案 / 截断提示 / 连接导入面板 / 偏好 / 设置页 / 诊断基建） | 随后（用户可见项优先） |
 | `e609b04` | 后台任务面板（会话 ⋯ 菜单 →「后台任务」） | 随后 |
@@ -2367,6 +2367,7 @@ entry/build/default/cache/default/default@CompileArkTS/esmodule/release/entry/sr
 1. `core/ToolBlocks.ts`（新）+ `test/cases/tool-blocks.test.ts` 19 例 —— 工具调用专用块投影。
 2. `core/PathLinks.ts`（新）+ `test/cases/path-links.test.ts` 11 例 —— 正文已知文件名链接化。
 3. `core/ChatLinkTarget.ts` 补 Markdown autolink 尖括号剥壳 + `chat-link-target.test.ts` 补 4 例。
+4. `ui/ToolBlockBody.ets`（新）+ `ui/MessageParts.ets` 分派 —— 专用块的**界面接入**（见坑 44、坑 45）。
 
 **坑 42：ArkTS 没有判别联合类型 ——「四种长相」只能用单类 + `kind` 字段承载**
 
@@ -2386,3 +2387,43 @@ ArkTS 严格模式下既没有 sealed 也没有收窄，于是 `ToolBlocks.ts` �
 > 判据：两类工程**依赖面不同**（源用第三方 Markdown 库 + WebView，本工程自研），
 > 第三方库的坑在本工程**可能根本不存在**。凡是「绕第三方库缺陷」的补丁，先在本工程实测复现，
 > 复现不了就不移植 —— 否则会把一份无用的复杂度背进来。
+
+**坑 44：ArkUI 的 `build()` / `@Builder` 方法体里不允许声明局部变量（实测编译失败）**
+
+想照搬「先算一次、多处复用」的常规写法时踩的：在 `ToolCallDetailBlock.build()` 顶部写
+
+```typescript
+build() {
+  const view: ToolBlockView = toolBlockView(this.tool);   // ← 这里
+  Column() {
+```
+
+`hvigorw assembleHap` 直接 `CompileArkTS` 失败：
+
+```
+Unexpected token (Note that you need plugins to import files that are not JavaScript)
+ERROR: In an '@Entry' decorated component, the 'build' method can have only one root node,
+which must be a container component.
+```
+
+**报错信息误导**：它说「@Entry 组件只能有一个根节点」，但当时的组件根本不是 `@Entry`，
+根节点也只有一个 —— 真正的原因是 `build()` 方法体**只接受 UI 描述**，任何前置语句都被当成语法错误。
+放在 `@Builder` 方法体里同样不行。
+
+三条出路，按推荐度：
+
+1. **抽成子组件 + `@Prop`**（本轮采用）：父组件在**构造参数**里投影一次
+   （`ToolBlockBody({ view: toolBlockView(this.tool), failed: this.tool.failed })`），
+   子组件成员里便有一份现成的值 —— 构造参数位置是允许表达式的，方法调用、三元都行。
+2. **把计算放进 `private` 方法**，在 UI 描述里按需调用（`this.viewKind()`），
+   代价是同一处会重复解析（本项目 arguments 只有几十字节，可接受）。
+3. 塞进普通成员 —— **不行**（只在构造时赋一次，父组件重绘不回写，见坑 40）。
+
+**坑 45：`@Builder` 的参数从哪来，决定了能不能用**
+
+同一次尝试里还想让 `@Builder` 收一个 `ToolBlockView` 参数（`this.readBlock(view)`）。
+与坑 44 叠加后，唯一稳定的传值位置就是**组件构造参数**；把值从「局部变量」搬到「组件成员」后，
+所有 `@Builder` 改成无参、内部直接读 `this.view.xxx`，问题一并消失。
+代价是 `ui/MessageParts.ets` 里那个非导出的 `ToolTextBlock` 必须改成 `export` 才能被新组件复用
+（跨文件复用下位组件时，循环 import 在本工程实测可用：`ToolBlockBody.ets` 与
+`MessageParts.ets` 互相 import，`hvigorw` 编译无报错）。

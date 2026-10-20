@@ -32,6 +32,8 @@ import {
   ToolCallDetail,
 } from '../core/ChatPresentation';
 import { GenUiDiagnosis, diagnoseGenUi, GenUiSpec, parseGenUi } from '../core/GenUiBlocks';
+import { ToolBlockKind, toolBlockView } from '../core/ToolBlocks';
+import { ToolBlockBody } from './ToolBlockBody';
 import { localizedErrorText } from '../core/ErrorMessages';
 import { GenUiCard } from './GenUiCard';
 import { MarkdownView } from './MarkdownView';
@@ -363,7 +365,7 @@ export struct TurnFailureRow {
  * 硬折行，缩进层次就全乱了。ArkUI 的一个 `Scroll` 只支持单方向，所以纵向套横向。
  */
 @Component
-struct ToolTextBlock {
+export struct ToolTextBlock {
   label: ResourceStr = '';
   text: string = '';
   isError: boolean = false;
@@ -464,6 +466,29 @@ export struct ToolCallDetailBlock {
     return duration === null ? '' : formatToolDuration(duration);
   }
 
+  /** 形态判别（每次现算 —— ArkUI 的 build/@Builder 里不允许声明局部变量）。 */
+  private viewKind(): ToolBlockKind {
+    return toolBlockView(this.tool).kind;
+  }
+
+  /** 原有长相：格式化后的输入 + 结果。Generic 与「read 失败」两种情况共用。 */
+  @Builder
+  genericBody() {
+    if (this.argumentsText().length === 0) {
+      Text($r('app.string.tool_detail_no_args'))
+        .fontSize(11)
+        .fontColor($r('sys.color.ohos_id_color_text_secondary'))
+    } else {
+      ToolTextBlock({
+        label: $r('app.string.tool_detail_input'),
+        text: this.argumentsText(),
+        isError: false,
+        maxHeightVp: 160,
+      })
+    }
+    this.resultBlock()
+  }
+
   @Builder
   resultBlock() {
     if (this.tool.result === null) {
@@ -515,20 +540,18 @@ export struct ToolCallDetailBlock {
       .width('100%')
       .alignItems(VerticalAlign.Center)
 
-      if (this.argumentsText().length === 0) {
-        Text($r('app.string.tool_detail_no_args'))
-          .fontSize(11)
-          .fontColor($r('sys.color.ohos_id_color_text_secondary'))
+      if (this.viewKind() === ToolBlockKind.Generic
+        || (this.viewKind() === ToolBlockKind.Read && this.tool.failed)) {
+        this.genericBody()
       } else {
-        ToolTextBlock({
-          label: $r('app.string.tool_detail_input'),
-          text: this.argumentsText(),
-          isError: false,
-          maxHeightVp: 160,
-        })
+        // 投影一次、按值传给子组件（子组件用 @Prop 接，见 ToolBlockBody）。
+        ToolBlockBody({ view: toolBlockView(this.tool), failed: this.tool.failed })
+        // Terminal 自己已经把输出显示出来了（失败时红底）；Read/Diff 只显示正文/改动，
+        // 工具失败时的**错误原文**必须补出来，不能只剩一个「改动」块。
+        if (this.viewKind() === ToolBlockKind.Diff && this.tool.failed) {
+          this.resultBlock()
+        }
       }
-
-      this.resultBlock()
     }
     .width('100%')
     .margin({ top: 6 })

@@ -1433,6 +1433,14 @@
       "value": "思考"
     },
     {
+      "name": "tool_block_diff",
+      "value": "改动"
+    },
+    {
+      "name": "tool_block_file",
+      "value": "文件"
+    },
+    {
       "name": "tool_call",
       "value": "工具调用"
     },

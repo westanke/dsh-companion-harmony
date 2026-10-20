@@ -1317,6 +1317,14 @@
       "value": "Think"
     },
     {
+      "name": "tool_block_diff",
+      "value": "Changes"
+    },
+    {
+      "name": "tool_block_file",
+      "value": "File"
+    },
+    {
       "name": "tool_call",
       "value": "Tool call"
     },

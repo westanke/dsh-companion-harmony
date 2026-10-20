@@ -87,13 +87,48 @@ export struct ChatStatusBar {
     .justifyContent(FlexAlign.Center)
   }
 
-  /** 思考条：转圈 + 一行摘要，点一下展开全文。 */
+  /**
+   * 思考条：转圈 + 一行摘要，点标题行展开 / 收起全文。
+   *
+   * **标题行常驻，不随展开态消失**（真机反馈：拉开之后找不到收回的按钮）。
+   * 折叠时把整行换成全文，就只剩「再点一下会收起」这个看不见的约定 ——
+   * 界面上没有任何东西提示这里能点。所以照源工程 `ChatThinkBar` 的写法：
+   * 标题行（转圈 + 尾部摘要 + 方向箭头）一直在，全文接在它下面，
+   * 箭头 `⌄` / `⌃` 明确告诉用户「现在能往哪边点」。
+   *
+   * `onClick` 只挂在**标题行**上，不挂整列：否则用户在全文里拖动滚动会被当成点击，
+   * 手一滑就把刚展开的思考收回去。源工程同样只给 `Row` 加 `clickable`。
+   */
   @Builder
   thinkBar() {
     Column() {
       Divider()
         .strokeWidth(1)
         .color($r('sys.color.ohos_id_color_list_separator'))
+      Row() {
+        LoadingProgress()
+          .width(13)
+          .height(13)
+          .color($r('sys.color.ohos_id_color_text_secondary'))
+        Text(this.collapsedText())
+          .fontSize(12)
+          .fontColor($r('sys.color.ohos_id_color_text_secondary'))
+          .layoutWeight(1)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .margin({ left: 7 })
+        // 方向箭头 = 可折叠的可见凭据。折叠态朝下（还能往下展开），展开态朝上（能收回）。
+        Text(this.expanded ? '⌃' : '⌄')
+          .fontSize(14)
+          .fontColor($r('sys.color.ohos_id_color_text_secondary'))
+          .margin({ left: 7 })
+      }
+      .width('100%')
+      .padding({ left: 14, right: 14, top: 6, bottom: 6 })
+      .alignItems(VerticalAlign.Center)
+      .onClick((): void => {
+        this.expanded = !this.expanded;
+      })
       if (this.expanded) {
         Scroll() {
           Text(this.expandedText())
@@ -106,31 +141,11 @@ export struct ChatStatusBar {
         .constraintSize({ maxHeight: EXPANDED_MAX_HEIGHT_VP })
         .padding({ left: 14, right: 14, top: 6, bottom: 6 })
         .scrollBar(BarState.Off)
-      } else {
-        Row() {
-          LoadingProgress()
-            .width(13)
-            .height(13)
-            .color($r('sys.color.ohos_id_color_text_secondary'))
-          Text(this.collapsedText())
-            .fontSize(12)
-            .fontColor($r('sys.color.ohos_id_color_text_secondary'))
-            .layoutWeight(1)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .margin({ left: 7 })
-        }
-        .width('100%')
-        .padding({ left: 14, right: 14, top: 6, bottom: 6 })
-        .alignItems(VerticalAlign.Center)
       }
     }
     .width('100%')
     .backgroundColor($r('sys.color.ohos_id_color_sub_background'))
     .alignItems(HorizontalAlign.Start)
-    .onClick((): void => {
-      this.expanded = !this.expanded;
-    })
   }
 
   build() {

@@ -44,7 +44,7 @@
 - **兼容**：HarmonyOS 6.0 及以上（`compatibleSdkVersion` = 5.1.0(18)）
 - **设备类型**：phone / tablet / 2in1
 - **插件基线**：`dsh-remote-bridge` **≥ 2.0.4**（旧名 `dsh-workspace`）
-- **最近验证**：`786 用例全绿`（`cd test && npm test`，49 个用例文件）+ `BUILD SUCCESSFUL`
+- **最近验证**：`787 用例全绿`（`cd test && npm test`，49 个用例文件）+ `BUILD SUCCESSFUL`
   （首跑 4 条红已全部修掉，其中 1 条是门禁抓出的真缺陷，详见文末）
 - **真机**：ICL-AL10（HarmonyOS 7.0.0.109）已装 **1.0.3 调试签名包**（同调试签名
   **覆盖安装**，`wangke-PC` 配对数据**保住**——局域网 / 虚拟网两地址俱在）。
@@ -158,8 +158,10 @@
   坑 52）；②同一面板下方大留白（`FIT_CONTENT` 里写 `height('72%')`，百分比按整屏算，
   改 `constraintSize` 上限，坑 53）；③连接页失败时一片「连接」（`state.error` 只在
   `AppShell` 报，而未连接时 `AppShell` 根本没挂载；抽出 `ui/ErrorText.ets` 供两处共用，
-  并给主机按钮加「重试连接」第三档，坑 54）。`BUILD SUCCESSFUL` + **786 用例全绿**
-  （新增 `cases/ui-wiring-guard.test.ts` 三条源码形状门禁）。**这三项尚未上机复验**。
+  并给主机按钮加「重试连接」第三档，坑 54）；④思考条展开后没有收回入口（展开态把整行标题
+  换成了正文，可见凭据一起消失；改为标题行常驻 + `⌄`/`⌃` 箭头 + 全文接在下面，
+  `onClick` 收到标题行上，坑 55）。`BUILD SUCCESSFUL` + **787 用例全绿**
+  （新增 `cases/ui-wiring-guard.test.ts` 四条源码形状门禁）。**这四项尚未上机复验**。
 - **本轮改动（1.0.3）**：①**追平 Android v2.2.42 的 39 条新能力**（第 1 / 2 / 3 / 4 批 +
   主题三档，代码全部落盘，见文末「2026-10-17 移植补齐」）；
   ②**真机逐项验证**并**修复**设置页说明文字不随字号档更新（`SwitchRow.title/description`

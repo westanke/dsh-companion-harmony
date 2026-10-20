@@ -125,6 +125,42 @@ test('FIT_CONTENT 面板内不许用百分比高度', () => {
   );
 });
 
+// ---------------------------------------------------------------- 展开态必须留收回入口
+
+/**
+ * 思考条原先把「折叠标题行」整行换成了展开正文 —— 展开之后界面上再没有任何东西
+ * 提示这里能点，用户只能靠记忆去点那片文字，真机反馈就是「拉开之后没有可以收回的按钮」。
+ *
+ * 正确形状（与源工程 `ChatThinkBar` 一致）：**标题行常驻**，正文接在它下面，
+ * 行尾有一个方向箭头 `⌄` / `⌃` 当可见凭据；点击只挂在标题行上，
+ * 避免用户在全文里拖动滚动时被当成点击而收回。
+ */
+test('思考条展开后必须仍留着标题行与收回箭头', () => {
+  const text: string = read('ChatStatusBar.ets');
+  const from: number = text.indexOf('thinkBar()');
+  const to: number = text.indexOf('build()', from);
+  sanity(from >= 0 && to > from, `ChatStatusBar.ets 里定位不到 thinkBar() 主体`);
+  const body: string = text.substring(from, to);
+
+  // 箭头必须两种朝向都在（同一行三元表达式里切换）
+  const hasCollapseGlyph: boolean = body.includes("'⌃'");
+  const hasExpandGlyph: boolean = body.includes("'⌄'");
+  assert.ok(
+    hasCollapseGlyph && hasExpandGlyph,
+    `思考条缺少方向箭头（⌄ 折叠态 / ⌃ 展开态）—— 用户看不到"能收回"的凭据：\n${body.slice(0, 400)}`,
+  );
+
+  // 标题行必须排在展开分支之前：先出现 LoadingProgress（标题行），再出现 if (this.expanded)
+  const headerAt: number = body.indexOf('LoadingProgress()');
+  const branchAt: number = body.indexOf('if (this.expanded)');
+  assert.ok(headerAt >= 0, `思考条里找不到标题行（LoadingProgress）`);
+  assert.ok(branchAt > headerAt, `标题行被放进了展开分支里 —— 展开后它就消失了，等于没有收回入口`);
+
+  // 点击要挂在标题行上（在展开分支之前），而不是整列
+  const clickAt: number = body.indexOf('.onClick(');
+  assert.ok(clickAt >= 0 && clickAt < branchAt, `onClick 没有挂在标题行上（或在展开分支之后）—— 拖动正文会误触收起`);
+});
+
 // ---------------------------------------------------------------- 连接页必须自己报错
 
 /**

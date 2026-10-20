@@ -96,3 +96,34 @@ test('只有单个冒号的裸 scheme 也算未知 scheme', () => {
   const target = ChatLinkTarget.classify('ftp://host/x');
   assert.equal(target.reason, ChatLinkReason.UNKNOWN_SCHEME);
 });
+
+// -------------------------------------------- Markdown autolink 尖括号（源 v2.2.44 `a344e3f`）
+
+test('尖括号包裹的绝对路径被剥壳后仍认作服务端路径', () => {
+  // 这是真机踩过的：`[看报告](</abs/report.md>)` 不剥壳会被判成相对路径，
+  // 于是绝对路径被再拼一次 cwd，得到「翻倍路径」。
+  const target = ChatLinkTarget.classify('</media/wangke/x/report.md>');
+  assert.equal(target.kind, ChatLinkTargetKind.SERVER_PATH);
+  assert.equal(target.path, '/media/wangke/x/report.md');
+});
+
+test('尖括号包裹的网页被剥壳后仍认作网页', () => {
+  const target = ChatLinkTarget.classify('<https://example.com/a>');
+  assert.equal(target.kind, ChatLinkTargetKind.WEB);
+  assert.equal(target.path, 'https://example.com/a');
+});
+
+test('尖括号只剥一层，且壳内空白也裁掉', () => {
+  const target = ChatLinkTarget.classify('< /tmp/x.md >');
+  assert.equal(target.kind, ChatLinkTargetKind.SERVER_PATH);
+  assert.equal(target.path, '/tmp/x.md');
+  // 单个 `<` 或 `<` 与 `>` 不配对时不当壳剥，仍按原样分类。
+  assert.equal(ChatLinkTarget.classify('<').kind, ChatLinkTargetKind.UNSUPPORTED);
+  assert.equal(ChatLinkTarget.classify('<a.md').kind, ChatLinkTargetKind.UNSUPPORTED);
+});
+
+test('剥壳后为空仍按空目标处理', () => {
+  const target = ChatLinkTarget.classify('<>');
+  assert.equal(target.kind, ChatLinkTargetKind.UNSUPPORTED);
+  assert.equal(target.reason, ChatLinkReason.EMPTY);
+});

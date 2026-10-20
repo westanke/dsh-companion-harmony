@@ -5,7 +5,11 @@
   2026-10-20 收到 AGC 对上架包（**1.0.2**）的稳定性驳回：**连接页「粘贴」按钮闪退**。
   根因已确证并修复（`getPrimaryText()` 声明 `string` 实到给 `undefined` → `text.length` 抛
   TypeError → ArkUI 回调未捕获异常**杀进程**；见 PORT-MAP 坑 41），
-  已过 `BUILD SUCCESSFUL` + **690 用例全绿**，**尚未上机复验**（测试机中途掉线）。
+  已过 `BUILD SUCCESSFUL` + **724 用例全绿**，**尚未上机复验**（测试机中途掉线）。
+  **另**：源工程已从 v2.2.42 推进到 **v2.2.46**（+6 个提交），对标增量移植**进行中** ——
+  纯逻辑数据层已落盘（工具专用块 `core/ToolBlocks.ts`、正文文件链接化 `core/PathLinks.ts`、
+  文件链接识别补 autolink 尖括号剥壳），界面接入与权限档位 Pill / 后台任务面板随后
+  （逐提交处置见 PORT-MAP 收尾十四）。
   追平 Android 源工程 v2.2.42 的新增内容**已全部落盘**，
   已**编译 + 跑测通过**（`BUILD SUCCESSFUL` + `684 用例全绿`），并已**真机逐项验证**；
   真机验证中**新发现并修复**设置页说明文字不随字号档更新（`SwitchRow.title/description`

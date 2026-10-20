@@ -36,7 +36,10 @@
 | 消息流（实时） | WebSocket | `core/ChatPresentation.ts` | ✅ | `step/end`、`turn/end`、token 序列**不**渲染为卡片 |
 | Markdown 渲染 | 无（自研 `MarkdownLite`） | `core/MarkdownLite.ts` | ✅ | 标题/列表/引用/代码/GFM 表格/分隔线；表格列宽修复 2026-10-16 真机已验（待验第 24 条） |
 | GenUI 卡片（`dsh-ui` 围栏） | 无（自研 `GenUiBlocks`） | `ui/GenUiCard.ets` | ✅ | 22 种组件，23 用例 |
-| 工具调用详情 | 消息体 | `core/ToolCallDetail.ts` | ✅ | 18 用例 |
+| 工具调用详情 | 消息体 | `core/ChatToolFormat.ts`（+ `ChatToolItems.ts`） | ✅ | 18 用例 |
+| **工具调用专用块（Read / Terminal / Diff）** | 消息体 | `core/ToolBlocks.ts` | 🟡 | 源 `a96f5e7`（v2.2.43）。**数据层已移植**：`toolBlockView()` 把 `read`/`read_image`/`bash`/`edit`/`write` 投影成三种专用长相，其余回落 Generic；含 `extractReadBody()`（剥 `<content>`、判 `N: ` 行号）与 `stripAnsiEscapes()`（手写扫描，残缺序列不吞正文）。19 用例。**界面接入待做** |
+| **正文已知文件名链接化** | 会话文件清单 | `core/PathLinks.ts` | 🟡 | 源 `a344e3f`（v2.2.44）。`linkifyKnownFiles()`：唯一文件名才替换、不碰已有 Markdown 链接、只替换第一次。11 用例。**界面接入（点击打开文件）待做** |
+| **Markdown autolink 尖括号剥壳** | 无 | `core/ChatLinkTarget.ts` | ✅ | 源 `a344e3f`。`classify()` 先剥 `</abs/path>` 再分类，避免「翻倍路径」。4 用例 |
 | 审批（含 `full-access` 二次确认） | `POST /approvals` | `ui/ChatDetail.ets` | ✅ | 由 `AlertDialog` 改为底部面板 + 勾选闸门 |
 | AI 追问（ask） | 消息体 | `ui/ChatDetail.ets` | ✅ | 两道闸 |
 | 上下文注入来源显示 | 消息体 | `ChatPresentation` | ✅ | 受设置 `showContext` 控制 |

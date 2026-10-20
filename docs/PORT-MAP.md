@@ -2348,3 +2348,41 @@ entry/build/default/cache/default/default@CompileArkTS/esmodule/release/entry/sr
 
 直接读它第 993 行，那里就是粘贴按钮的 `onClick` 回调体（`readClipboardText()` → `text.length`），
 与源文件 `ConnectScreen.ets:598` 那唯一一处调用点对上 —— **这条链把「猜」变成了「对上了」**。
+
+### 收尾十四：对标源 v2.2.43–v2.2.46 增量移植（2026-10-20，进行中）
+
+源工程在本工程基线（tag `v2.2.42` / commit `e1b8c13`）之后又推了 6 个提交。逐提交对照与处置：
+
+| 源提交 | 标题 | 处置 |
+| --- | --- | --- |
+| `a96f5e7` | 工具调用专用块 + 权限档位 Pill | 数据层已移植（`core/ToolBlocks.ts`）；界面接入与权限档位随后 |
+| `a344e3f` | 会话页九条交互整改 + 权限档位打通 + 文件链接可打开 | 文件链接部分已移植（`core/PathLinks.ts` + `ChatLinkTarget.classify` 剥壳）；其余随后 |
+| `9863579` | 存量改动（错误文案 / 截断提示 / 连接导入面板 / 偏好 / 设置页 / 诊断基建） | 随后（用户可见项优先） |
+| `e609b04` | 后台任务面板（会话 ⋯ 菜单 →「后台任务」） | 随后 |
+| `f02c5b9` | 表格紧贴上一行被渲染成竖线纯文本 | **刻意未移植**（见坑 43） |
+| `bfa9aed` | 补三组回归用例（发送键三态 / 正文文件链接化 / autolink 尖括号） | 判据已并入本轮新增用例 |
+
+**本轮已完成**（全部离线可验，未上真机）：
+
+1. `core/ToolBlocks.ts`（新）+ `test/cases/tool-blocks.test.ts` 19 例 —— 工具调用专用块投影。
+2. `core/PathLinks.ts`（新）+ `test/cases/path-links.test.ts` 11 例 —— 正文已知文件名链接化。
+3. `core/ChatLinkTarget.ts` 补 Markdown autolink 尖括号剥壳 + `chat-link-target.test.ts` 补 4 例。
+
+**坑 42：ArkTS 没有判别联合类型 ——「四种长相」只能用单类 + `kind` 字段承载**
+
+源工程用 `sealed interface ToolBlockView` + 四个 `data class`，`when (view)` 里靠类型收窄分支。
+ArkTS 严格模式下既没有 sealed 也没有收窄，于是 `ToolBlocks.ts` 用**单类 + `ToolBlockKind` 判别字段**：
+不适用当前形态的字段留默认值，表现层先看 `kind` 再取值。看着不如四个类「干净」，
+但在 ArkTS 里拆成四个类反而要写四组空判 —— 这是语言约束下的取舍，不是设计疏忽。
+
+**坑 43：对照移植前先分清「源工程修的是第三方库的缺陷，还是它自己的缺陷」**
+
+`f02c5b9` 修的是第三方解析器 `org.intellij.markdown` 的行为：**表头紧贴上一行且中间无空行时
+不产出 `TABLE` 节点**，于是整块被当普通段落渲染成竖线纯文本。本工程 `core/MarkdownLite.ts` 是
+**自研逐行解析**，表格判据是「本行含 `|` 且下一行是分隔行」（`markdownBlocks()`），
+**根本不需要前导空行**。实测五种现场（表头紧贴 `**标题**` / 紧贴段落 / 文档开头 / 围栏内伪表格 /
+列表项后）：本工程全部正常产出表格块，故**不移植**该归一化 —— 移植了也只是白多一层文本改写。
+
+> 判据：两类工程**依赖面不同**（源用第三方 Markdown 库 + WebView，本工程自研），
+> 第三方库的坑在本工程**可能根本不存在**。凡是「绕第三方库缺陷」的补丁，先在本工程实测复现，
+> 复现不了就不移植 —— 否则会把一份无用的复杂度背进来。

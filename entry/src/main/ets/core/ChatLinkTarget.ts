@@ -81,7 +81,15 @@ export class ChatLinkTarget {
    * 机器，「本地文件」这个概念在远程场景下没有意义）。
    */
   static classify(raw: string): ChatLinkTarget {
-    const target: string = trimText(raw);
+    // **先剥 Markdown autolink 的尖括号**（源 v2.2.44 `a344e3f` 补的）：
+    // `[text](</abs/path>)` 是 CommonMark 允许的写法（路径含空格/特殊字符时常用），
+    // 模型也真的这么写。不剥的话 `<...>` 既不以 `/` 开头、也没有 scheme，
+    // 会被一路判成**相对路径** —— 于是绝对路径又被拼了一次 cwd，得到
+    // `/media/wangke/OFFICE/workspace/</media/wangke/.../x.md>` 这种翻倍路径。
+    let target: string = trimText(raw);
+    if (target.length >= 2 && target.startsWith('<') && target.endsWith('>')) {
+      target = trimText(target.substring(1, target.length - 1));
+    }
     if (target.length === 0) {
       return ChatLinkTarget.unsupported(raw, ChatLinkReason.EMPTY);
     }

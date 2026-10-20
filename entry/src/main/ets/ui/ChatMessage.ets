@@ -48,6 +48,7 @@ import {
 } from '../core/GenUiBlocks';
 import { GenUiDebugLine, GenUiSegment, MessageAttachments, ToolCallDetailBlock,
   TurnFailureRow } from './MessageParts';
+import { InlineText } from './InlineText';
 import { MarkdownView } from './MarkdownView';
 import { writeClipboardText } from '../platform/Clipboard';
 import { systemLanguageTag } from '../platform/Platform';
@@ -74,6 +75,8 @@ struct AssistantBody {
   streaming: boolean = false;
   genUiDebug: boolean = false;
   onAnswer: (text: string) => void = (): void => {};
+  /** 点正文里的链接（会话文件名 / 网址）—— 分流规则见 `ui/ChatDetail.ets` 的 `openChatLink`。 */
+  onLink: (url: string) => void = (): void => {};
 
   private segments(): MessageSegment[] {
     return splitMessageBody(this.body);
@@ -100,14 +103,14 @@ struct AssistantBody {
     if (segment.kind === MessageSegmentKind.UI) {
       GenUiSegment({ json: segment.text, onAnswer: this.onAnswer })
     } else {
-      MarkdownView({ body: segment.text })
+      MarkdownView({ body: segment.text, onLink: this.onLink })
     }
   }
 
   build() {
     Column() {
       if (this.isPlain()) {
-        MarkdownView({ body: this.body })
+        MarkdownView({ body: this.body, onLink: this.onLink })
         if (this.diagnosis() !== null) {
           GenUiDebugLine({ diagnosis: this.diagnosis() as GenUiDiagnosis })
         }
@@ -336,6 +339,14 @@ export struct ChatMessageView {
   onRetry: () => void = (): void => {};
 
   /**
+   * 点正文里的链接（会话文件名 / 网址）。
+   *
+   * 与 `onRetry` 同理，函数成员**不能**加 `@Prop`（见 PORT-MAP 坑 24）。
+   * 用户气泡与助手正文都走它 —— 源工程对 USER / ASSISTANT 两类正文都做文件链接化。
+   */
+  onLink: (url: string) => void = (): void => {};
+
+  /**
    * 「从这条分叉」：由 `ChatDetail` 转给 vm 的 `forkSession(sessionId, atSeq)`。
    *
    * 与 `onRetry` 同理，函数成员**不能**加 `@Prop`（见 PORT-MAP 坑 24）—— 它不随状态刷新。
@@ -422,13 +433,13 @@ export struct ChatMessageView {
         Row() {
           Column() {
             if (this.item.body.trim().length > 0) {
-              Text(this.item.body)
-                .fontSize(14)
-                .fontColor($r('sys.color.ohos_id_color_text_primary'))
+              // 底色 / 内边距 / 圆角挂在组件实例上（都是**通用属性**，落到它根的那个
+              // `Text` 上）：用户气泡的宽度是「贴着文字」的，所以底色必须由文字自己背，
+              // 不能挪到外层容器 —— 一挪就变成一条整宽的色带（见 `ui/InlineText.ets` 文件头）。
+              InlineText({ text: this.item.body, fontSize: 14, onLink: this.onLink })
                 .padding({ left: 9, right: 9, top: 6, bottom: 6 })
                 .borderRadius(8)
                 .backgroundColor($r('sys.color.ohos_id_color_component_normal'))
-                .copyOption(CopyOptions.LocalDevice)
             }
             MessageAttachments({
               attachments: this.item.attachments,
@@ -453,6 +464,7 @@ export struct ChatMessageView {
             streaming: this.item.streaming,
             genUiDebug: this.genUiDebug,
             onAnswer: this.onAnswer,
+            onLink: this.onLink,
           })
           this.footerRow()
         }

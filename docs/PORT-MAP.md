@@ -2355,8 +2355,8 @@ entry/build/default/cache/default/default@CompileArkTS/esmodule/release/entry/sr
 
 | 源提交 | 标题 | 处置 |
 | --- | --- | --- |
-| `a96f5e7` | 工具调用专用块 + 权限档位 Pill | 数据层 + **界面接入已完成**（`core/ToolBlocks.ts` + `ui/ToolBlockBody.ets`）；权限档位 Pill 随后 |
-| `a344e3f` | 会话页九条交互整改 + 权限档位打通 + 文件链接可打开 | 文件链接部分已移植（`core/PathLinks.ts` + `ChatLinkTarget.classify` 剥壳）；其余随后 |
+| `a96f5e7` | 工具调用专用块 + 权限档位 Pill | **已完成**：工具块数据层 + 界面接入（`core/ToolBlocks.ts` + `ui/ToolBlockBody.ets`）；权限档位 Pill 走独立候选目录接口（见下「本轮已完成」6，坑 47） |
+| `a344e3f` | 会话页九条交互整改 + 权限档位打通 + 文件链接可打开 | 文件链接部分**已端到端移植**（`core/PathLinks.ts` + `core/InlineSegments.ts` + `ui/InlineText.ets` + 渲染 / 点击接入 + `ChatLinkTarget.classify` 剥壳，见「本轮已完成」5）；权限档位打通见 6；其余九条交互整改随后 |
 | `9863579` | 存量改动（错误文案 / 截断提示 / 连接导入面板 / 偏好 / 设置页 / 诊断基建） | 随后（用户可见项优先） |
 | `e609b04` | 后台任务面板（会话 ⋯ 菜单 →「后台任务」） | 随后 |
 | `f02c5b9` | 表格紧贴上一行被渲染成竖线纯文本 | **刻意未移植**（见坑 43） |
@@ -2368,6 +2368,15 @@ entry/build/default/cache/default/default@CompileArkTS/esmodule/release/entry/sr
 2. `core/PathLinks.ts`（新）+ `test/cases/path-links.test.ts` 11 例 —— 正文已知文件名链接化。
 3. `core/ChatLinkTarget.ts` 补 Markdown autolink 尖括号剥壳 + `chat-link-target.test.ts` 补 4 例。
 4. `ui/ToolBlockBody.ets`（新）+ `ui/MessageParts.ets` 分派 —— 专用块的**界面接入**（见坑 44、坑 45）。
+5. `core/InlineSegments.ts`（新）+ `ui/InlineText.ets`（新）+ `test/cases/inline-segments.test.ts` 13 例
+   —— 正文文件链接化的**渲染接入**：切分（`[文字](目标)` → 普通文字 / 链接）→ 渲染（`Text` + 逐段 `Span`）
+   → 点击分流（服务端路径开文件面板 / `http(s)` 外部浏览器 / 相对路径拼 cwd / 其余提示不支持）；
+   候选清单取自 `sessionFileList`（与「本会话的文件」面板同一出处）并跟随投影缓存。见坑 46。
+6. **权限档位 Pill** —— `core/ModelsConfig.ts` 的 `PermissionCatalog` + `core/DshClient.ts` 的
+   `permissionPresets()`（**404 容忍**）+ `HarnessViewModelConnection.loadSnapshot` 连接时拉取一次
+   （**失败自己吞掉、不连坐整条连接，也不擦掉已有目录**）+ `permissionSelectOf(history, catalog)`
+   （内联 options 优先，缺失才用目录兜底；档位名走 `currentValue` → `preset` → `sandbox` 降级）
+   + `ui/ChatHeader.ets` 顶栏小胶囊与 ⋯ 菜单标题行修复（**候选为空也照渲染**）。见坑 47。
 
 **坑 42：ArkTS 没有判别联合类型 ——「四种长相」只能用单类 + `kind` 字段承载**
 
@@ -2427,3 +2436,60 @@ which must be a container component.
 代价是 `ui/MessageParts.ets` 里那个非导出的 `ToolTextBlock` 必须改成 `export` 才能被新组件复用
 （跨文件复用下位组件时，循环 import 在本工程实测可用：`ToolBlockBody.ets` 与
 `MessageParts.ets` 互相 import，`hvigorw` 编译无报错）。
+
+**坑 46：把「可点链接」塞进正文 —— `Span` + `Text` 的两条边界**
+
+要在同一段正文里混排「普通文字 + 可点链接」，`Text()` 里放多个 `Span()` 是本工程选的路子
+（`ui/InlineText.ets`）。两条边界是实测撞出来的：
+
+1. **`Span` 只承担「这一段文字长什么样」**（颜色、下划线装饰），字号 / 行高 / 字重统一设在
+   **外层 `Text`** 上、由各 `Span` 继承 —— 逐段重复设置只会得到「某一段忘了设、字号跟隔壁不一样」。
+2. **`fontSize` / `lineHeight` / `fontWeight` 是 `Text` 独有属性、不是通用属性**，
+   于是它们**写不到自定义组件实例上**：`InlineText({...}).fontSize(16)` 这种链式写法拿不到效果，
+   样式只能**当构造入参**传进去（`ui/InlineText.ets` 因此把 `fontSize` / `fontWeight` / `lineHeight`
+   都开成入参）。反过来，**通用属性是能写在组件实例上的** —— 用户气泡的底色 / 内边距 / 圆角
+   正是挂在 `InlineText` 实例上、落到它根节点的 `Text` 上的。
+
+   由此还有一条**按处不同**的宽度约定：组件**刻意不自带** `width('100%')` ——
+   正文段落（要占满行宽）在调用处显式设 `100%`，**用户气泡不设**（设了气泡会从「贴着文字」
+   变成「整条色带」）。
+
+   另：`lineHeight` 传 `0` 表示「这一处不设」，`build()` 为此分了两条几乎相同的链 ——
+   ArkUI 里属性**没有「可选」这一说**，要么设、要么靠 `if` 分支绕开，而「设成 0」与「不设」不是一回事。
+
+**坑 47：权限档位的候选项不在投影里 —— 只给 `currentValue` 就得另开目录接口，且老 bridge 的 404 必须容忍**
+
+会话投影里的 `permissions` **只带 `currentValue`**（当前档位）**、列不出候选**。
+想给用户一个能切档的界面，光知道「现在是哪个档」远远不够 —— 候选项在**另一个独立接口**
+`GET /chat/permission-presets`（bridge ≥ 2.4.2，内核 `permissionPresets.catalog()`）。
+
+三条纪律，缺一条界面就会出现「看着像故障」的表现：
+
+1. **404 `ROUTE_NOT_FOUND` 必须容忍**：老 bridge 没有这个路由，抛出去会被渲染成一次**连接失败**，
+   而实际只是「服务端版本稍旧」。`DshClient.permissionPresets()` 因此只把这一种错误吞成 `null`，
+   **其余错误照抛**（不能一律吞 —— 那会把真故障也咽掉）。
+2. **拉取失败不连坐整条连接**：该请求在 `loadSnapshot` 里**自己 catch 成 null**，不进全局 error ——
+   权限目录取不到不该让整页连不上。
+3. **失败不许擦掉旧目录**：`st.permissionCatalog = catalog !== null ? catalog : this.state.permissionCatalog;`
+   —— 重连时这一次恰好取不到就把它清空，用户会看到「权限入口点都点不了」，而其实只是这一次请求失败。
+
+另一条相关的**投影形状漂移**：档位名按 `currentValue` → `preset` → `sandbox` 三级降级取，
+三者皆无才认定「没有档位」—— bridge 换字段名的窗口期，界面仍显示得出来（同坑 33「未知 ≠ 缺失」的口径）。
+
+**坑 48：测试桩少一个方法不是「少测一条」，而是同步抛 `TypeError`、连坐整条链**
+
+给 `DshClient` 加了 `permissionPresets()` 之后，`harness-view-model.test.ts` 里的替身 `FakeClient`
+没跟着加，跑测时**22 条用例一起红**，而且红的全是不相干的用例（会话列表、命令清单…）。
+
+原因：`loadSnapshot` 里写的是 `api.permissionPresets().catch((): null => null)` ——
+当替身上**根本没有这个方法**时，`api.permissionPresets()` 是**同步**抛 `TypeError` 的，
+**压根不进 Promise 链**，`.catch()` 接不住，异常直接冲出 `connect()`，把所有下游用例一起带崩。
+
+两条教训：
+
+1. **替身是被测对象的影子，接口一变必须同步改桩**；默认值要挑「最弱的那个合法行为」——
+   `FakeClient.permissionPresets()` 默认返回 `null`（= 老 bridge），这样「404 / 旧版本必须容忍」
+   这条纪律正好被钉在**默认路径**上，而不是靠某个特例用例。
+2. 看到 `.catch()` 不要默认「这里的所有失败都被接住了」—— 它**只接 Promise 里的拒绝**，
+   接不住「方法不存在」「this 为空」这类**同步**异常。这类错误在真机上只会表现为「一进页面就崩」，
+   在单测里则表现为「一片红、且跟改动点看不出关系」。

@@ -25,6 +25,7 @@ import {
   DeviceView,
   DirectoryPage,
   PairingResult,
+  PermissionCatalog,
   PluginInventory,
   ProviderSettings,
   RootView,
@@ -811,6 +812,19 @@ export class HarnessViewModelConnection extends HarnessViewModelComposer {
     const pluginsP: Promise<PluginInventory | null> = canReadSettings
       ? api.pluginInventory() : Promise.resolve<PluginInventory | null>(null);
     const trashP: Promise<TrashEntry[]> = canReadFiles ? api.trash() : Promise.resolve<TrashEntry[]>([]);
+    /**
+     * 权限档位候选清单是**进程级**的（内核 `permissionPresets.catalog()`），连上时取一次就够。
+     *
+     * **取不到不算连接失败**：老 bridge（< 2.4.2）没有这条路由，回 404；网络抖动也可能失败。
+     * 所以这里自己吞掉（`catch` → null），**不走全局 error** —— 走那条路等于每次连老 bridge
+     * 都弹一句用户看不懂的错。取不到时权限入口退化成「只显示当前档位、不能切换」，
+     * 这远好过整个入口消失。
+     *
+     * 同样按 `chat.read` 挡一道：少了这个权限，请求只会拿一个 403 回来，白白占一次往返。
+     */
+    const permissionP: Promise<PermissionCatalog | null> = canReadChat
+      ? api.permissionPresets().catch((): PermissionCatalog | null => null)
+      : Promise.resolve<PermissionCatalog | null>(null);
 
     const roots: RootView[] = await rootsP;
     const selectedRoot: string | null = roots.length > 0 ? roots[0].id : null;
@@ -823,6 +837,7 @@ export class HarnessViewModelConnection extends HarnessViewModelComposer {
     const providerSettings: ProviderSettings | null = await settingsP;
     const pluginInventory: PluginInventory | null = await pluginsP;
     const trash: TrashEntry[] = await trashP;
+    const catalog: PermissionCatalog | null = await permissionP;
     const directory: DirectoryPage | null = await directoryP;
     const st: HarnessState = new HarnessState();
     st.restoring = false;
@@ -837,6 +852,9 @@ export class HarnessViewModelConnection extends HarnessViewModelComposer {
     st.agentPresets = agentPresets;
     st.providerSettings = providerSettings;
     st.pluginInventory = pluginInventory;
+    // `catalog ?? 上一份`：这一次拉取失败（或老 bridge 404）时**保留已有的目录**，
+    // 别把上一次连接拿到的好数据擦成空 —— 那样「重连一次权限入口就没了」。
+    st.permissionCatalog = catalog !== null ? catalog : this.state.permissionCatalog;
     st.selectedRootId = selectedRoot;
     st.directory = directory;
     st.trash = trash;

@@ -356,6 +356,38 @@ test('DshClient：pluginInventoryWithUpdates 带 checkUpdates=1（与轻量版�
   assert.equal(t.last().url, 'http://192.168.1.126:3090/api/v1/settings/plugins?checkUpdates=1');
 });
 
+test('DshClient.permissionPresets：解出候选与默认档位，走独立目录路由', async () => {
+  const t = new FakeTransport().reply(200,
+    '{"options":[{"value":"read-only","name":"只读"},'
+    + '{"value":"workspace-write","name":"工作区写入","description":"仅在会话目录内写"}],'
+    + '"defaultPreset":"workspace-write"}');
+  const c = client(t);
+  const catalog = await c.permissionPresets();
+  assert.notEqual(catalog, null);
+  assert.equal(catalog!.defaultPreset, 'workspace-write');
+  assert.deepEqual(catalog!.options.map((o) => o.value), ['read-only', 'workspace-write']);
+  assert.equal(catalog!.options[1].description, '仅在会话目录内写');
+  assert.equal(t.last().url, 'http://192.168.1.126:3090/api/v1/chat/permission-presets');
+  assert.equal(t.last().headers.get('Authorization'), 'Bearer device-token');
+});
+
+test('DshClient.permissionPresets：老 bridge 的 404 必须容忍（返回 null，不抛）', async () => {
+  // 老 bridge（< 2.4.2）没有这条路由。抛出去会连累整个连接流程 —— 而缺了候选只是
+  // 「权限入口退化成只读」，远好过连不上。
+  const t = new FakeTransport().reply(404, '{"error":{"code":"ROUTE_NOT_FOUND","message":"无此路由"}}');
+  const c = client(t);
+  assert.equal(await c.permissionPresets(), null);
+});
+
+test('DshClient.permissionPresets：非 404 的失败照旧抛出（网络 / 鉴权问题不该被吞）', async () => {
+  const t = new FakeTransport().reply(403, '{"error":{"code":"FORBIDDEN","message":"scope 不足"}}');
+  const c = client(t);
+  await assert.rejects((): Promise<unknown> => c.permissionPresets(), (err: { code: string }) => {
+    assert.equal(err.code, 'FORBIDDEN');
+    return true;
+  });
+});
+
 test('DshClient：updateProvider 的 PATCH 体沿用 ProviderPatch 的省略语义', async () => {
   const t = new FakeTransport().reply(200, '{"writable":true,"providers":[]}');
   const c = client(t);

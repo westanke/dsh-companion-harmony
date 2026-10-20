@@ -98,3 +98,29 @@ export function linkifyKnownFiles(text: string, knownAbsolutePaths: string[]): s
   }
   return result;
 }
+
+/**
+ * 把**相对路径**拼到会话工作目录上 —— 对位源工程 `ui/chat/ChatLinkHandlers.kt` 里
+ * 「拿会话 cwd 当基准」那条分支（源 v2.2.44 补的）。
+ *
+ * 模型正文里的链接常写成 `docs/report.md` 这种相对路径，源工程的处置是
+ * 「拼上 cwd 再走绝对路径那一条路」；拿不到 cwd 时才告诉用户这个链接打不开。
+ *
+ * 三条与源工程一致的细节：
+ *
+ * - cwd 末尾的 `/` 只留一个（两边都带斜杠时不出现 `//`）；
+ * - 相对路径开头的 `/` 去掉（`/docs/x.md` 拼出来不该是 `/cwd//docs/x.md`）；
+ * - cwd 为 `"/"`（根目录）时结果仍是 `/docs/x.md` —— 这是拼接的自然结果，
+ *   不需要为它开特例，但不这么写就会出现 `"//docs/x.md"`。
+ */
+export function joinCwd(cwd: string, raw: string): string {
+  let base: string = cwd;
+  while (base.endsWith('/')) {
+    base = base.substring(0, base.length - 1);
+  }
+  let rest: string = raw;
+  while (rest.startsWith('/')) {
+    rest = rest.substring(1);
+  }
+  return `${base}/${rest}`;
+}

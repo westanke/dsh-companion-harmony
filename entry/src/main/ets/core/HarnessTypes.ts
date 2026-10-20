@@ -24,6 +24,7 @@ import {
   FileEntry,
   PendingApproval,
   PendingQuestionSet,
+  PermissionCatalog,
   PluginInventory,
   PromptPart,
   ProviderModel,
@@ -291,6 +292,15 @@ export class HarnessState {
   workspacePickerDirectory: DirectoryPage | null = null;
   sessionModels: SessionModels | null = null;
   commands: CommandDescriptor[] = [];
+  /**
+   * 权限档位**候选项**目录（`GET /chat/permission-presets`）。
+   *
+   * `null` = 还没拉、或服务端没有这条路由（老 bridge 404）。
+   * 与会话投影**刻意分开**：投影只给当前档位、列不出候选，所以候选只能来自这份目录
+   * （见 `core/ModelsConfig.ts` 的 `PermissionCatalog`）。无目录时界面仍渲染当前档位标签、
+   * 只是点不动 —— 「拿不到候选项」不该升级成「整条入口消失」。
+   */
+  permissionCatalog: PermissionCatalog | null = null;
   providerSettings: ProviderSettings | null = null;
   /** 插件清单；null 表示尚未读取（未连接、无 settings.read 权限或读取失败）。 */
   pluginInventory: PluginInventory | null = null;
@@ -396,6 +406,7 @@ export class HarnessState {
     this.workspacePickerDirectory = other.workspacePickerDirectory;
     this.sessionModels = other.sessionModels;
     this.commands = other.commands;
+    this.permissionCatalog = other.permissionCatalog;
     this.providerSettings = other.providerSettings;
     this.pluginInventory = other.pluginInventory;
     this.discoveredModels = other.discoveredModels;

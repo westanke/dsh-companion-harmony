@@ -24,7 +24,8 @@ import {
 } from '../../entry/src/main/ets/core/HarnessViewModel.ts';
 import {
   ChatSession, CommandDescriptor, DeviceView, DirectoryPage, FileContent, FileEntry, HistoryEntry,
-  ChatHistory, HealthView, PairingResult, PendingApproval, PendingQuestionSet, PluginInventory,
+  ChatHistory, HealthView, PairingResult, PendingApproval, PendingQuestionSet, PermissionCatalog,
+  PermissionOption, PluginInventory,
   ProviderSettings, QuestionAnswer, ResolvedPath, RootView, SessionEvent, SessionModels, TrashEntry,
   UploadedAttachment, WorkspaceEvent, DshApiException,
 } from '../../entry/src/main/ets/core/Models.ts';
@@ -232,6 +233,24 @@ class FakeClient {
 
   pluginInventory(): Promise<PluginInventory> {
     return Promise.resolve(new PluginInventory());
+  }
+
+  /**
+   * 权限档位候选目录（`GET /chat/permission-presets`）。
+   *
+   * 默认 `null` = 服务端没这条路由（老 bridge 404）。**默认必须容忍**：
+   * 连接流程把它当「有最好、没有也能连」，所以桩的默认行为也照这个口径 ——
+   * 否则一加这条路由，所有与权限无关的用例都会因为连接失败而连坐。
+   */
+  permissionCatalog: PermissionCatalog | null = null;
+  permissionError: Error | null = null;
+
+  permissionPresets(): Promise<PermissionCatalog | null> {
+    if (this.permissionError !== null) {
+      // `connect` 内部已把失败吞成 null；这里给的是「连自己抛都不该传出去」的验证路径。
+      return Promise.reject(this.permissionError);
+    }
+    return Promise.resolve(this.permissionCatalog);
   }
 
   trash(): Promise<TrashEntry[]> {
@@ -683,6 +702,43 @@ test('connectHost 落地 activeHostId / activeEndpointId 且 restoring 归位', 
   // 与 Kotlin 一致：连上之后状态被 loadSnapshot 的快照整份接管，而快照里
   // `selectedHostId` 是默认的 null —— 「选中查看」这个 UI 态由连接页自己维护。
   assert.equal(rig.state.selectedHostId, null);
+  rig.vm.dispose();
+});
+
+test('connectHost 拉不到权限目录也照样连上（老 bridge 404 不该连累连接）', async () => {
+  // 权限目录是「锦上添花」：没有它，界面退化成「只显示当前档位、不能切换」，
+  // 远好过连不上。源工程 v2.2.44 的教训是反过来的 —— 把拿不到候选升级成了
+  // 「整条权限入口消失」，而这里连「连接失败」都不该发生。
+  const rig = makeRig();
+  rig.client.permissionError = new DshApiException('ROUTE_NOT_FOUND', 'no such route');
+  seedHost(rig, sampleHost('h1'));
+  await rig.vm.connectHost('h1');
+  assert.equal(rig.state.error, null, `目录失败不该让连接失败：${rig.state.error}`);
+  assert.equal(rig.state.connected, true);
+  assert.equal(rig.state.permissionCatalog, null);
+  rig.vm.dispose();
+});
+
+test('connectHost 拿到权限目录时落到 state，且重连失败时不把已有目录擦掉', async () => {
+  const rig = makeRig();
+  const catalog = new PermissionCatalog([
+    new PermissionOption('read-only', '只读'),
+    new PermissionOption('workspace-write', '工作区写入'),
+  ], 'workspace-write');
+  rig.client.permissionCatalog = catalog;
+  seedHost(rig, sampleHost('h1'));
+  await rig.vm.connectHost('h1');
+  assert.notEqual(rig.state.permissionCatalog, null);
+  assert.deepEqual(rig.state.permissionCatalog!.options.map((o) => o.value),
+    ['read-only', 'workspace-write']);
+
+  // 再连一次、这次目录接口失败：**保留**上一次的好数据。
+  // 擦成空的话，「重连一次权限入口就没了」—— 用户会以为是自己点坏了什么。
+  rig.client.permissionCatalog = null;
+  rig.client.permissionError = new DshApiException('ROUTE_NOT_FOUND', 'no such route');
+  await rig.vm.connectHost('h1');
+  assert.equal(rig.state.connected, true);
+  assert.notEqual(rig.state.permissionCatalog, null, '重连失败不该清掉已有目录');
   rig.vm.dispose();
 });
 

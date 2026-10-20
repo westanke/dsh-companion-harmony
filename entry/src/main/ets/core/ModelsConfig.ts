@@ -52,6 +52,41 @@ export class PermissionSelect {
   }
 }
 
+/**
+ * 权限档位**候选项**目录（`GET /chat/permission-presets`，bridge ≥ 2.4.2）。
+ *
+ * ## 为什么必须有这个类
+ *
+ * 内核把预设清单放在一个独立的远程服务上，而会话投影里那条 `permissions` wire 视图
+ * **只给 `currentValue`**（`wire.view: state => ({ currentValue })`）——
+ * 拿得到当前档位、**列不出候选**。源工程 v2.2.44 之前读投影里的 `options[]`，
+ * 于是整条恒为空、权限 Pill 与 ⋯ 菜单的权限项在真机上**从不渲染**。
+ * 本工程移植时读的是同一份投影字段，所以是同一处缺陷（真机复验前不能假定它不存在）。
+ *
+ * 老 bridge 没有这条路由（404 `ROUTE_NOT_FOUND`），调用方必须容忍失败继续跑 ——
+ * 那时 `options` 为空，界面仍要渲染一个**不可点**的当前档位标签（用户至少看得见
+ * 自己在什么档位上；切不了是「服务端还没给这个能力」，不是「界面坏了」）。
+ */
+export class PermissionCatalog {
+  options: PermissionOption[] = [];
+  defaultPreset: string = '';
+
+  constructor(options: PermissionOption[] = [], defaultPreset: string = '') {
+    this.options = options;
+    this.defaultPreset = defaultPreset;
+  }
+
+  static fromJson(map: JsonMap | null): PermissionCatalog {
+    const v: PermissionCatalog = new PermissionCatalog();
+    const raw: JsonMap[] = JsonAccess.objArr(map, 'options');
+    for (let i = 0; i < raw.length; i++) {
+      v.options.push(PermissionOption.fromJson(raw[i]));
+    }
+    v.defaultPreset = JsonAccess.str(map, 'defaultPreset') ?? '';
+    return v;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // 模型选择
 // ---------------------------------------------------------------------------

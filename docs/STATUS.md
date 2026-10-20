@@ -5,7 +5,8 @@
   2026-10-20 收到 AGC 对上架包（**1.0.2**）的稳定性驳回：**连接页「粘贴」按钮闪退**。
   根因已确证并修复（`getPrimaryText()` 声明 `string` 实到给 `undefined` → `text.length` 抛
   TypeError → ArkUI 回调未捕获异常**杀进程**；见 PORT-MAP 坑 41），
-  已过 `BUILD SUCCESSFUL` + **724 用例全绿**，**尚未上机复验**（测试机中途掉线）。
+  已过 `BUILD SUCCESSFUL` + **748 用例全绿**，**尚未上机复验**
+  （测试机已重连，待本轮出包后按 TESTING「设备侧验证」补做）。
   追平 Android 源工程 v2.2.42 的新增内容**已全部落盘**，
   已**编译 + 跑测通过**（`BUILD SUCCESSFUL` + `684 用例全绿`），并已**真机逐项验证**；
   真机验证中**新发现并修复**设置页说明文字不随字号档更新（`SwitchRow.title/description`
@@ -13,9 +14,14 @@
   （1.0.0 送审被驳回；1.0.1 因改名而作废，未上传）。见文末「2026-10-17 移植补齐」。
   **另**：源工程已从 v2.2.42 推进到 **v2.2.46**（+6 个提交），对标增量移植**进行中** ——
   已完成：**工具调用专用块**（数据层 `core/ToolBlocks.ts` + 界面 `ui/ToolBlockBody.ets`，端到端）、
-  正文文件链接化 `core/PathLinks.ts`、文件链接识别补 autolink 尖括号剥壳；
-  待做：`PathLinks` 接入正文渲染路径、权限档位 Pill、后台任务面板、会话页九条交互整改，
+  **正文文件链接化端到端**（`core/PathLinks.ts` + `core/InlineSegments.ts` + `ui/InlineText.ets`
+  + `ui/MarkdownView.ets` / `ui/ChatMessage.ets` / `ui/ChatDetail.ets` 渲染与点击接入）、
+  **权限档位 Pill**（`core/ModelsConfig.ts` `PermissionCatalog` + `core/DshClient.ts`
+  `permissionPresets()` 独立候选目录接口 + `ui/ChatHeader.ets` 顶栏小胶囊）、
+  文件链接识别补 autolink 尖括号剥壳；
+  待做：后台任务面板、会话页九条交互整改，
   以及错误文案 / 截断提示 / 连接导入面板 / 设置页等存量项（逐提交处置见 PORT-MAP 收尾十四）。
+  以上三项**均为「编译 + 单测通过、未上机」**（本轮新增坑 46–48 见 PORT-MAP）。
 - **版本**：1.0.3 / `versionCode` 1000003（**剪贴板闪退修复尚未并入版本号** ——
   `[未发布]` 段已记录，版本号待定：1.0.3 未上传 AGC 则折进 1.0.3 重出包，
   已上传则升 1.0.4，**待用户拍板**）
@@ -35,7 +41,7 @@
 - **兼容**：HarmonyOS 6.0 及以上（`compatibleSdkVersion` = 5.1.0(18)）
 - **设备类型**：phone / tablet / 2in1
 - **插件基线**：`dsh-remote-bridge` **≥ 2.0.4**（旧名 `dsh-workspace`）
-- **最近验证**：`684 用例全绿`（`cd test && npm test`，43 个用例文件）+ `BUILD SUCCESSFUL`
+- **最近验证**：`748 用例全绿`（`cd test && npm test`，47 个用例文件）+ `BUILD SUCCESSFUL`
   （首跑 4 条红已全部修掉，其中 1 条是门禁抓出的真缺陷，详见文末）
 - **真机**：ICL-AL10（HarmonyOS 7.0.0.109）已装 **1.0.3 调试签名包**（同调试签名
   **覆盖安装**，`wangke-PC` 配对数据**保住**——局域网 / 虚拟网两地址俱在）。
@@ -148,8 +154,9 @@
    > 重录演示录屏 + 重拍截图 6 张 + 修设置页药丸不刷新，详见 PORT-MAP 坑 26 / 坑 27）见 CHANGELOG。
 - **下一步**（顺序不可倒）：
   1. **用户拍板版本号**（1.0.3 若尚未上传 AGC → 折进 1.0.3 重出包；已上传 → 升 1.0.4）；
-  2. **测试机重连**（当前 `hdc list targets` 为空）后，先按 TESTING「设备侧验证」跑一遍
-     **粘贴按钮不闪退**（这是驳回项的复现路径），再谈出包；
+  2. **测试机已重连**（`hdc list targets` 报 `3AX0225103005398` / ICL-AL10）：先按 TESTING
+     「设备侧验证」跑一遍**粘贴按钮不闪退**（这是驳回项的复现路径），再补验本轮两项
+     ——**点正文里的文件名能否打开文件**、**顶栏权限胶囊能否列出并切换档位**；
   3. 出上架包（先签 hap → 组装 `.app` → 里外双签 → `verify-app` 双层验）与真机调试包；
   4. 回填体积与 SHA-256 → 上传 `.app` 到 AGC，并按上「AGC 侧待办」补材料
 

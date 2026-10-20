@@ -108,18 +108,24 @@ import { visibleHistoryItems } from '../core/ChatVisibleItems';
 import {
   ChatDisplayEntry, chatDisplayEntryKey, groupChatDisplay,
 } from '../core/ChatDisplayGroups';
+import { ChatLinkReason, ChatLinkTarget, ChatLinkTargetKind } from '../core/ChatLinkTarget';
+import { joinCwd, linkifyKnownFiles } from '../core/PathLinks';
 import { liveThinkingText } from '../core/ChatThinkBar';
 import { composerOverlayActive } from '../core/ComposerSuggestions';
 import { galleryFileName } from '../core/ImageSave';
 import { SaveOutcome, saveBytes } from '../platform/Pickers';
 import { decodeImageSync } from '../platform/ImageCodec';
+import { openExternalUrl } from '../platform/ExternalOpen';
 import { harnessState, harnessVm } from './AppRuntime';
 import { ChatDisplayEntryRow } from './ProcessGroupRow';
+import { SessionFileRef } from '../core/SessionFileRefs';
+import { sessionFileList } from './SessionFilesSheet';
 import { ChatStatusBar } from './ChatStatusBar';
 import { ApprovalPanel, QuestionCard } from './ChatDetailPanels';
 import { ChatHeaderPanelHost, SHEET_FILES, SHEET_FULL_ACCESS } from './ChatHeader';
 import { TrajectoryScreen } from './TrajectoryScreen';
 import { ChatComposer } from './ChatComposer';
+import { common } from '@kit.AbilityKit';
 
 /** 待回答问题区的高度上限：对位源工程 `heightIn(max = 340.dp)`。 */
 const QUESTION_PANEL_MAX_HEIGHT_VP: number = 340;
@@ -191,6 +197,14 @@ export struct ChatDetail {
   private projHasHistory: boolean = false;
   private projShowContext: boolean = false;
   private projItems: ChatDisplayItem[] = [];
+  /**
+   * 与 `projItems` **同时算出**的已知文件路径（本会话交付物 + 历史里提到的文件）。
+   *
+   * 为什么跟着缓存一起存：`sessionFileList` 要**遍历全部历史事件**，而
+   * `computeDisplayItems` 每帧都被调（流式期间每秒几十次）—— 每帧重扫一遍几百条事件
+   * 正是这个文件头反复强调要避免的那类白烧 CPU。它只在投影缓存未命中时才重算。
+   */
+  private projKnownPaths: string[] = [];
 
   /**
    * 滚动代际。停手后延时解冻的定时器要认这个值，**只有当前代际**的定时器才能解冻。
@@ -371,15 +385,61 @@ export struct ChatDetail {
     this.projHistory = history;
     this.projHasHistory = history !== null;
     this.projShowContext = showContext;
-    this.projItems = visibleHistoryItems(history, showContext);
+    const paths: string[] = this.knownFilePaths(history);
+    this.projKnownPaths = paths;
+    this.projItems = this.linkified(visibleHistoryItems(history, showContext), paths);
     return this.projItems;
+  }
+
+  /**
+   * 本会话「提到过的文件」的绝对路径清单。
+   *
+   * 与「本会话的文件」面板**同一个出处**（`ui/SessionFilesSheet.ets` 的 `sessionFileList`）：
+   * 源工程也是直接从 `sessionFileList(history)` 取（`ui/chat/ChatDetail.kt` 渲染正文之前）。
+   * 若这里另起一套取法，面板里能点开的文件在正文里可能点不动 —— 用户会认定是链接坏了。
+   */
+  private knownFilePaths(history: ChatHistory | null): string[] {
+    const refs: SessionFileRef[] = sessionFileList(history);
+    const out: string[] = [];
+    for (let i = 0; i < refs.length; i++) {
+      out.push(refs[i].path);
+    }
+    return out;
+  }
+
+  /**
+   * 正文文件链接化：把「已落盘：report.md」这种纯文本文件名变成可点链接。
+   *
+   * 只对 USER / ASSISTANT 两类做（源工程同款判据）：工具行的正文是命令与输出，
+   * 那一段有自己的等宽排版与折叠规则，塞进链接语法只会让它在详情块里显示成一串标记。
+   *
+   * 复制一份、只换正文（`withBody`）而不是就地改：历史投影**带缓存**，
+   * 就地改会把缓存对象一起改掉。
+   */
+  private linkified(items: ChatDisplayItem[], paths: string[]): ChatDisplayItem[] {
+    if (paths.length === 0) {
+      return items;
+    }
+    const out: ChatDisplayItem[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const item: ChatDisplayItem = items[i];
+      if (item.kind !== ChatItemKind.USER && item.kind !== ChatItemKind.ASSISTANT) {
+        out.push(item);
+        continue;
+      }
+      const linked: string = linkifyKnownFiles(item.body, paths);
+      out.push(linked === item.body ? item : item.withBody(linked));
+    }
+    return out;
   }
 
   private computeDisplayItems(): ChatDisplayItem[] {
     const history: ChatHistory | null = this.st().history;
     const showContext: boolean = this.st().showContext;
     const out: ChatDisplayItem[] = this.historyProjection(history, showContext).slice();
-    const live: ChatDisplayItem[] = this.liveItems();
+    // 流式项每帧重建，所以也得每帧链接化；它只有寥寥几项（正在流的那条正文 + 活动行），
+    // 与「几百条历史事件重扫一遍」是两码事（后者已随投影一起缓存，见 `projKnownPaths`）。
+    const live: ChatDisplayItem[] = this.linkified(this.liveItems(), this.projKnownPaths);
     for (let i = 0; i < live.length; i++) {
       out.push(live[i]);
     }
@@ -608,6 +668,88 @@ export struct ChatDetail {
     this.viewerBytes = null;
     this.viewerPixelMap = null;
     this.viewerName = '';
+  }
+
+  /**
+   * 会话正文里点了链接：按目标类型分流。
+   *
+   * 对位源工程 `ui/chat/ChatLinkHandlers.kt` 的 `rememberSessionLinkHandler` ——
+   * 判断规则住在 `core/ChatLinkTarget.ts`（可单测），这里只做「怎么办」：
+   *
+   * | 类型 | 怎么办 | 为什么 |
+   * |---|---|---|
+   * | 服务端绝对路径 | 加载并**打开「本会话的文件」面板** | 只加载不开面板 = 点了没反应（见下） |
+   * | http(s) | 交给系统浏览器 | |
+   * | 相对路径 | **先拼上会话 cwd** 再当绝对路径走 | 模型常写 `docs/x.md` 这种相对路径 |
+   * | 锚点 / 其它协议 / 空 | 明确告诉用户不支持 | 不能让点击**静默失败** |
+   */
+  private openChatLink(url: string): void {
+    const target: ChatLinkTarget = ChatLinkTarget.classify(url);
+    if (target.kind === ChatLinkTargetKind.SERVER_PATH) {
+      this.openSessionFileFromLink(target.path);
+      return;
+    }
+    if (target.kind === ChatLinkTargetKind.WEB) {
+      const context: common.Context | undefined = this.getUIContext().getHostContext();
+      if (context === undefined || !openExternalUrl(context, target.path)) {
+        this.toast($r('app.string.link_open_failed'));
+      }
+      return;
+    }
+    if (target.reason === ChatLinkReason.RELATIVE_PATH) {
+      const cwd: string | null = this.cwdAbsolute();
+      if (cwd !== null && cwd.length > 0) {
+        this.openSessionFileFromLink(joinCwd(cwd, target.path));
+        return;
+      }
+      // 拿不到 cwd（本工程实测 `/` 之前的字段多为空）时给同一句提示：
+      // 用户至少知道「需要一个基准路径」，而不是以为链接坏了。
+      this.toast($r('app.string.link_relative_path'));
+      return;
+    }
+    this.toast(this.linkReasonText(target.reason));
+  }
+
+  /**
+   * 打开服务端路径：**既加载又开面板**。
+   *
+   * 只调 `openSessionFile` 是不行的 —— 它只把文件加载进状态，展示它的
+   * 「本会话的文件」面板由 `sheetOpen` / `sheetKind` 控制。只加载不开面板，
+   * 用户看到的就是「点了完全没反应」（源工程 2026-10-19 真机实测：日志与 resolve
+   * 都成功了，屏幕上什么都没发生）。
+   */
+  private openSessionFileFromLink(path: string): void {
+    const vm: HarnessViewModel | null = this.vm();
+    if (vm === null) {
+      return;
+    }
+    void vm.openSessionFile(path);
+    this.sheetKind = SHEET_FILES;
+    this.sheetOpen = true;
+  }
+
+  /** 会话的工作目录（绝对）。拿不到就是 null —— 相对路径那一支会据此降级。 */
+  private cwdAbsolute(): string | null {
+    const session: ChatSession | null = this.currentSession();
+    return session === null ? null : session.cwdAbsolute;
+  }
+
+  /** 不支持的原因 → 给用户看的那句话。 */
+  private linkReasonText(reason: ChatLinkReason | null): Resource {
+    if (reason === ChatLinkReason.ANCHOR) {
+      // 锚点是「同一页内的跳转」，本 App 没有「同一页」这个概念，说了用户也不懂，
+      // 只说明「需要网址」即可。
+      return $r('app.string.link_anchor_unsupported');
+    }
+    if (reason === ChatLinkReason.UNKNOWN_SCHEME) {
+      return $r('app.string.link_scheme_unsupported');
+    }
+    // RELATIVE_PATH / EMPTY 共用一句：要点都是「告诉用户去哪儿找这个文件」。
+    return $r('app.string.link_relative_path');
+  }
+
+  private toast(message: Resource): void {
+    this.getUIContext().getPromptAction().showToast({ message: message });
   }
 
   /**
@@ -922,6 +1064,9 @@ export struct ChatDetail {
               },
               onOpenImage: (bytes: Uint8Array, name: string): void => {
                 this.openImageViewer(bytes, name);
+              },
+              onLink: (url: string): void => {
+                this.openChatLink(url);
               },
               // 展开态与切换回调由父组件持有（理由见 `expandedGroups` 的注释）。
               // `expanded` 必须是 `@Prop`：普通成员不会被 ArkUI 重绘回写，

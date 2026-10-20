@@ -45,6 +45,7 @@ import { MARKDOWN_TABLE_MIN_COLUMN_VP, markdownTableColumnWidths, MdBlock, MdBlo
   markdownBlocks } from '../core/MarkdownLite';
 import { CodeSegment, CodeTokenKind, codeSegments, highlightCode } from '../core/CodeHighlight';
 import { writeClipboardText } from '../platform/Clipboard';
+import { InlineText } from './InlineText';
 
 /**
  * 高亮缓存的容量上限（条数）。
@@ -72,6 +73,13 @@ const CODE_CACHE_LIMIT: number = 8;
 export struct MarkdownView {
   body: string = '';
   textScale: number = 1;
+  /**
+   * 点链接（标题 / 列表 / 引用 / 正文段落里的 `[文字](目标)`）。
+   *
+   * 资源在「文件」页预览里不会出现，那里可以不传（默认为空实现，点了没反应但不报错）。
+   * 表格单元格不经过这里 —— 理由见 `ui/InlineText.ets` 文件头。
+   */
+  onLink: (url: string) => void = (): void => {};
 
   private blocks(): MdBlock[] {
     return markdownBlocks(this.body);
@@ -352,22 +360,32 @@ export struct MarkdownView {
   @Builder
   blockView(block: MdBlock, index: number) {
     if (block.kind === MdBlockKind.HEADING) {
-      Text(inlineMarkup(block.text))
-        .fontSize(this.headingSize(block.level))
-        .fontWeight(block.level <= 3 ? FontWeight.Bold : FontWeight.Medium)
+      InlineText({
+        text: block.text,
+        fontSize: this.headingSize(block.level),
+        fontWeight: block.level <= 3 ? FontWeight.Bold : FontWeight.Medium,
+        onLink: this.onLink,
+      })
         .width('100%')
         .margin({ top: 8, bottom: 2 })
-        .copyOption(CopyOptions.LocalDevice)
     } else if (block.kind === MdBlockKind.BULLET) {
       Row() {
         Text('•')
           .fontSize(this.scaled(14))
           .fontColor($r('sys.color.ohos_id_color_text_secondary'))
-        Text(inlineMarkup(block.text))
-          .fontSize(this.scaled(14))
-          .layoutWeight(1)
-          .margin({ left: 6 })
-          .copyOption(CopyOptions.LocalDevice)
+        // `layoutWeight` 挂在标准容器（Column）上而不是自定义组件实例上：
+        // 自定义组件实例只保证收通用属性，`layoutWeight` 这类影响父级测量的属性
+        // 在实例上是否生效没有明确保障 —— 多套一层零风险。
+        Column() {
+          InlineText({
+            text: block.text,
+            fontSize: this.scaled(14),
+            onLink: this.onLink,
+          })
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+        .margin({ left: 6 })
       }
       .width('100%')
       .padding({ left: 8 })
@@ -378,10 +396,15 @@ export struct MarkdownView {
           .fontSize(this.scaled(14))
           .fontColor($r('sys.color.ohos_id_color_text_secondary'))
           .width(22)
-        Text(inlineMarkup(block.text))
-          .fontSize(this.scaled(14))
-          .layoutWeight(1)
-          .copyOption(CopyOptions.LocalDevice)
+        Column() {
+          InlineText({
+            text: block.text,
+            fontSize: this.scaled(14),
+            onLink: this.onLink,
+          })
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
       }
       .width('100%')
       .padding({ left: 8 })
@@ -394,12 +417,17 @@ export struct MarkdownView {
           .width(3)
           .alignSelf(ItemAlign.Stretch)
           .backgroundColor($r('sys.color.ohos_id_color_emphasize'))
-        Text(inlineMarkup(block.text))
-          .fontSize(this.scaled(14))
-          .layoutWeight(1)
-          .fontColor($r('sys.color.ohos_id_color_text_secondary'))
-          .margin({ left: 8 })
-          .copyOption(CopyOptions.LocalDevice)
+        Column() {
+          InlineText({
+            text: block.text,
+            fontSize: this.scaled(14),
+            secondary: true,
+            onLink: this.onLink,
+          })
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+        .margin({ left: 8 })
       }
       .width('100%')
       .padding({ top: 2, bottom: 2 })
@@ -417,11 +445,13 @@ export struct MarkdownView {
         .width('100%')
         .margin({ top: 8, bottom: 8 })
     } else {
-      Text(inlineMarkup(block.text))
-        .fontSize(this.scaled(14))
-        .lineHeight(this.scaled(21))
+      InlineText({
+        text: block.text,
+        fontSize: this.scaled(14),
+        lineHeight: this.scaled(21),
+        onLink: this.onLink,
+      })
         .width('100%')
-        .copyOption(CopyOptions.LocalDevice)
     }
   }
 

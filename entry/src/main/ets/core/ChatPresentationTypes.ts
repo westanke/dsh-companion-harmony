@@ -224,6 +224,19 @@ export class ChatDisplayItem {
     return new ChatDisplayItem(id, this.seq, this.kind, title, body, this.streaming,
       this.attachments, actions, tools, this.failure, this.time);
   }
+
+  /**
+   * 派生一份「只换正文」的副本（对应源工程 `item.copy(body = linked)`）。
+   *
+   * 给正文文件链接化用（`core/PathLinks.ts`）：历史投影**带缓存**（`ui/ChatDetail.ets` 的
+   * `projItems`），就地改 `body` 会把缓存里的那一条也一起改掉 —— 下次命中缓存拿到的就是
+   * 「已经链接化过的正文」。虽然 `linkifyKnownFiles` 是幂等的（不会二次包裹），
+   * 但缓存对象被外部改写这种副作用会随增量改动变成真 bug，所以照源工程的做法复制一份。
+   */
+  withBody(body: string): ChatDisplayItem {
+    return new ChatDisplayItem(this.id, this.seq, this.kind, this.title, body, this.streaming,
+      this.attachments, this.actions, this.tools, this.failure, this.time);
+  }
 }
 
 export class ChatDelta {

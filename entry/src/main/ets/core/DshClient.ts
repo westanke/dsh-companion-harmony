@@ -20,7 +20,8 @@
 import {
   AgentPreset, ChatHistory, ChatSession, ChatWorkspace, CommandDescriptor, CommandExecution,
   CreatedSession, CustomProviderCreate, DeviceView, DirectoryPage, DshApiException, FileContent,
-  HealthView, ModelSelection, PairingResult, PendingApproval, PendingQuestionSet, PluginInventory,
+  HealthView, ModelSelection, PairingResult, PendingApproval, PendingQuestionSet,
+  PermissionCatalog, PluginInventory,
   PluginToggleRequest, PluginToggleResult, PromptPart, ProviderModel, ProviderPatch,
   ProviderSettings, QuestionAnswer, QuestionAnswerRequest, RenamedSession, ResolvedPath,
   RootView, SessionModels, TrashEntry, UploadedAttachment, WorkspaceEvent,
@@ -700,6 +701,36 @@ export class DshClient {
   pluginInventory(): Promise<PluginInventory> {
     return this.getJson('settings/plugins', true)
       .then((map: JsonMap | null): PluginInventory => PluginInventory.fromJson(map));
+  }
+
+  /**
+   * 权限档位**候选项**目录（`GET /chat/permission-presets`，bridge ≥ 2.4.2）。
+   *
+   * ## 为什么必须单独取、不能只读会话投影
+   *
+   * 内核把预设清单放在一个独立的远程服务（`permissionPresets.catalog()`）上，
+   * 而投影里那条 `permissions` wire 视图**只给 `currentValue`**
+   * （`wire.view: state => ({ currentValue })`）——拿得到当前档位、列不出候选。
+   * 源工程 v2.2.44 之前读投影里的 `options[]`，于是整条恒为空、
+   * 权限 Pill 与 ⋯ 菜单的权限项在真机上**从不渲染**。
+   *
+   * ## 老 bridge 必须容忍失败
+   *
+   * 老 bridge 没有这条路由，会回 404 `ROUTE_NOT_FOUND`。**这里不抛错，返回 null**：
+   * 目录是「锦上添花」——没有它，界面仍要渲染一个**不可点**的当前档位标签
+   * （用户至少看得见自己在什么档位上），而调用方也就能照常连接。
+   * 抛出去的话，一次目录拉取失败会连累整个连接流程。
+   */
+  async permissionPresets(): Promise<PermissionCatalog | null> {
+    try {
+      const map: JsonMap | null = await this.getJson('chat/permission-presets', true);
+      return PermissionCatalog.fromJson(map);
+    } catch (failure) {
+      if (failure instanceof DshApiException && failure.code === 'ROUTE_NOT_FOUND') {
+        return null;
+      }
+      throw failure;
+    }
   }
 
   /**

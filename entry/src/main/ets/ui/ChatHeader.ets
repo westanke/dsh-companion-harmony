@@ -181,7 +181,10 @@ export struct ChatHeaderPanelHost {
 
   private permission(): PermissionSelect | null {
     const history: ChatHistory | null = this.st().history;
-    return history === null ? null : permissionSelectOf(history);
+    // 候选**不来自投影**：投影那条 wire 视图只给 `currentValue`，列不出候选
+    // （源工程 v2.2.44 真机验收实测：读投影 options 恒为空 → 整条权限入口都不渲染）。
+    // 候选来自连接时单独取的目录（`state.permissionCatalog`），这里只是把它递给解析函数。
+    return history === null ? null : permissionSelectOf(history, this.st().permissionCatalog);
   }
 
   private approvalIsNone(): boolean {
@@ -263,14 +266,19 @@ export struct ChatHeaderPanelHost {
     });
 
     const permission: PermissionSelect | null = this.permission();
-    if (permission !== null && permission.options.length > 0) {
+    // 候选项为空时**仍然**渲染「访问权限 · 当前档位」那一行（源工程 `PermissionMenuItems`
+    // 的同款注释）：那是用户在菜单里唯一能看到「我现在是什么权限档位」的地方。
+    // 只有这一行、下面没有可选项时菜单是只读的，但「看不见」比「看得见却切不了」
+    // 更让人怀疑 App 坏了 —— v2.2.44 真机验收里，这一行连同整个权限入口一起消失了。
+    if (permission !== null) {
       out.push({
-        value: `${this.resText($r('app.string.access_mode'))} · ${this.permissionLabel(permission.currentValue, '')}`,
+        value: `${this.resText($r('app.string.access_mode'))} · `
+          + `${this.permissionLabel(permission.currentValue, this.permissionCurrentName())}`,
         enabled: false,
         action: (): void => {
         },
       });
-      const permissionEnabled: boolean = this.canWrite() && !this.st().busy;
+      const permissionEnabled: boolean = this.permissionPillEnabled();
       for (let i = 0; i < permission.options.length; i++) {
         const option: PermissionOption = permission.options[i];
         if (option.value === 'custom') {
@@ -328,6 +336,154 @@ export struct ChatHeaderPanelHost {
     }
   }
 
+  // ————————————————— 权限档位 Pill（顶栏那枚小胶囊）—————————————————
+
+  /**
+   * 当前档位在**候选项里的展示名**（服务端给的，可能是「Workspace Write」这种
+   * 比内置文案更具体的说法）；候选为空或没匹配上就是空串。
+   *
+   * 抽出来给两个入口共用（Pill 与 ⋯ 菜单的标题行）—— 两处显示不一致的话，
+   * 用户会以为是两个不同的设置。
+   */
+  private permissionCurrentName(): string {
+    const permission: PermissionSelect | null = this.permission();
+    if (permission === null) {
+      return '';
+    }
+    for (let i = 0; i < permission.options.length; i++) {
+      if (permission.options[i].value === permission.currentValue) {
+        return permission.options[i].name;
+      }
+    }
+    return '';
+  }
+
+  /**
+   * 权限档位胶囊上那行字。候选为空时只能用内置文案 + 原值兜底 ——
+   * 那时界面仍要显示当前档位（见下面 Pill 那一段注释）。
+   */
+  private permissionPillLabel(): string {
+    const permission: PermissionSelect | null = this.permission();
+    if (permission === null) {
+      return '';
+    }
+    return this.permissionLabel(permission.currentValue, this.permissionCurrentName());
+  }
+
+  /** 候选非空才谈得上切换；空的时候胶囊不可点（但仍显示当前档位）。 */
+  private permissionSwitchable(): boolean {
+    const permission: PermissionSelect | null = this.permission();
+    return permission !== null && permission.options.length > 0;
+  }
+
+  /**
+   * Pill 能否点：与 ⋯ 菜单里权限项**同一条判据**（要能写、且没有别的事在跑）。
+   *
+   * 连 `danger-full-access` 都一并交给 `onPermissionPicked` 走二次确认 —— 档位越高越要过闸，
+   * 这条判据在两个入口必须一致，否则用户会发现「Pill 里点得动、菜单里点不动」。
+   */
+  private permissionPillEnabled(): boolean {
+    return this.canWrite() && !this.st().busy;
+  }
+
+  /**
+   * Pill 点开的档位菜单：与 ⋯ 菜单里权限项那一段**逐条对应**
+   * （`custom` 跳过、当前档位带 `✓`、`danger-full-access` 走二次确认）。
+   *
+   * 与 ⋯ 菜单的唯一差别是**没有那行只读的标题**：胶囊本身已经写着当前档位了。
+   */
+  private permissionMenuItems(): MenuElement[] {
+    const out: MenuElement[] = [];
+    const permission: PermissionSelect | null = this.permission();
+    if (permission === null) {
+      return out;
+    }
+    const enabled: boolean = this.permissionPillEnabled();
+    for (let i = 0; i < permission.options.length; i++) {
+      const option: PermissionOption = permission.options[i];
+      if (option.value === 'custom') {
+        continue;
+      }
+      const mark: string = option.value === permission.currentValue ? '✓ ' : '';
+      out.push({
+        value: `${mark}${this.permissionLabel(option.value, option.name)}`,
+        enabled: enabled,
+        action: (): void => {
+          this.onPermissionPicked(option.value);
+        },
+      });
+    }
+    return out;
+  }
+
+  /**
+   * 顶栏「已连接 / 已断开」后面那枚**权限档位胶囊**。
+   *
+   * ## 为什么在这里、为什么是这个形态
+   *
+   * 源工程原先把它放在**输入区上方**且 `.fillMaxWidth()` 独占一整条，用户 2026-10-19
+   * 反馈「影响页面可视区域」；后来挪到会话顶栏、贴在状态文字后面，宽度自适应。
+   * 挪动的理由不只是省一行 —— 语义也更顺：它跟「已连接」一样，都是**当前会话的处境**。
+   *
+   * ## 与 ⋯ 菜单同源，是「第三个入口」不是第二套语义
+   *
+   * 候选来自同一份 `permission()`，切换动作也走同一个 `onPermissionPicked`
+   * （`danger-full-access` 照样过二次确认面板）。所以这里**不重写**任何判断逻辑，
+   * 只换容器 —— 两处行为不可能出现分歧。
+   *
+   * ## 候选为空时仍要渲染（源工程踩过的坑）
+   *
+   * 源工程原先有一句「候选项为空就整个入口不渲染」，把「拿不到候选项」升级成
+   * 「入口消失」；v2.2.44 真机验收时看到的正是整条 Pill + ⋯ 权限项一起不见、
+   * 而 PARITY 上还标着 done。现在候选项来自独立目录接口，老 bridge（没这条路由）
+   * 时列表为空 —— 那时只渲染一个**不可点**的档位标签：
+   * 用户至少看得见自己在什么档位上，切不了是「服务端还没给这个能力」，
+   * 不是「界面出故障了」。
+   *
+   * 胶囊本体（可切换 / 不可切换两态）。
+   *
+   * 为什么写成两个分支而不是「一个胶囊 + `.enabled(false)`」：`.bindMenu` 的弹出
+   * 到底是否受 `enabled` 抑制，在 ArkTS 侧没有明确保证。分支摆在明面上、行为可预期 ——
+   * 不可切换时压根没有菜单可弹，而不是「弹一个空菜单」。
+   */
+  @Builder
+  permissionPill() {
+    if (this.permissionSwitchable()) {
+      Row() {
+        Text('🔒')
+          .fontSize(10)
+          .fontColor($r('sys.color.ohos_id_color_text_secondary'))
+        Text(this.permissionPillLabel())
+          .fontSize(11)
+          .fontWeight(FontWeight.Medium)
+          .maxLines(1)
+          .fontColor($r('sys.color.ohos_id_color_text_secondary'))
+          .margin({ left: 3 })
+      }
+      .padding({ left: 7, right: 7, top: 2, bottom: 2 })
+      .borderRadius(999)
+      .backgroundColor($r('sys.color.ohos_id_color_sub_background'))
+      .opacity(this.permissionPillEnabled() ? 1 : 0.5)
+      .bindMenu(this.permissionMenuItems())
+    } else {
+      Row() {
+        Text('🔒')
+          .fontSize(10)
+          .fontColor($r('sys.color.ohos_id_color_text_secondary'))
+        Text(this.permissionPillLabel())
+          .fontSize(11)
+          .fontWeight(FontWeight.Medium)
+          .maxLines(1)
+          .fontColor($r('sys.color.ohos_id_color_text_secondary'))
+          .margin({ left: 3 })
+      }
+      .padding({ left: 7, right: 7, top: 2, bottom: 2 })
+      .borderRadius(999)
+      .backgroundColor($r('sys.color.ohos_id_color_sub_background'))
+      .opacity(0.5)
+    }
+  }
+
   /** 插话：固定 steer 提交（不受设置里的「繁忙时默认行为」影响）。 */
   private steer(): void {
     const vm: HarnessViewModel | null = this.vm();
@@ -364,10 +520,23 @@ export struct ChatHeaderPanelHost {
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .width('100%')
-          StatusLabel({
-            label: this.st().eventsConnected ? $r('app.string.online') : $r('app.string.offline'),
-            active: this.st().eventsConnected,
-          })
+          // 状态行：连接状态（绿/红点）+ 权限档位 Pill **同一行**。
+          // Pill 原先在源工程里贴在输入区上方且独占一整条（用户 2026-10-19 反馈
+          // 「影响页面可视区域」），挪到这里既省掉那一行，语义也更顺：两者都是
+          // 「当前会话的处境」。间距 8vp 对位源工程的 `spacedBy(8.dp)`。
+          Row() {
+            StatusLabel({
+              label: this.st().eventsConnected ? $r('app.string.online') : $r('app.string.offline'),
+              active: this.st().eventsConnected,
+            })
+            if (this.permission() !== null) {
+              Row() {
+                this.permissionPill()
+              }
+              .margin({ left: 8 })
+            }
+          }
+          .alignItems(VerticalAlign.Center)
           if (this.currentSession() !== null
             && (this.currentSession() as ChatSession).pendingInteraction === 'approval') {
             Row() {

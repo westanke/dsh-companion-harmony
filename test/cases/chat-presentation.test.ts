@@ -5,7 +5,8 @@ import {
   chatTurnFailure, deliverablesOf, displayItemsOf, handoffPathOf, permissionSelectOf, todoItemsOf,
 } from '../../entry/src/main/ets/core/ChatPresentation.ts';
 import {
-  ChatHistory, HistoryEntry, SessionEvent, TodoItem, WorkspaceEvent,
+  ChatHistory, HistoryEntry, PermissionCatalog, PermissionOption, SessionEvent, TodoItem,
+  WorkspaceEvent,
 } from '../../entry/src/main/ets/core/Models.ts';
 import { JsonAccess } from '../../entry/src/main/ets/core/JsonAccess.ts';
 
@@ -193,6 +194,52 @@ test('待办与权限控件从会话投影里读出来', () => {
   assert.deepEqual(permissions!.options.map((it) => it.value),
     ['read-only', 'workspace-write', 'danger-full-access']);
   assert.equal(permissions!.options[1].description, 'Write inside the workspace');
+});
+
+test('权限档位：投影只给 currentValue 时，候选项从目录补（源工程 v2.2.44 的真缺陷）', () => {
+  // 新版内核那条 wire 视图**只给 currentValue** —— 拿得到当前档位、列不出候选。
+  // 源工程此前读投影 options，于是整条权限入口在真机上从不渲染。候选只能来自目录接口。
+  const value: ChatHistory = history([],
+    '{"values":{"permissions":{"currentValue":"workspace-write"}}}');
+  const projectionOnly = permissionSelectOf(value);
+  assert.notEqual(projectionOnly, null);
+  assert.equal(projectionOnly!.currentValue, 'workspace-write');
+  assert.deepEqual(projectionOnly!.options, [], '无目录时候选就是空（调用方仍要渲染只读标签）');
+
+  const catalog = new PermissionCatalog([
+    new PermissionOption('read-only', 'Read Only'),
+    new PermissionOption('workspace-write', 'Workspace Write'),
+    new PermissionOption('danger-full-access', 'Full access'),
+  ], 'workspace-write');
+  const merged = permissionSelectOf(value, catalog);
+  assert.equal(merged!.currentValue, 'workspace-write');
+  assert.deepEqual(merged!.options.map((it) => it.value),
+    ['read-only', 'workspace-write', 'danger-full-access']);
+});
+
+test('权限档位：投影内联候选优先于目录（老 bridge 可能仍在投影里给）', () => {
+  const value: ChatHistory = history([], '{"values":{"permissions":{"currentValue":"read-only",'
+    + '"options":[{"value":"read-only"}]}}}');
+  const catalog = new PermissionCatalog([new PermissionOption('workspace-write', '工作区写入')], 'read-only');
+  const merged = permissionSelectOf(value, catalog);
+  assert.deepEqual(merged!.options.map((it) => it.value), ['read-only'], '内联非空就不该被目录覆盖');
+  assert.equal(merged!.options[0].name, 'read-only', '缺 name 时退回 value，不显示空白');
+});
+
+test('权限档位：投影形状漂移时按 currentValue → preset → sandbox 依次降级', () => {
+  // 新版投影给 { preset, sandbox }，currentValue 直接消失 —— 内核不保证字段稳定，
+  // 只能「读到什么算什么」。
+  const byPreset: ChatHistory = history([],
+    '{"values":{"permissions":{"preset":"read-only","sandbox":"workspace-write"}}}');
+  assert.equal(permissionSelectOf(byPreset)!.currentValue, 'read-only', 'preset 优先于 sandbox');
+
+  const bySandbox: ChatHistory = history([],
+    '{"values":{"permissions":{"sandbox":"workspace-write"}}}');
+  assert.equal(permissionSelectOf(bySandbox)!.currentValue, 'workspace-write');
+
+  // 三者都没有 → 这条投影没有权限信息，返回 null（界面整条不渲染，而不是显示空档位）。
+  const none: ChatHistory = history([], '{"values":{"permissions":{"approval":"on-request"}}}');
+  assert.equal(permissionSelectOf(none), null);
 });
 
 test('投影缺失或形状不对时安静返回空，不抛异常', () => {

@@ -50,6 +50,8 @@ export struct ChatDisplayEntryRow {
   onFork: (atSeq: number) => void = (): void => {};
   /** 点消息里的图片 → 全屏查看；查看器由 `ChatDetail` 持有。 */
   onOpenImage: (bytes: Uint8Array, name: string) => void = (): void => {};
+  /** 点正文里的链接（会话文件名 / 网址）：透传给 `ChatMessageView`。 */
+  onLink: (url: string) => void = (): void => {};
 
   /** 本组是否展开（只有多项目的过程组会用到；由父组件持有）。 */
   @Prop expanded: boolean = false;
@@ -92,6 +94,7 @@ export struct ChatDisplayEntryRow {
         onRetry: this.onRetry,
         onFork: this.onFork,
         onOpenImage: this.onOpenImage,
+        onLink: this.onLink,
       })
     }
     .width('100%')

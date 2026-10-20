@@ -8,7 +8,8 @@
  * 拆分来龙去脉见 `ChatPresentation.ts` 文件头。
  */
 
-import { ChatHistory, PermissionOption, PermissionSelect, SessionEvent, TodoItem, WorkspaceEvent } from './Models';
+import { ChatHistory, PermissionCatalog, PermissionOption, PermissionSelect, SessionEvent, TodoItem,
+  WorkspaceEvent } from './Models';
 import { JsonAccess, JsonMap } from './JsonAccess';
 import { isBlank, isNotBlank } from './TextPredicates';
 import { ChatJson } from './ChatJson';
@@ -129,8 +130,29 @@ export function todoItemsOf(history: ChatHistory): TodoItem[] {
   return out;
 }
 
-/** 对应 Kotlin 扩展函数 `ChatHistory.permissionSelect()`。 */
-export function permissionSelectOf(history: ChatHistory): PermissionSelect | null {
+/**
+ * 对应 Kotlin 扩展函数 `ChatHistory.permissionSelect(catalog)`。
+ *
+ * ## 投影形状会漂移，只能「读到什么算什么」
+ *
+ * 内核 `permissions` 投影的形状随版本变：旧版给 `currentValue` / `options`，
+ * 新版给 `{ preset, sandbox, approval, seeded }`，`currentValue` 直接消失。
+ * wire schema 由内核定义，本仓不能要求上游保持某个字段，所以依次降级取值：
+ * `currentValue` → `preset` → `sandbox`，三者都没有才认为是「这条投影没有权限信息」。
+ *
+ * ## 为什么候选项要接 `catalog`
+ *
+ * 同一版本内核把预设清单挪到了独立的远程服务上，投影里那条 wire 视图**只给
+ * `currentValue`** —— 于是「投影内联 options」这条路实测恒为空，界面就会拿不到候选、
+ * **整条权限入口都不渲染**（源工程 v2.2.44 真机验收时看到的正是这个症状）。
+ * 所以候选项按「投影内联优先、为空才用目录」的顺序取：
+ * 老 bridge 可能仍在内联（那种情况不该被目录覆盖），新 bridge 则靠目录兜住。
+ *
+ * `catalog` 默认 `null` 是**刻意的**：调用方还没有目录（未连接、老 bridge 404）时，
+ * 行为与移植前完全一致 —— 拿得到当前档位就返回，只是候选为空。
+ */
+export function permissionSelectOf(history: ChatHistory,
+    catalog: PermissionCatalog | null = null): PermissionSelect | null {
   const projections: JsonMap | null = JsonAccess.asMap(history.projections);
   const values: JsonMap | null = ChatJson.obj(projections, 'values');
   if (values === null) {
@@ -140,7 +162,9 @@ export function permissionSelectOf(history: ChatHistory): PermissionSelect | nul
   if (raw === null) {
     return null;
   }
-  const currentValue: string | null = ChatJson.str(raw, 'currentValue');
+  const currentValue: string | null = ChatJson.str(raw, 'currentValue')
+    ?? ChatJson.str(raw, 'preset')
+    ?? ChatJson.str(raw, 'sandbox');
   if (currentValue === null) {
     return null;
   }
@@ -152,11 +176,18 @@ export function permissionSelectOf(history: ChatHistory): PermissionSelect | nul
       continue;
     }
     const value: string | null = ChatJson.str(option, 'value');
-    const name: string | null = ChatJson.str(option, 'name');
-    if (value === null || name === null) {
+    if (value === null) {
       continue;
     }
+    // 名字缺失时**退回 value 本身**（源工程同款）：档位有值无名的场景下，
+    // 界面上显示 `workspace-write` 也比显示一片空白强。
+    const name: string | null = ChatJson.str(option, 'name') ?? value;
     options.push(new PermissionOption(value, name, ChatJson.str(option, 'description')));
+  }
+  if (options.length === 0 && catalog !== null) {
+    for (let i = 0; i < catalog.options.length; i++) {
+      options.push(catalog.options[i]);
+    }
   }
   return new PermissionSelect(options, currentValue);
 }

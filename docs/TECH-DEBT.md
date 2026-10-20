@@ -39,7 +39,17 @@
 | 文件 | 现测行数 | 计划拆为 | 判据（拆完必须满足） |
 |---|---|---|---|
 | `ui/SettingsScreen.ets` | 979 | `SettingsScreen.ets` / `SettingsGroups.ets` | 「外观」与「服务端信息」两组各自成 `@Component`，回调以 `(value) => void` 显式传入；设置页对外行为不变 |
-| `ui/ChatDetail.ets` | 1207 | `ChatDetail.ets` / `ChatDetailTodo.ets` / `ChatDetailOverlays.ets` | 待办面板、图片查看器、轨迹覆盖层各自成 `@Component`；`bindContentCover` 的 `isShow` 仍只有一个来源（住在 `ChatDetail`） |
+| `ui/ChatDetail.ets` | 1352 | `ChatDetail.ets` / `ChatDetailTodo.ets` / `ChatDetailOverlays.ets` | 待办面板、图片查看器、轨迹覆盖层各自成 `@Component`；`bindContentCover` 的 `isShow` 仍只有一个来源（住在 `ChatDetail`） |
+
+> **本次上调理由（2026-10-20，1207 → 1352，+145）**：接入「正文文件链接化」时，
+> `ui/ChatDetail.ets` 多出三块**必须住在装配层**的东西 ——
+> ① 已知文件清单与投影缓存同步（`knownFilePaths` / `projKnownPaths` + `linkified`），
+> ② 链接分流（`openChatLink` / `openSessionFileFromLink` / `linkReasonText`：要读 vm、
+> 要开 `sheetOpen`，两样都只有装配层拿得到），③ 大量注释（分流四条分支的判据、
+> 「只加载不开面板 = 点了没反应」这条真机结论）。
+> 判据函数本身（`ChatLinkTarget` / `PathLinks` / `InlineSegments`）**都不在本文件**，
+> 所以这里增的是装配代码而不是逻辑 —— 结构问题与上一条同源，
+> **清账方式不变**：仍按上表拆为三个 `@Component`，拆完行数回落到预算内。
 
 > **本次上调理由（2026-10-17）**：`ui/SettingsScreen.ets` 由 967 上调至 979（+12）。
 > 原因是修坑 40（`SwitchRow.title` / `description` 漏 `@Prop`）时**只增注释、不改结构** ——

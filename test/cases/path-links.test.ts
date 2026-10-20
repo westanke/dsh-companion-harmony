@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { linkifyKnownFiles } from '../../entry/src/main/ets/core/PathLinks.ts';
+import { joinCwd, linkifyKnownFiles } from '../../entry/src/main/ets/core/PathLinks.ts';
 
 /**
  * 正文文件链接化的门禁（对标源工程 `ChatPathLinksTest.kt`，源 v2.2.44 `a344e3f`）。
@@ -77,6 +77,29 @@ test('边界：紧跟中文全角括号仍可点，紧跟半角右括号不动',
   assert.equal(linkifyKnownFiles('（report.md）', known), '（[report.md](/a/report.md)）');
   // 半角右括号在排除集内 → 判为「已经是链接的一部分」，不动。
   assert.equal(linkifyKnownFiles('(report.md)', known), '(report.md)');
+});
+
+test('joinCwd：相对路径拼上会话工作目录', () => {
+  // 源工程 v2.2.44 补的那条分支：模型正文里的链接常写成 `docs/report.md`。
+  assert.equal(joinCwd('/root/workspace', 'docs/report.md'), '/root/workspace/docs/report.md');
+});
+
+test('joinCwd：两边多余 / 只留一个，不产生双斜杠', () => {
+  assert.equal(joinCwd('/root/workspace/', 'docs/x.md'), '/root/workspace/docs/x.md');
+  assert.equal(joinCwd('/root/workspace', '/docs/x.md'), '/root/workspace/docs/x.md');
+  assert.equal(joinCwd('/root/workspace/', '/docs/x.md'), '/root/workspace/docs/x.md');
+  // 根目录这一点最容易被拼成 `//docs/x.md`。
+  assert.equal(joinCwd('/', 'docs/x.md'), '/docs/x.md');
+  assert.equal(joinCwd('/', '/docs/x.md'), '/docs/x.md');
+});
+
+test('joinCwd：结果能被 linkify 后的链接目标直接使用（接口对齐）', () => {
+  // 这条钉的是两个函数的**接口**：相对路径拼成绝对路径后，必须与原清单里的绝对路径
+  // 逐字一致，否则「点开的文件」与「清单里的文件」成了两个不同的东西。
+  const known = ['/root/workspace/docs/report.md'];
+  const linked = linkifyKnownFiles('已落盘：report.md', known);
+  assert.equal(linked, '已落盘：[report.md](/root/workspace/docs/report.md)');
+  assert.equal(joinCwd('/root/workspace', 'docs/report.md'), known[0]);
 });
 
 test('文件名带正则特殊字符不会被当模式（点号必须转义）', () => {

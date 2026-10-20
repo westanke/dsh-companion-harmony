@@ -106,20 +106,24 @@
   > （设备只信任调试证书）。
   > **`1.0.0` / `1.0.1` 的包全部作废**：1.0.0 图标为 216×216 单层图；1.0.1 仍带旧 bundleName
   > 与 DeepSeek 品牌名，且 Profile 已随旧应用失效。
-- **产物校验**（**1.0.3 重出包**，2026-10-21；`stat` / `sha256sum` 实测回填）：
+- **产物校验**（**1.0.3 重出包**，2026-10-21 出包后 `stat` / `sha256sum` 实测回填）：
 
   | 产物 | 字节 | SHA-256 |
   |---|---|---|
-  | `…-1.0.3-release-signed.app` | 待回填 | 待回填 |
-  | `…-1.0.3-release-signed.hap` | 待回填 | 待回填 |
-  | `…-1.0.3-release-debugsigned.hap` | 待回填 | 待回填 |
+  | `…-1.0.3-release-signed.app` | 539 740 | `62cba73adb64484dcf00cc71914bf82bc8ed5f5d1f02cec1df4b2c53b3e75603` |
+  | `…-1.0.3-release-signed.hap` | 1 560 802 | `d581848f1f6a8caa20ee55e7cb21d7169d0ea3e0851b230d1d5a4282237c0527` |
+  | `…-1.0.3-release-debugsigned.hap` | 1 560 889 | `b4a8f696010b4054e8e0bf836712b1d1859c478936411965da57a63cf4cf5ace` |
 
-  > ⏳ 本表由**出包后紧接的一次提交**回填（RELEASE ⑤）—— 出包前无法预知字节数与摘要。
-  > **10-17 / 10-20 两批 1.0.3 包全部作废**，只认本表回填后的数字。
-  > `.app` 内层 hap 与 `…-1.0.3-release-signed.hap` 是**同一文件**（SHA 应相等），
-  > 双层 `verify-app` 均须 `Verify success`。
-  > 演示录屏沿用 1.0.2 的 `…-1.0.2-demo-9x16.mp4`：37 415 192 字节，
-  > `5be2680aacba5770379d847b2c71a29f02570af55e932943cd411591bd7e38bc`。
+  > **10-17 / 10-20 两批 1.0.3 包全部作废**，字节数与上面三行对不上的一律不是本版。
+  > `.app` 内层 hap 与 `…-1.0.3-release-signed.hap` 是**同一文件**（SHA 实测相等
+  > `d581848f…`），双层 `verify-app` 均 `Verify success`。
+  > **包内水印 `BUILD_COMMIT = 032ef56`**（出包所用提交，已在 `ets/modules.abc` 内实测命中；
+  > 包内 `versionCode` 1000003 / `versionName` 1.0.3 / `bundleName` `com.dsh.westanke`）。
+  > 构建走 `assembleApp -p buildMode=release`：compat 后 hap 由 3 297 952 字节（debug）降到
+  > 1 512 983 字节（release），确认 release 模式生效。
+  > 演示录屏沿用 1.0.2 的 `…-1.0.2-demo-9x16.mp4`（存放在仓库外的
+  > `/media/wangke/OFFICE/TRae_work/`）：37 415 192 字节，
+  > `5be2680aacba5770379d847b2c71a29f02570af55e932943cd411591bd7e38bc`（本轮复核未变）。
 
 - **历史产物校验**（2026-10-16）：
 

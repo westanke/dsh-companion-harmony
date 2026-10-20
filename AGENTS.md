@@ -144,6 +144,7 @@ ui/     ← 只消费 HarnessState，调 HarnessViewModel 动作；不持有协�
 - `Span 装分段样式，字号行高在 Text 上`
 - `投影只给 currentValue 就得另开目录接口`
 - `桩缺方法会同步抛、连坐整条链`
+- `注入点击驱动不了弹窗项，别当代码缺陷`
 
 > 新坑位：名字加进上面清单 + 原文写进 `docs/PORT-MAP.md` §6 并补 `### 同名` 锚点。
 

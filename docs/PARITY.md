@@ -38,9 +38,9 @@
 | GenUI 卡片（`dsh-ui` 围栏） | 无（自研 `GenUiBlocks`） | `ui/GenUiCard.ets` | ✅ | 22 种组件，23 用例 |
 | 工具调用详情 | 消息体 | `core/ChatToolFormat.ts`（+ `ChatToolItems.ts`） | ✅ | 18 用例 |
 | **工具调用专用块（Read / Terminal / Diff）** | 消息体 | `core/ToolBlocks.ts` + `ui/ToolBlockBody.ets` | ✅（未上机） | 源 `a96f5e7`（v2.2.43）。`toolBlockView()` 把 `read`/`read_image`/`bash`/`edit`/`write` 投影成三种专用长相，其余回落 Generic；含 `extractReadBody()`（剥 `<content>`、判 `N: ` 行号）与 `stripAnsiEscapes()`（手写扫描，残缺序列不吞正文）。界面由 `ToolCallDetailBlock` 按形态分派（`read` 失败不走专用块、`diff` 失败补错误块）。19 用例 |
-| **正文已知文件名链接化（已接入渲染路径）** | 会话文件清单 | `core/PathLinks.ts` + `core/InlineSegments.ts` + `ui/InlineText.ets` | ✅（未上机） | 源 `a344e3f`（v2.2.44）。`linkifyKnownFiles()`：唯一文件名才替换、不碰已有 Markdown 链接、只替换第一次；`inlineSegments()` 把 `[文字](目标)` 切成「普通文字 / 链接」分段，`InlineText`（`Text` + 逐段 `Span`）渲染；点击分流在 `ui/ChatDetail.ets`（服务端路径开文件面板并定位 / `http(s)` 外部浏览器 / 相对路径拼 cwd 再当绝对路径 / 其余提示不支持）。候选取自 `sessionFileList`（与「本会话的文件」面板**同一出处**）并跟随投影缓存。14 + 13 用例。见坑 46 |
+| **正文已知文件名链接化（已接入渲染路径）** | 会话文件清单 | `core/PathLinks.ts` + `core/InlineSegments.ts` + `ui/InlineText.ets` | ✅ | 源 `a344e3f`（v2.2.44）。`linkifyKnownFiles()`：唯一文件名才替换、不碰已有 Markdown 链接、只替换第一次；`inlineSegments()` 把 `[文字](目标)` 切成「普通文字 / 链接」分段，`InlineText`（`Text` + 逐段 `Span`）渲染；点击分流在 `ui/ChatDetail.ets`（服务端路径开文件面板并定位 / `http(s)` 外部浏览器 / 相对路径拼 cwd 再当绝对路径 / 其余提示不支持）。候选取自 `sessionFileList`（与「本会话的文件」面板**同一出处**）并跟随投影缓存。14 + 13 用例。见坑 46 |
 | **Markdown autolink 尖括号剥壳** | 无 | `core/ChatLinkTarget.ts` | ✅ | 源 `a344e3f`。`classify()` 先剥 `</abs/path>` 再分类，避免「翻倍路径」。4 用例 |
-| **访问权限档位 Pill（顶栏胶囊）** | `GET /chat/permission-presets` + `POST` 命令 | `core/ModelsConfig.ts` + `core/DshClient.ts` + `ui/ChatHeader.ets` | ✅（未上机） | 源 `a96f5e7` / `a344e3f`（v2.2.43–44）。投影 `permissions` **只给 `currentValue`**，候选必须走独立目录接口（bridge ≥ 2.4.2；**老 bridge 404 须容忍**，见坑 47）；胶囊贴在顶栏「已连接 / 已断开」之后、**宽度自适应不独占一行**（源 `ChatHeader.kt` 同款位置），与 ⋯ 菜单权限段**同源**（`selectPermissionPreset` → `executeCommand(id, "/permission <preset>")`），`danger-full-access` 走二次确认；候选取不到时仍渲染**不可点**的档位标签。档位名走 `currentValue` → `preset` → `sandbox` 降级 |
+| **访问权限档位 Pill（顶栏胶囊）** | `GET /chat/permission-presets` + `POST` 命令 | `core/ModelsConfig.ts` + `core/DshClient.ts` + `ui/ChatHeader.ets` | ✅ | 源 `a96f5e7` / `a344e3f`（v2.2.43–44）。投影 `permissions` **只给 `currentValue`**，候选必须走独立目录接口（bridge ≥ 2.4.2；**老 bridge 404 须容忍**，见坑 47）；胶囊贴在顶栏「已连接 / 已断开」之后、**宽度自适应不独占一行**（源 `ChatHeader.kt` 同款位置），与 ⋯ 菜单权限段**同源**（`selectPermissionPreset` → `executeCommand(id, "/permission <preset>")`），`danger-full-access` 走二次确认；候选取不到时仍渲染**不可点**的档位标签。档位名走 `currentValue` → `preset` → `sandbox` 降级 |
 | 审批（含 `full-access` 二次确认） | `POST /approvals` | `ui/ChatDetail.ets` | ✅ | 由 `AlertDialog` 改为底部面板 + 勾选闸门 |
 | AI 追问（ask） | 消息体 | `ui/ChatDetail.ets` | ✅ | 两道闸 |
 | 上下文注入来源显示 | 消息体 | `ChatPresentation` | ✅ | 受设置 `showContext` 控制 |
@@ -114,7 +114,7 @@
 
 | 状态 | 项数 |
 |---|---|
-| ✅ 已实现（其中 **3 行标注「未上机」**） | 31 |
+| ✅ 已实现（其中 **1 行标注「未上机」**） | 31 |
 | 🟡 已实现待真机验证 | 33 |
 | 🔵 有意的差异 | 3 |
 | ⛔ 不做 | 0 |
@@ -126,10 +126,15 @@
 > 「工具调用专用块」「正文已知文件名链接化」「访问权限档位 Pill」三行都是那次统计之后才进表的。
 > 本轮**逐行重数**得 **31 / 33 / 3**（总行数 67）。加行请顺手重数，别让统计与表格分家。
 >
-> **3 行标的是 `✅（未上机）`**：工具调用专用块、正文已知文件名链接化、访问权限档位 Pill ——
-> 它们**只是代码落盘 + `BUILD SUCCESSFUL` + 单测通过**，**未在设备上确认**。
-> 按图例口径本应记 🟡；此处沿用 2026-10-20 给工具块定下的写法，把「已实现」与「已上机」两个维度
-> **分开标注**，计数时算进 ✅，**读表请以行内标注为准**。
+> **1 行标的是 `✅（未上机）`**：工具调用专用块 —— 它**只是代码落盘 + `BUILD SUCCESSFUL` +
+> 单测通过**，**未在设备上确认**。按图例口径本应记 🟡；此处沿用 2026-10-20 给工具块定下的写法，
+> 把「已实现」与「已上机」两个维度**分开标注**，计数时算进 ✅，**读表请以行内标注为准**。
+>
+> **2026-10-20 上机后重标**：**正文已知文件名链接化**与**访问权限档位 Pill** 两行已由「未上机」
+> 升为 ✅（真机验收细节见 TESTING）。注意权限胶囊的**弹窗行点击**这一步受注入工具限制未单独触发
+> —— `uitest uiInput click` 与 `uinput -T -c` 都驱动不了 ArkUI `bindMenu` 弹窗项（注入点击被
+> 当作 dismiss 吞掉），属**工具局限、非代码缺陷**；该动作的 ⋯ 菜单路径已验通、与胶囊同源同值，
+> 故不写成「全链路逐点已验」。
 >
 > 2026-10-17 的 **18 条新增项**（第 1 / 2 / 3 / 4 批移植补齐 + 收口）已跑过编译与单测；其中
 > **6 条已上机确认**（消息时间戳、会话级状态条 / AI 标识、构建水印、主题三档、应用内字号缩放、

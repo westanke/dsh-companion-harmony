@@ -206,6 +206,11 @@ export struct AppShell {
   private reportErrorIfAny(): void {
     const vm = harnessVm();
     const st: HarnessState | null = this.st();
+    // 错误已被消费掉 → 去重记录一起归零（理由见 `ConnectScreen.reportErrorIfAny()`）：
+    // 同一个错误**再发生一次**必须照样弹，否则用户重试失败时会以为没点上。
+    if (st !== null && st.error === null) {
+      this.lastReported = null;
+    }
     if (vm === null || st === null || st.error === null) {
       return;
     }

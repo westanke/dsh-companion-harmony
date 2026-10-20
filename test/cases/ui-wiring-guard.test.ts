@@ -186,6 +186,11 @@ test('连接页必须自己把 state.error 报出来并清掉', () => {
   if (!code.includes('lastReported')) {
     missing.push('- 没有 lastReported：无法抑制重复文案');
   }
+  // 去重记录必须随错误被消费而复位 —— 真机上验过：点两次「重试连接」、两次都超时，
+  // 第二次一个字都不弹（去重记录永不复位），用户以为没点上。
+  if (!code.includes('lastReported = null')) {
+    missing.push('- lastReported 从不复位：同一个错误再发生一次会被静默吞掉（重试失败看着像没点上）');
+  }
   if (!code.includes("@Watch('onVmChanged')")) {
     missing.push("- revision 上没有 @Watch('onVmChanged')：vm 更新后不会走到报错逻辑");
   }

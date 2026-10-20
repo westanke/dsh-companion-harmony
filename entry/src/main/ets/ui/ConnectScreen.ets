@@ -73,6 +73,12 @@ export struct ConnectScreen {
   private reportErrorIfAny(): void {
     const vm: HarnessViewModel | null = this.vm();
     const st: HarnessState = this.st();
+    // 错误已被消费掉 → 去重记录一起归零。否则「同一个错误再发生一次」会被当成重复而静默：
+    // 用户点两次「重试连接」、两次都超时，第二次就一个字都不弹，看着像没点上。
+    // 去重只为拦住**同一次错误**在多帧 / 多个宿主里的重复播报，不该跨事件生效。
+    if (st.error === null) {
+      this.lastReported = null;
+    }
     if (vm === null || st.error === null) {
       return;
     }

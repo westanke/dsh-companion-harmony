@@ -317,6 +317,10 @@
       "value": "连接"
     },
     {
+      "name": "connect_retry",
+      "value": "重试连接"
+    },
+    {
       "name": "connect_title",
       "value": "连接服务端"
     },

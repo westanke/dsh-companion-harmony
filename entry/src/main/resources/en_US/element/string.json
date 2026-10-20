@@ -273,6 +273,10 @@
       "value": "Connect"
     },
     {
+      "name": "connect_retry",
+      "value": "Retry connection"
+    },
+    {
       "name": "connect_title",
       "value": "Connect to server"
     },

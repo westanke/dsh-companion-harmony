@@ -34,7 +34,8 @@ import { sessionFileSizeText } from '../core/FileFormat';
 import { PreviewKind, previewKindOf } from '../core/PreviewKind';
 import { SessionFileRef, sessionFileRefs } from '../core/SessionFileRefs';
 import { ChatHistory, ResolvedPath } from '../core/Models';
-import { SessionFileOpen } from '../core/HarnessViewModel';
+import { HarnessState, SessionFileOpen } from '../core/HarnessViewModel';
+import { harnessState } from './AppRuntime';
 import { BinaryFilePreview } from './Components';
 import { MarkdownView } from './ChatMessage';
 
@@ -46,6 +47,9 @@ const BINARY_MIN_HEIGHT_VP: number = 180;
 
 /** 二进制预览的最大高度。 */
 const BINARY_MAX_HEIGHT_VP: number = 420;
+
+/** 列表态最多占的高度：条目再多也在面板内部滚动，不把面板撑到贴满屏幕。 */
+const FILE_LIST_MAX_HEIGHT_VP: number = 420;
 
 /**
  * 面板列表的条目来源。
@@ -142,15 +146,23 @@ struct SessionFileRow {
 /** 列表态：标题 + 说明 + 条目；一条都没有时给空态。 */
 @Component
 struct SessionFileList {
-  history: ChatHistory | null = null;
+  /** 自订阅 vm 的 revision —— 与 `JobsSheet` / `ChatHeaderPanelHost.st()` 同一套读法。 */
+  @StorageLink('dshRevision') revision: number = 0;
+  private fallback: HarnessState = new HarnessState();
   onOpen: (path: string) => void = (): void => {};
 
+  private st(): HarnessState {
+    const rev: number = this.revision;
+    return rev >= 0 ? (harnessState() ?? this.fallback) : this.fallback;
+  }
+
   private refs(): SessionFileRef[] {
-    return sessionFileList(this.history);
+    return sessionFileList(this.st().history);
   }
 
   private hasMore(): boolean {
-    return this.history !== null && this.history.hasMore;
+    const h: ChatHistory | null = this.st().history;
+    return h !== null && h.hasMore;
   }
 
   build() {
@@ -195,7 +207,12 @@ struct SessionFileList {
           }
         }
         .width('100%')
-        .height('72%')
+        // **不写百分比高度**。面板走 `SheetSize.FIT_CONTENT`（要的就是"内容多高、面板多高"），
+        // 而百分比在 FIT_CONTENT 下没有"确定的父高度"可依，只能退回按整屏算 —— 于是列表
+        // 固定占掉整屏的 72%，条目少的时候下面就是一大片空白，真机上看到的就是「面板很高、
+        // 下面留白很大」。改成「最高 420、内容不足就只占内容那么高」，与源工程
+        // `fillMaxHeight(0.72f)` 的**观感**一致（源里 sheet 自身高度也被屏幕限死）。
+        .constraintSize({ maxHeight: FILE_LIST_MAX_HEIGHT_VP })
         .margin({ top: 10 })
         .scrollBar(BarState.Auto)
       }
@@ -235,13 +252,23 @@ struct SessionFileNotice {
   }
 }
 
-/** `contentType · size`；两项都拿不到就整行不显示。 */
+/**
+ * `contentType · size`；两项都拿不到就整行不显示。
+ *
+ * `resolved` 收可空：调用方是「每帧现读状态」的 `opened()`，那是个方法调用，
+ * ArkTS 的流式窄化对方法调用结果不生效（`if (x.y() !== null)` 之后 `x.y()` 仍是可空
+ * 类型），把判空下沉到这里比在 `build` 里绕圈更省事 —— 也顺带让 `null` 与「两项都没有」
+ * 走同一条「不占位置」的路。
+ */
 @Component
 struct SessionFileMeta {
-  resolved: ResolvedPath = new ResolvedPath();
+  resolved: ResolvedPath | null = null;
 
   private parts(): string[] {
     const out: string[] = [];
+    if (this.resolved === null) {
+      return out;
+    }
     const type: string | null = this.resolved.contentType;
     if (type !== null && type.trim().length > 0) {
       out.push(type);
@@ -366,24 +393,66 @@ struct HtmlStructurePreview {
 /**
  * 详情态。
  *
- * `kind` 在 `aboutToAppear` 里算一次即可 —— 它只取决于 `requestedPath` /
- * `contentType` / `bytes`，三者在本次打开期间都不变（切换文件会重建组件）。
+ * **两样都不做本地缓存**：`open` 每帧从 `HarnessState` 现读、预览类型每帧现算。
+ * 因为 `openSessionFile` 是两段式的（先放占位、异步读完再整体换成成品），缓存任何一半
+ * 都会画出旧的那一帧 —— 表现就是"只有路径"或"把图片当文本"。理由见 `opened()` 与
+ * `kind()` 上的注释。
  */
 @Component
 struct SessionFileDetail {
-  open: SessionFileOpen = new SessionFileOpen('', '');
+  /** 自订阅 vm 的 revision，读法与 `JobsSheet` / `SessionFileList` 一致。 */
+  @StorageLink('dshRevision') revision: number = 0;
+  private fallback: HarnessState = new HarnessState();
+  /** 兜底空壳：本组件只在有内容可展示时才被渲染，这一份是防御性的。 */
+  private blank: SessionFileOpen = new SessionFileOpen('', '');
   onBack: () => void = (): void => {};
   // 「打开目录」交出的是**已经解析好的**授权根与相对路径，而不是原始绝对路径。
   // 面板里已经有 `open.resolved`（就是 `roots/resolve` 的产物），再让上层拿绝对路径
   // 去解析一遍是白跑一次网络请求；更重要的是两处解析结果可能不一致（目录被移动过）。
   onOpenDirectory: (rootId: string, path: string) => void = (): void => {};
 
-  @State kind: PreviewKind = PreviewKind.SOURCE;
+  private st(): HarnessState {
+    const rev: number = this.revision;
+    return rev >= 0 ? (harnessState() ?? this.fallback) : this.fallback;
+  }
 
-  aboutToAppear(): void {
-    const resolved: ResolvedPath | null = this.open.resolved;
+  /**
+   * 当前要展示的那份打开结果 —— **每帧现读，绝不用成员变量接**。
+   *
+   * `openSessionFile` 先把一个 `loading=true` 的占位实例放进状态（只带会话 id 与路径），
+   * 异步读完再**整体换成一个新实例**（带 `resolved` / `preview` / `bytes`）。若这里用普通
+   * 成员接，只有首帧收得到值、之后父组件怎么重绘都改不动 —— 子组件永远停在占位上：
+   * 面板里只有路径、内容永远不出来，**关掉面板再点一次**（组件重建、重新收值）才显示，
+   * 这正是真机上那条反馈。
+   *
+   * 也**不能用 `@Prop`**：`@Prop` 会深拷贝整个对象，而 `bytes` 是 `Uint8Array`，
+   * 深拷贝出来的东西不再是真 TypedArray（内部槽位丢不掉）—— 图片 / PDF 预览会直接坏掉。
+   * 现读引用则一次拷贝都没有。
+   *
+   * 过滤 `sessionId` 的理由与 `SessionFilesSheet.current()` 相同：结果属于发起它的那个会话。
+   */
+  private opened(): SessionFileOpen {
+    const o: SessionFileOpen | null = this.st().sessionFileOpen;
+    const id: string | null = this.st().selectedSessionId;
+    if (o === null || o.sessionId !== id) {
+      return this.blank;
+    }
+    return o;
+  }
+
+  /**
+   * 预览类型**每次渲染现算**，不再用 `@State` + `aboutToAppear` 缓存。
+   *
+   * 原写法假设「本次打开期间 `requestedPath` / `contentType` / `bytes` 三者不变」——
+   * 这个假设在**两段式加载**下不成立：组件挂载时 `resolved` 还是 null、`bytes` 也还没有，
+   * 算出来的 `kind` 永远是 `SOURCE`；等真正的图片/PDF 字节到位时，`aboutToAppear` 早跑完了，
+   * 于是图片被当成文本渲染成一片乱码（或干脆什么都不显示）。纯函数现算的代价只是几次
+   * 字符串比较，换来的是「内容一到就画对」。
+   */
+  private kind(): PreviewKind {
+    const resolved: ResolvedPath | null = this.opened().resolved;
     const contentType: string | null = resolved === null ? null : resolved.contentType;
-    this.kind = previewKindOf(this.open.requestedPath, contentType, this.open.bytes);
+    return previewKindOf(this.opened().requestedPath, contentType, this.opened().bytes);
   }
 
   /**
@@ -395,27 +464,27 @@ struct SessionFileDetail {
    * 只可能出现在"理论上到不了"的路径上，而 `revealDirectory` 对空串是无害的（不会切分节）。
    */
   private resolvedRoot(): string {
-    const resolved: ResolvedPath | null = this.open.resolved;
+    const resolved: ResolvedPath | null = this.opened().resolved;
     return resolved === null ? '' : resolved.rootId;
   }
 
   private resolvedPath(): string {
-    const resolved: ResolvedPath | null = this.open.resolved;
+    const resolved: ResolvedPath | null = this.opened().resolved;
     return resolved === null ? '' : resolved.path;
   }
 
   private isDirectory(): boolean {
-    const resolved: ResolvedPath | null = this.open.resolved;
+    const resolved: ResolvedPath | null = this.opened().resolved;
     return resolved !== null && resolved.kind === 'directory';
   }
 
   private isBinaryPreview(): boolean {
-    return this.kind === PreviewKind.IMAGE || this.kind === PreviewKind.PDF;
+    return this.kind() === PreviewKind.IMAGE || this.kind() === PreviewKind.PDF;
   }
 
   /** `PLUGIN_TOO_OLD` 是唯一需要单独文案的失败码：它指向「去电脑上升级插件」这个动作。 */
   private failureText(): ResourceStr {
-    const failure: string | null = this.open.failure;
+    const failure: string | null = this.opened().failure;
     if (failure === 'PLUGIN_TOO_OLD') {
       return $r('app.string.session_file_plugin_too_old');
     }
@@ -423,28 +492,49 @@ struct SessionFileDetail {
   }
 
   private previewIsEmpty(): boolean {
-    const preview: string | null = this.open.preview;
+    const preview: string | null = this.opened().preview;
     return preview !== null && preview.length === 0;
   }
 
   private trailingNotice(): ResourceStr {
-    return this.open.truncated
+    return this.opened().truncated
       ? $r('app.string.session_file_truncated')
       : $r('app.string.session_file_files_hint');
   }
 
+  /**
+   * 预览正文（拿不到时给空串）。
+   *
+   * 抽成方法而不是在 `build` 里写 `x === null ? '' : x`：`opened()` 是方法调用，
+   * ArkTS 不会对「方法调用结果的属性」做流式窄化 —— 三元的第二个分支仍被当成可空。
+   */
+  private previewText(): string {
+    const preview: string | null = this.opened().preview;
+    return preview === null ? '' : preview;
+  }
+
+  /** 元信息里的字节数：`resolved` 或其中的 `size` 缺失时按 0 处理。 */
+  private sizeBytes(): number {
+    const resolved: ResolvedPath | null = this.opened().resolved;
+    if (resolved === null) {
+      return 0;
+    }
+    const size: number | null = resolved.size;
+    return size === null ? 0 : size;
+  }
+
   @Builder
   previewBody() {
-    if (this.kind === PreviewKind.MARKDOWN) {
-      MarkdownView({ body: this.open.preview === null ? '' : this.open.preview })
-    } else if (this.kind === PreviewKind.HTML) {
-      HtmlStructurePreview({ source: this.open.preview === null ? '' : this.open.preview })
+    if (this.kind() === PreviewKind.MARKDOWN) {
+      MarkdownView({ body: this.previewText() })
+    } else if (this.kind() === PreviewKind.HTML) {
+      HtmlStructurePreview({ source: this.previewText() })
     } else {
       // 其余一律等宽原样显示：代码、JSON、日志 —— 折行会让缩进失去意义，
       // 所以给横向滚动。ArkUI 单个 Scroll 只支持一个方向，这里只给横向，
       // 纵向由外层容器承担。
       Scroll() {
-        Text(this.open.preview === null ? '' : this.open.preview)
+        Text(this.previewText())
           .fontSize(12)
           .fontFamily('monospace')
           .copyOption(CopyOptions.LocalDevice)
@@ -471,14 +561,14 @@ struct SessionFileDetail {
       .width('100%')
       .alignItems(VerticalAlign.Center)
 
-      Text(this.open.requestedPath)
+      Text(this.opened().requestedPath)
         .fontSize(11)
         .fontFamily('monospace')
         .fontColor($r('sys.color.ohos_id_color_text_secondary'))
         .width('100%')
         .copyOption(CopyOptions.LocalDevice)
 
-      if (this.open.loading) {
+      if (this.opened().loading) {
         Column() {
           LoadingProgress()
             .width(24)
@@ -488,10 +578,10 @@ struct SessionFileDetail {
         .width('100%')
         .height(140)
         .justifyContent(FlexAlign.Center)
-      } else if (this.open.outsideRoots) {
+      } else if (this.opened().outsideRoots) {
         // 排在 failure 之前：这是服务端的正常判定，不是错误。
         SessionFileNotice({ icon: '🔒', text: $r('app.string.session_file_outside_roots') })
-      } else if (this.open.failure !== null) {
+      } else if (this.opened().failure !== null) {
         SessionFileNotice({ icon: '⚠', text: this.failureText() })
       } else if (this.isDirectory()) {
         // 目录给一句说明 + 一个入口：直接切到「文件」页对应目录，比只显示"这是目录"有用。
@@ -509,16 +599,15 @@ struct SessionFileDetail {
         .alignItems(HorizontalAlign.Start)
       } else if (this.isBinaryPreview()) {
         Column() {
-          if (this.open.resolved !== null) {
-            SessionFileMeta({ resolved: this.open.resolved })
+          if (this.opened().resolved !== null) {
+            SessionFileMeta({ resolved: this.opened().resolved })
           }
           Column() {
             BinaryFilePreview({
-              kind: this.kind,
-              bytes: this.open.bytes,
-              sizeBytes: this.open.resolved === null
-                ? 0 : (this.open.resolved.size === null ? 0 : this.open.resolved.size),
-              skippedForSize: this.open.tooLarge,
+              kind: this.kind(),
+              bytes: this.opened().bytes,
+              sizeBytes: this.sizeBytes(),
+              skippedForSize: this.opened().tooLarge,
               fallbackMessage: $r('app.string.session_file_binary'),
               skippedHint: $r('app.string.session_file_files_hint'),
             })
@@ -530,16 +619,16 @@ struct SessionFileDetail {
         }
         .width('100%')
         .alignItems(HorizontalAlign.Start)
-      } else if (this.open.tooLarge) {
+      } else if (this.opened().tooLarge) {
         SessionFileNotice({ icon: '⚠', text: $r('app.string.session_file_too_large') })
-      } else if (this.open.preview === null) {
+      } else if (this.opened().preview === null) {
         SessionFileNotice({ icon: '📄', text: $r('app.string.session_file_binary') })
       } else if (this.previewIsEmpty()) {
         SessionFileNotice({ icon: '📄', text: $r('app.string.session_file_empty') })
       } else {
         Column() {
-          if (this.open.resolved !== null) {
-            SessionFileMeta({ resolved: this.open.resolved })
+          if (this.opened().resolved !== null) {
+            SessionFileMeta({ resolved: this.opened().resolved })
           }
           Scroll() {
             Column() {
@@ -569,15 +658,28 @@ struct SessionFileDetail {
   }
 }
 
-/** 面板宿主：按 `sessionFileOpen` 是否存在决定画列表还是画详情。 */
+/**
+ * 面板宿主：按 `sessionFileOpen` 是否存在决定画列表还是画详情。
+ *
+ * 状态**全部自己从 `AppRuntime` 读**，一个参数都不接（与 `JobsSheet` 同一套做法）。
+ * 原先靠父组件传 `history` / `open` / `sessionId` 三个普通成员，而 `bindSheet` 的
+ * content builder 不会因为 vm 的一次 `update()` 就重新执行，于是这份「传进来的快照」
+ * 永远停在面板刚打开那一帧 —— 而那一帧恰好是 `openSessionFile` 刚放进去的**占位**
+ * （只有路径、`loading=true`）。异步内容回来后状态换了新实例，面板却看不到，
+ * 用户看到的就是「点击文件只弹路径，再点一次才出内容」。
+ */
 @Component
 export struct SessionFilesSheet {
-  history: ChatHistory | null = null;
-  open: SessionFileOpen | null = null;
-  sessionId: string | null = null;
+  @StorageLink('dshRevision') revision: number = 0;
+  private fallback: HarnessState = new HarnessState();
   onOpen: (path: string) => void = (): void => {};
   onBack: () => void = (): void => {};
   onOpenDirectory: (rootId: string, path: string) => void = (): void => {};
+
+  private st(): HarnessState {
+    const rev: number = this.revision;
+    return rev >= 0 ? (harnessState() ?? this.fallback) : this.fallback;
+  }
 
   /**
    * 打开的结果属于**发起它的那个会话**。
@@ -586,8 +688,8 @@ export struct SessionFilesSheet {
    * 直接渲染会显示上一个会话的文件内容，看起来像"点错了文件"。所以按 sessionId 过滤。
    */
   private current(): SessionFileOpen | null {
-    const opened: SessionFileOpen | null = this.open;
-    if (opened === null || opened.sessionId !== this.sessionId) {
+    const opened: SessionFileOpen | null = this.st().sessionFileOpen;
+    if (opened === null || opened.sessionId !== this.st().selectedSessionId) {
       return null;
     }
     return opened;
@@ -596,10 +698,9 @@ export struct SessionFilesSheet {
   build() {
     Column() {
       if (this.current() === null) {
-        SessionFileList({ history: this.history, onOpen: this.onOpen })
+        SessionFileList({ onOpen: this.onOpen })
       } else {
         SessionFileDetail({
-          open: this.current() as SessionFileOpen,
           onBack: this.onBack,
           onOpenDirectory: this.onOpenDirectory,
         })

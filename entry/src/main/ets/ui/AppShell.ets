@@ -27,6 +27,7 @@ import { promptAction } from '@kit.ArkUI';
 import { HarnessState } from '../core/HarnessViewModel';
 import { harnessVm } from './AppRuntime';
 import { BrandMark, StatusLabel } from './Components';
+import { localErrorText } from './ErrorText';
 import { ChatScreen } from './ChatScreen';
 import { FilesScreen } from './FilesScreen';
 import { PluginsScreen } from './PluginsScreen';
@@ -227,28 +228,7 @@ export struct AppShell {
     if (ctx === undefined) {
       return value;
     }
-    const rm = ctx.resourceManager;
-    if (value === 'FILE_TOO_LARGE') {
-      return rm.getStringSync($r('app.string.file_too_large').id);
-    }
-    if (value === 'BINARY_FILE') {
-      return rm.getStringSync($r('app.string.binary_file').id);
-    }
-    if (value.startsWith('ETAG_MISMATCH') || value.startsWith('HTTP 412')) {
-      return rm.getStringSync($r('app.string.etag_conflict').id);
-    }
-    if (value.startsWith('RATE_LIMITED')) {
-      return rm.getStringSync($r('app.string.rate_limited').id);
-    }
-    if (value.startsWith('AGENT_PRESET_LOCKED') || value.startsWith('DSH_AGENT_PRESET_LOCKED')) {
-      return rm.getStringSync($r('app.string.agent_preset_locked').id);
-    }
-    // 配置文本解析失败必须给一句人能看懂的话：此刻用户人已经到了外面，
-    // 屏幕上只有一段粘贴进来的文本，一句 "CONFIG_INVALID" 帮不了他。
-    if (value.startsWith('CONFIG_INVALID')) {
-      return rm.getStringSync($r('app.string.import_invalid').id);
-    }
-    return value;
+    return localErrorText(ctx, value);
   }
 
   /** 当前分节的中文名，用于顶栏副标题。 */

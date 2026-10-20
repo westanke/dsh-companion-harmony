@@ -24,6 +24,7 @@ import { Endpoint, EndpointProbe, Host } from '../core/ConnectionModels';
 import { HarnessState, HarnessViewModel } from '../core/HarnessViewModel';
 import { harnessState, harnessVm } from './AppRuntime';
 import { BrandMark, WarningBanner, StatusLabel, endpointKindLabel } from './Components';
+import { localErrorText } from './ErrorText';
 import { readClipboardText } from '../platform/Clipboard';
 
 @Component
@@ -32,7 +33,7 @@ export struct ConnectScreen {
   onEnterApp: () => void = (): void => {};
 
   /** 订阅 vm 的 revision：任何 `update()` 都会让本页重新 build。 */
-  @StorageLink('dshRevision') revision: number = 0;
+  @StorageLink('dshRevision') @Watch('onVmChanged') revision: number = 0;
 
   @State endpoint: string = '';
   @State code: string = '';
@@ -48,6 +49,47 @@ export struct ConnectScreen {
     this.endpoint = this.st().endpointDraft;
     // 设备名默认取手机名；鸿蒙没有 Android 的 Build.MODEL，用设备类型兜底。
     this.deviceName = this.defaultDeviceName();
+  }
+
+  /**
+   * 连接页上的 `state.error` 必须自己报 —— 这是「网络不通时界面一片『连接』」的根因。
+   *
+   * 源工程 `App.kt` 把 `state.error` 的 Snackbar 挂在**顶层**，连接页与主界面两处都看得见；
+   * 移植侧只把这段逻辑放进了 `AppShell`，而 `AppShell` 在未连接时**根本没挂载**
+   * （`pages/Index.ets` 走的是 `ConnectScreen` 分支）。于是连接失败时：
+   * `connectHostInternal` 明明写了 `s.error`，却没有任何一处把它显示出来 ——
+   * 用户点「连接」→ 停两秒 → 回到同一页，标题、按钮、配对按钮全还写着「连接」，
+   * 看不出刚失败过。这里补上连接页那一半。
+   *
+   * `lastReported` + `clearError()` 与 `AppShell.reportErrorIfAny()` 同一套：不清掉的话
+   * 下一次任意重绘都会再弹一遍，用户看到的就是「同一句话反复弹」。
+   */
+  private lastReported: string | null = null;
+
+  onVmChanged(): void {
+    this.reportErrorIfAny();
+  }
+
+  private reportErrorIfAny(): void {
+    const vm: HarnessViewModel | null = this.vm();
+    const st: HarnessState = this.st();
+    if (vm === null || st.error === null) {
+      return;
+    }
+    // 已经连上时主界面接管这件事（那时本页不在树里），不重复报。
+    if (st.connected) {
+      return;
+    }
+    const ctx: common.Context | undefined = this.getUIContext().getHostContext();
+    if (ctx === undefined) {
+      return;
+    }
+    const text: string = localErrorText(ctx, st.error);
+    if (text !== this.lastReported) {
+      this.lastReported = text;
+      promptAction.showToast({ message: text, duration: 2600 });
+    }
+    vm.clearError();
   }
 
   /**
@@ -309,11 +351,12 @@ export struct ConnectScreen {
 
       // 底部按钮。已经连上的那台必须写「进入应用」而不是「连接」：
       // 写「连接」的话用户找不到「进去」这件事该点哪里。
+      // 上次探活全失败的那台写「重试连接」：否则失败前后按钮**一模一样**，
+      // 用户无法判断刚才那次点击到底做了什么（真机反馈「网络不通时都显示『连接』」）。
       Button() {
         Row() {
           Text('🔗').fontSize(14)
-          Text(host.id === this.st().activeHostId && this.st().connected
-            ? $r('app.string.enter_app') : $r('app.string.connect_this_computer'))
+          Text(this.hostButtonText(host))
             .fontSize(14)
             .margin({ left: 8 })
         }
@@ -337,6 +380,28 @@ export struct ConnectScreen {
       : $r('sys.color.ohos_id_color_text_secondary'))
     .backgroundColor($r('sys.color.ohos_id_color_background'))
     .alignItems(HorizontalAlign.Start)
+  }
+
+  /**
+   * 主机卡片底部按钮的文案 —— 三种状态三种说法。
+   *
+   * - 已连接（`isActive`）：「进入应用」（纯本地跳转）；
+   * - 这台刚探活全失败：「重试连接」；
+   * - 其余：「连接」。
+   *
+   * 中间那一档是给「网络断了」用的：原先失败前后按钮都写「连接」，用户点完回来
+   * 看到的是同一屏同样的字，只能怀疑自己没点上。判据只看**当前选中主机**的探活结果
+   * （`endpointProbes` 也只装当前主机的），换一台电脑不受影响。
+   */
+  private hostButtonText(host: Host): ResourceStr {
+    const st: HarnessState = this.st();
+    if (host.id === st.activeHostId && st.connected) {
+      return $r('app.string.enter_app');
+    }
+    if (host.id === st.selectedHostId && this.probeFailureCount() > 0) {
+      return $r('app.string.connect_retry');
+    }
+    return $r('app.string.connect_this_computer');
   }
 
   /**

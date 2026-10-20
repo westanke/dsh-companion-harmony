@@ -147,6 +147,9 @@ ui/     ← 只消费 HarnessState，调 HarnessViewModel 动作；不持有协�
 - `注入点击驱动不了弹窗项，别当代码缺陷`
 - `postJson 与 postJsonUrl 后缀别喂错`
 - `转发纯类型必须 export type`
+- `bindSheet 内容不随 vm 重绘`
+- `FIT_CONTENT 里别写百分比高度`
+- `错误只在连上后的界面报`
 
 > 新坑位：名字加进上面清单 + 原文写进 `docs/PORT-MAP.md` §6 并补 `### 同名` 锚点。
 

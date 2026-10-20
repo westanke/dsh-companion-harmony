@@ -2391,6 +2391,18 @@ entry/build/default/cache/default/default@CompileArkTS/esmodule/release/entry/sr
    本轮还顺带把 `DshClient` 的传输层拆成 `core/DshTransport.ts`（**行数预算**所致，对外接口零变化），
    并修掉四处 POST 端点的双份基地址（坑 50）。新增 `test/cases/jobs-panel.test.ts`（24 例）
    与 `dsh-client.test.ts` 的后台任务 10 例。
+8. **真机体感三修（接线层，2026-10-20）** —— 用户真机反馈驱动，**不属于源工程增量**，
+   三条都是「编译绿 + 纯逻辑单测绿，但界面不对」的接线缺陷：
+   ① **会话文件面板拿到过期状态快照**（点文件只弹路径、再点一次才出内容）——
+   `ui/SessionFilesSheet.ets` 改为自订阅（`@StorageLink('dshRevision')` + `harnessState()`），
+   父组件 `ChatHeader.sheetContent()` 只传回调；详情态去掉 `@State kind`（改每帧现算，
+   避免图片/PDF 在字节到位后被当文本渲染）。见坑 52。
+   ② **同面板下方大留白** —— 列表 `.height('72%')` 改 `constraintSize({ maxHeight: 420 })`
+   （FIT_CONTENT 里百分比按整屏算）。见坑 53。
+   ③ **连接页失败时一片「连接」** —— 新增 `ui/ErrorText.ets` 抽出 `localErrorText()`，
+   `ui/ConnectScreen.ets` 接上与 `AppShell` 同一套的报错（`@Watch` + `lastReported` +
+   `clearError()`）；主机按钮加第三档「重试连接」（`connect_retry`）。见坑 54。
+   新增 `test/cases/ui-wiring-guard.test.ts`（3 例源码形状门禁）。**均未上机。**
 
 **坑 42：ArkTS 没有判别联合类型 ——「四种长相」只能用单类 + `kind` 字段承载**
 
@@ -2595,4 +2607,90 @@ export type { HttpTransport, WebSocketTransport, TimerBridge, DshClientDeps } fr
 
 > 顺带一条：**ArkTS 编译绿不代表能跑**。类型转发这类问题只在**运行时**暴露 ——
 > 而本工程的离线单测是 node + tsx，正好会当场撞上。所以「拆完编译通过」之后**必须跑一次 `npm test`**。
+
+**坑 52：`bindSheet` 的 content builder 不随 vm 重绘 —— 面板靠「父组件传状态」必然停在首帧**
+
+真机反馈：点会话正文里的文件名，弹出的面板**只有路径、没有内容**；关掉再点一次（或再点另一条）
+才显示内容。
+
+**根因是两件事叠在一起**：
+
+1. `openSessionFile`（`core/HarnessViewModelSessions.ts`）是**两段式**的 —— 先同步放进一个
+   `loading=true` 的 `SessionFileOpen` 占位（只带 `sessionId` + `requestedPath`），
+   异步 `loadSessionFile` 回来后**整体换成**一个新实例（带 `resolved` / `preview` / `bytes`）。
+2. 面板 `SessionFilesSheet` 把 `history` / `open` / `sessionId` 声明成**普通成员**，
+   由 `ChatHeader.sheetContent()` 往下传。而 **`bindSheet` 的 content builder 不会因为
+   vm 的一次 `update()` 重新执行** —— 它只在面板打开时构建一次。于是面板手里那份参数
+   永久停在「打开那一帧」，也就是**第一段的占位**。异步结果换了新实例，面板看不见。
+
+「第二次就好了」是因为关掉面板会销毁组件、再点重建时重新收值（此时状态里已是成品）。
+
+**修法：面板自订阅，父组件只传回调。**
+
+```typescript
+@Component
+export struct SessionFilesSheet {
+  @StorageLink('dshRevision') revision: number = 0;
+  private fallback: HarnessState = new HarnessState();
+  private st(): HarnessState {
+    const rev: number = this.revision;            // 读一次，登记依赖
+    return rev >= 0 ? (harnessState() ?? this.fallback) : this.fallback;
+  }
+}
+```
+
+`SessionFileList` / `SessionFileDetail` 同样自订阅（详情态还额外**每帧现算** `kind`：
+原先在 `aboutToAppear()` 里算一次，挂载时 `resolved` 还是 `null`，算出来永远是「按后缀」那支，
+图片/PDF 会在字节到位后被当文本渲染）。
+
+> **详情态别用 `@Prop open`**：`@Prop` 会**深拷贝**整个对象，而 `open.bytes` 是 `Uint8Array`
+> —— 深拷贝出来的东西不再是真 TypedArray，`BinaryFilePreview` 会直接坏掉。
+> 自订阅之后"现读引用"一次拷贝都没有，正好也避开这个坑（与坑 12「@Prop 深拷贝保原型」同一根源）。
+
+**判据**：`test/cases/ui-wiring-guard.test.ts` 第一条 —— FIT_CONTENT 面板必须带
+`@StorageLink('dshRevision')`，且 `SessionFilesSheet` 里**不许再出现**
+`history:` / `open:` / `sessionId:` 这三个普通成员声明。
+
+**坑 53：`SheetSize.FIT_CONTENT` 面板里写 `height('72%')` —— 百分比按整屏算，面板被撑满**
+
+文件面板列表原先写 `.height('72%')`（照抄源工程 `fillMaxHeight(0.72f)` 的比例），
+面板本身走 `SheetSize.FIT_CONTENT`。真机表现：**弹窗很高、内容挤在上方、下面一大片留白**。
+
+原因：`FIT_CONTENT` 的语义是「内容多高、面板多高」——此时**没有确定的父高度**给百分比当参照，
+`'72%'` 只能退回按**整屏**算，于是面板被撑到贴满，条目只有三五个时下方全空。
+
+**修法**：`constraintSize({ maxHeight: 420 })` —— 条目多时列表在面板内部滚动，
+条目少时只占内容那么高。`JobsSheet` 用的是同一手法（`JOB_LIST_MAX_HEIGHT_VP`）。
+
+> 规律：**FIT_CONTENT 里只写"内容自身需要的尺寸"**，上限用 `constraintSize`；
+> 百分比高度只适用于父高度确定的地方（这类面板里没有）。
+
+**坑 54：`state.error` 只在 `AppShell` 里报 —— 而 `AppShell` 连上之后才挂载**
+
+真机反馈：启动首屏网络不可达，界面上**到处都是「连接」**，点完看不出刚失败过。
+
+`connectHostInternal` 失败会把错误写进 `state.error`，写是写了；但显示它的逻辑
+（`localError` + `reportErrorIfAny` + `toast`）只写在 `ui/AppShell.ets` 里，而
+`pages/Index.ets` 在 `!connectGate || !connected` 时**根本不挂载 AppShell**。
+于是未连接时这条错误**没有任何听众**：标题、按钮、配对按钮全还写着「连接」，
+用户点一下、等两秒、回到同一屏同样的字 —— 只能怀疑自己没点上。
+
+源工程的做法是把 Snackbar 挂在**顶层**（`App.kt`），连接页与主界面**两处都看得见**；
+移植时只保留了主界面那一处。
+
+**修法**：`ui/ErrorText.ets` 抽出 `localErrorText()` 供两处共用（错误码 → 人话，
+认不出原样返回），连接页接同一套：
+
+```
+@StorageLink('dshRevision') @Watch('onVmChanged') revision
+  → reportErrorIfAny(): 未连接 + state.error != null → toast(不重复) → vm.clearError()
+```
+
+> 三个要点缺一不可：**`@Watch`**（否则 vm 更新走不到）、**`lastReported`**（否则每次重绘重弹）、
+> **`clearError()`**（否则同一句错误永远挂在状态里）。判据见
+> `test/cases/ui-wiring-guard.test.ts` 第三条。
+>
+> 另外按「**失败前后必须看得出区别**」的原则，主机卡片按钮加了第三档文案：
+> 当前选中主机**探活全失败**时写「重试连接」（`connect_retry`），其余写「连接」，
+> 已连接写「进入应用」。三档判据见 `ConnectScreen.hostButtonText()`。
 

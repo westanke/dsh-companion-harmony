@@ -701,10 +701,12 @@ export struct ChatHeaderPanelHost {
   sheetContent() {
     Column() {
       if (this.sheetKind === SHEET_FILES) {
+        // 只传回调，**不传状态**：`history` / `sessionFileOpen` / `selectedSessionId` 由面板
+        // 自己从 `AppRuntime` 现读（见 `SessionFilesSheet` 文件头）。原先按普通成员往下传，
+        // 而 `bindSheet` 的 content builder 不随 vm 的 `update()` 重新执行 —— 面板会一直
+        // 拿着第一次传进去的**占位快照**（只有路径、没有内容），真机表现就是
+        // 「点击文件只弹路径，要再点一次才显示内容」。
         SessionFilesSheet({
-          history: this.st().history,
-          open: this.st().sessionFileOpen,
-          sessionId: this.selectedId(),
           onOpen: (path: string): void => {
             this.openSessionFile(path);
           },

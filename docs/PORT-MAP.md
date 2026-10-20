@@ -2839,3 +2839,131 @@ export struct SessionFilesSheet {
 > 判据见 `test/cases/ui-wiring-guard.test.ts` 第五条，`trajectory.test.ts` 覆盖过滤 / 垫底 /
 > `prettyPayload` 三类行为。
 
+**坑 58：「回答被截断」提示在 App 里整条消失 —— 它在两条路上都不存在**
+
+用户反馈：安卓端有「已达到输出 token 上限 / 回答被截断，已有输出保留在对话中。
+发送"继续"可让模型接着输出。」这条黄色提示，鸿蒙版**一个字都没有**。
+
+**根因不是渲染，是数据源**：
+
+1. 模型撞到输出 token 上限时，内核发的是 `turn/end { reason: { kind: 'max-tokens' } }`，
+   **不是失败**。所以插件不会发 `chat.turn.failed`（那一帧只给 error / 登出停止），
+   按失败去接自然接不到。
+2. `sessions.history` **不返回 `turn/end`**（源工程 2026-10-18 真机实测：一次取 293 条历史，
+   `turn/end` 零条）。所以重进会话时，历史里也翻不到这一帧。
+
+两条路都断 ⇒ 唯一能拿到它的地方是**实时帧**，而实时帧只到一次。客户端必须自己记。
+
+**修法（照源工程 `HarnessTruncationViewModel.kt` + `ChatModels.kt`）**：
+
+| 层 | 落点 | 要点 |
+|---|---|---|
+| 判据 | `core/ChatTruncation.ts` `isTurnMaxTokens()` | `type === 'chat.turn.end'` **且** `data.reason.kind === 'max-tokens'`；缺字段一律 false（宁漏报勿误报） |
+| 历史 | `core/ChatItemBuilders.ts` `turnEndItem()` | `max-tokens` 分支排 **error / aborted 之前**，产出 `TRUNCATED` 行，seq 用真值 |
+| 实时 | `core/ChatTruncation.ts` `applyTurnBoundary()` | 截断收尾 → 记 `truncatedNoticeSession` + `truncatedNotice`（**seq = 0**）；`chat.turn.start` 且会话对得上 → 清掉 |
+| 呈现 | `ui/MessageParts.ets` `TruncatedNoticeRow` | 淡黄底 + 琥珀文字，**不复用**失败红框 |
+| 资源 | `turn_max_tokens_title` / `turn_max_tokens_hint` + 三色 | 中英各一份；`base` / `dark` 各一套（否则深色主题下警示条不可读） |
+
+**两个容易写错的点**：
+
+1. **伪 seq 用 0**。实时提示在历史里不存在，编一个「像真的」序号只会让轨迹/日志里
+   冒出一个查无此号的值；`seq = 0` 一眼就能看出「这条没有持久位置」。
+2. **必须独立成消息，不许折进过程组**。`isProcessItem()` 只认 CONTEXT / REASONING / TOOL，
+   `TRUNCATED` 天然独立 —— 别好心把它加进白名单。用户在翻记录，正停在「话为什么说了一半」
+   的地方，折进折叠组等于把解释藏起来（源工程 `ChatTurnMaxTokensTest` 专门钉这一条）。
+
+**判据/回归**：`test/cases/chat-truncation.test.ts`（9 例，含「不是 FAILURE」「error 仍 FAILURE」
+「登出 aborted 仍 FAILURE 且 stopped」「completed 不产行」「不折进过程组」「新一轮清理」），
+`ui-wiring-guard.test.ts` 第 6 例钉界面接线与中英/深浅资源。
+
+**坑 59：正文里 `docs/STATUS.md:1` 这种带位置的文档链接点开打不开**
+
+真机反馈：正文引用 `docs/project/STATUS.md:1`，点开后面板显示
+`/…/dsh-remote-bridge/docs/project/STATUS.md#L101`，并提示
+「这个路径不在本机的授权根内，或不是普通文件，服务端拒绝解析」。**文件明明存在。**
+
+**根因有两层，都在同一处判据上**：
+
+1. **把位置后缀当路径**。模型引用文档几乎总带位置：`:1`（行进第 1 行）、`:12-34`（行范围）、
+   `:12:5`（行:列）、`#L101`（GitHub 风格锚点）。原样发给 `roots/resolve`，服务端自然回
+   「不是普通文件」—— 那个文件名里真的多了 `#L101` 这几个字符。
+2. **相对路径的冒号被当成 scheme 分隔符**。分类时 `indexOf(':')` 一刀切，
+   `docs/x.md:1` 于是被判成「未知协议」而不是「相对路径」，界面**连拼 cwd 的机会都没有**。
+   这两层叠加，正好覆盖「绝对路径带 `#L`」和「相对路径带 `:数字`」两种真实写法。
+
+**修法（`core/ChatLinkTarget.ts`）**：
+
+| 位置 | 动作 |
+|---|---|
+| `stripLocationSuffix()` | 只剥**确定形态**：`#L\d+(-L?\d+)?`（不区分大小写）、`:\d+(-\d+)?`（最多剥两段，覆盖「行:列」）；剥完为空则不剥 |
+| `classify()` 绝对路径分支 | `serverPath(stripLocationSuffix(target))` |
+| `classify()` scheme 判定 | 先试着剥掉行号后缀，**且**前缀不再含冒号时才用剥后的串判 scheme；否则维持原样（`http://host:8080` 的端口不是行号） |
+| `ui/ChatDetail.ets` 相对路径分支 | `joinCwd(cwd, stripLocationSuffix(target.path.trim()))` |
+
+**刻意不做的两件事**：
+
+1. **不解析网页锚点**。`https://e.com/a#L1` 原样交给浏览器 —— `#` 在那里是文档内跳转，
+   剥掉等于把用户送到页面顶部。
+2. **不做泛化猜测**。「文件名里真带冒号」极罕见，而猜错会把**本来能打开的路径改坏**，
+   代价比漏剥一次高得多；所以只认上述两种写法。
+
+**判据/回归**：`test/cases/chat-link-target.test.ts` 新增 6 例 —— 绝对路径 `:1` / `:12-34` /
+`:12:5`、`#L101` / `#L101-L120` / `#l7`、相对路径 `:1` 不被误判成未知协议、
+带端口网页不被动、正常文件名不动、`:12` 不被剥成空串。
+
+
+**坑 60：连接页把「曾经连上过」当成「此刻还连着」，三处各错一次**
+
+真机症状是三个互不相干的抱怨，根子却是同一个：`HarnessState.connected` 是**历史状态位**
+（「这次进程里成功连上过」），而三处都把它当成「此刻仍连着」来解释：
+
+| 位置 | 错法 | 症状 |
+|---|---|---|
+| `AppRuntime.resumeHarnessEvents` | 回前台只重连事件流，不探活 REST | 断网再回来，界面仍显示已连接，点进去一片空白 |
+| `ui/ConnectScreen.ets` 主机卡片 | 只要 `activeHostId` 对得上就画「已连接」绿点 | 连接其实已断，卡片却在骗人 |
+| `ConnectScreen.onConnectHost` | 有活动连接就短路，不再发起连接 | 卡片显示已连接、点按钮却没反应 |
+
+**修法（`core/ConnectionLiveness.ts`，三个有名字的纯函数）**：
+
+- `shouldRecheckActiveConnection(connectGatePassed, connected, hasActiveConnection, connecting)`：
+  回前台要不要探活。已进 App 且连着 → 不探；没有活动连接 → 无从探起；正在并发探活 → 别抢。
+- `shouldReconnectOnTap(hostId, activeHostId, hasActiveConnection)`：点这台主机要不要真发起连接。
+- `hostCardState(hostId, activeHostId, connected)` → `CONNECTED` / `DISCONNECTED` / `IDLE`。
+  **`DISCONNECTED` 与 `IDLE` 必须分家**：前者是「这台连过、现在断了」（红色 `connect_offline` +
+  「重新连接」），后者是「这台没参与本轮连接」（不画状态点、按钮仍是「连接这台电脑」）。
+
+**顺带的拆分**：`HarnessViewModelConnection.ts` 一度涨到 946 行（超 900 行预算），把
+「主机维护 + 连接复核」7 个方法上移到新的 `HarnessViewModelConnect.ts` 中间层，降到 777 行。
+**父类不能调子类**：`removeHost`（依赖 `disconnect`）、`connectHostInternal`（依赖
+`connectEvents` / `loadSnapshot`）因此不能上移 —— 拆分层时先看这一点，否则编译期才报。
+
+**判据/回归**：`test/cases/connection-liveness.test.ts`（10 例：复核四组真假、点按重连三种、
+卡片三态含「断开 ≠ 空闲」）。
+
+**坑 61：编辑器里改过的字，点返回就静默丢了**
+
+源工程 v2.2.44 的缺陷 W3，移植时整条没跟过来：鸿蒙侧全局 `grep dirty|unsaved` **零命中**。
+症状两条，缺任何一条都等于没做：
+
+1. **保存键没有脏状态指示**。恒为次要色，改了字也看不出来 —— 用户不知道自己「还没存」。
+2. **返回不拦截**。顶栏 `←` 直接回目录，改动静默丢失，而用户以为存上了。
+   一个不报错的丢数据，比一次报错严重得多。
+
+**修法**：
+
+| 层 | 动作 |
+|---|---|
+| `core/HarnessTypes.ts` | `OpenDocument` 新增 `originalText`（打开时的原文）与 `hasUnsavedChanges()`（`originalText != null && text !== originalText`，逐字比）；`withEtag` 换成 `withSaved(etag)`：**etag 与基线一起更新** |
+| `core/HarnessViewModelFiles.ts` | 打开成功传基线；保存成功后 `withSaved` —— 只换 etag 会让保存过的文档永远是脏的，再点返回还会弹假警报 |
+| `ui/EditorPane.ets` | 保存键脏时变强调色（`ohos_id_color_text_primary_activated`） |
+| `ui/FilesScreen.ets` | 第四个面板 `SHEET_UNSAVED`：保存（留在编辑器）/ 关闭（留下继续改）/ 丢弃（红字，回目录）；`canSave` 为假时保存键不亮 |
+| `pages/Index.ets` | 系统返回键/侧滑也要拦：停在文件分节且文档脏 → 消费这次返回并发 `requestUnsavedPrompt()` |
+
+**为什么系统返回要绕一圈邮箱**：`onBackPress` 只能挂在 `@Entry`（`pages/Index.ets`），
+而面板归 `ui/FilesScreen.ets`（它才有 `bindSheet` 宿主）。入口页改不了子组件状态，
+于是沿用 `dshFilesRevealSeq` 那套 `AppStorage` 序号邮箱（`dshUnsavedBackSeq`）；
+入口页还要知道「此刻在哪个分节」，所以 `AppShell` 把 `section` 发布到 `dshMainSection`。
+**只拦 `←` 不拦系统返回，等于「不点那个按钮就能绕过」—— 源工程的原话。**
+
+**判据/回归**：`test/cases/unsaved-changes.test.ts`（6 例：未改 / 改过 / 改回原文 / 非文本无基线 /
+保存后基线同步 / 只改正文不动基线）。

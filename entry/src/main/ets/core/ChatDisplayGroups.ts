@@ -23,6 +23,7 @@
  * | `USER` | 消息 | 用户自己说的话，永远独立一行，折进去等于把提问藏了 |
  * | `ASSISTANT` | 消息 | 助手正文。**dsh-ui 卡片没有独立 kind** —— 它是正文里的围栏，由 `AssistantBody` 就地解析成原生组件，所以跟着 ASSISTANT 一起算消息 |
  * | `FAILURE` | 消息 | 终局失败（限流 / 配额 / 密钥 / 登出停止）是用户唯一能看到「为什么失败」的地方，折进过程组等于把答案藏起来 |
+ * | `TRUNCATED` | 消息 | 「回答被截断」提示。它**不是过程**：用户在翻记录，正停在「话为什么说了一半」的地方，折进组里等于把解释藏起来（源工程 `ChatTurnMaxTokensTest` 专门钉这一条） |
  * | `CONTEXT` | 过程 | 上下文注入（记忆库、AGENTS.md、插件、技能唤起…）：用户想知道「注入了 N 项」，不是逐条读正文 |
  * | `REASONING` | 过程 | 思考。历史与流式两处都已把它挡在消息流外（改由思考条承载），漏进来也不该占正文的位置 |
  * | `TOOL` | 过程 | 工具调用**同时也承载工具结果**：本工程把 `tool/result` 塞进 `tools[].result`，枚举里**没有**独立的 TOOL_RESULT —— 所以「工具调用 + 工具结果」在这里是同一个 kind |
@@ -206,6 +207,7 @@ export function groupChatDisplay(items: ChatDisplayItem[],
  * 判定表与文件头那张表一一对应，理由也写在那儿；这里只留一条**额外的保险**：
  * 任何带 `failure` 的项一律当消息。当前只有 FAILURE 会带这个字段，
  * 但只要谁把它带上了，它就不能被折进过程组 —— 用户找的就是那句「为什么失败了」。
+ * `TRUNCATED` 不带 `failure`，但它不在下面的过程白名单里，天生独立（别把它加进去）。
  */
 export function isProcessItem(item: ChatDisplayItem): boolean {
   if (item.failure !== null) {

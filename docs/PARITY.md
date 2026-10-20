@@ -24,6 +24,7 @@
 | 多主机持久化 | 无（本地） | `core/HostStore.ts` | ✅ | 坑 15 修复的复测见待验第 23 条；**2026-10-17 真机**：同调试签名**覆盖安装**后 `wangke-PC` 配对数据**保住**（局域网 / 虚拟网两地址俱在） |
 | 选路探活（四级排序） | `probes` | `core/ConnectionModels.ts` | ✅ | 排序键须与源一致，有单测锁 |
 | 冷启动自动重连 + 自动切会话页 | `GET /scopes` | `AppRuntime` | 🟡 | 缺陷 C 修复，待验第 17 条 |
+| **连接页三态（已连接 / 已断开 / 未参与）** | `GET /health` | `core/ConnectionLiveness.ts` + `ui/ConnectScreen.ets` | ✅（未上机） | 源 `ConnectionLiveness.kt`。`connected` 是历史状态位，不能当「此刻还连着」；回前台先复核、卡片红色「已断开」+「重新连接」、点按按 `shouldReconnectOnTap` 决定是否真发起。10 用例，见坑 60 |
 | 端点切换（局域网 / 虚拟网 / 公网） | 无 | `SettingsScreen` | 🟡 | 待验第 14 条 |
 | 剪贴板读取 | ~~`READ_PASTEBOARD`~~ | — | 🔵 | 该权限为 `system_basic` 级，声明后**装不上**；已移除并降级为「读到空串则提示」 |
 | `PATCH` 请求 | `SDK` 枚举缺 PATCH | `DshClient` | 🟡 | 靠字符串转型绕过，待验第 1 条 |
@@ -38,7 +39,7 @@
 | GenUI 卡片（`dsh-ui` 围栏） | 无（自研 `GenUiBlocks`） | `ui/GenUiCard.ets` | ✅ | 22 种组件，23 用例 |
 | 工具调用详情 | 消息体 | `core/ChatToolFormat.ts`（+ `ChatToolItems.ts`） | ✅ | 18 用例 |
 | **工具调用专用块（Read / Terminal / Diff）** | 消息体 | `core/ToolBlocks.ts` + `ui/ToolBlockBody.ets` | ✅（未上机） | 源 `a96f5e7`（v2.2.43）。`toolBlockView()` 把 `read`/`read_image`/`bash`/`edit`/`write` 投影成三种专用长相，其余回落 Generic；含 `extractReadBody()`（剥 `<content>`、判 `N: ` 行号）与 `stripAnsiEscapes()`（手写扫描，残缺序列不吞正文）。界面由 `ToolCallDetailBlock` 按形态分派（`read` 失败不走专用块、`diff` 失败补错误块）。19 用例 |
-| **正文已知文件名链接化（已接入渲染路径）** | 会话文件清单 | `core/PathLinks.ts` + `core/InlineSegments.ts` + `ui/InlineText.ets` | ✅ | 源 `a344e3f`（v2.2.44）。`linkifyKnownFiles()`：唯一文件名才替换、不碰已有 Markdown 链接、只替换第一次；`inlineSegments()` 把 `[文字](目标)` 切成「普通文字 / 链接」分段，`InlineText`（`Text` + 逐段 `Span`）渲染；点击分流在 `ui/ChatDetail.ets`（服务端路径开文件面板并定位 / `http(s)` 外部浏览器 / 相对路径拼 cwd 再当绝对路径 / 其余提示不支持）。候选取自 `sessionFileList`（与「本会话的文件」面板**同一出处**）并跟随投影缓存。14 + 13 用例。见坑 46 |
+| **正文已知文件名链接化（已接入渲染路径）** | 会话文件清单 | `core/PathLinks.ts` + `core/InlineSegments.ts` + `ui/InlineText.ets` | ✅ | 源 `a344e3f`（v2.2.44）。`linkifyKnownFiles()`：唯一文件名才替换、不碰已有 Markdown 链接、只替换第一次；`inlineSegments()` 把 `[文字](目标)` 切成「普通文字 / 链接」分段，`InlineText`（`Text` + 逐段 `Span`）渲染；点击分流在 `ui/ChatDetail.ets`（服务端路径开文件面板并定位 / `http(s)` 外部浏览器 / 相对路径拼 cwd 再当绝对路径 / 其余提示不支持）。候选取自 `sessionFileList`（与「本会话的文件」面板**同一出处**）并跟随投影缓存。14 + 13 + 6 用例。链接目标末尾的位置后缀（`:12` / `:12-34` / `:12:5` / `#L12` / `#L12-L34`）在分类与拼 cwd 前剥掉（`stripLocationSuffix()`，2026-10-20 真机反馈修复）。见坑 46 / 坑 59 |
 | **Markdown autolink 尖括号剥壳** | 无 | `core/ChatLinkTarget.ts` | ✅ | 源 `a344e3f`。`classify()` 先剥 `</abs/path>` 再分类，避免「翻倍路径」。4 用例 |
 | **访问权限档位 Pill（顶栏胶囊）** | `GET /chat/permission-presets` + `POST` 命令 | `core/ModelsConfig.ts` + `core/DshClient.ts` + `ui/ChatHeader.ets` | ✅ | 源 `a96f5e7` / `a344e3f`（v2.2.43–44）。投影 `permissions` **只给 `currentValue`**，候选必须走独立目录接口（bridge ≥ 2.4.2；**老 bridge 404 须容忍**，见坑 47）；胶囊贴在顶栏「已连接 / 已断开」之后、**宽度自适应不独占一行**（源 `ChatHeader.kt` 同款位置），与 ⋯ 菜单权限段**同源**（`selectPermissionPreset` → `executeCommand(id, "/permission <preset>")`），`danger-full-access` 走二次确认；候选取不到时仍渲染**不可点**的档位标签。档位名走 `currentValue` → `preset` → `sandbox` 降级 |
 | 审批（含 `full-access` 二次确认） | `POST /approvals` | `ui/ChatDetail.ets` | ✅ | 由 `AlertDialog` 改为底部面板 + 勾选闸门 |
@@ -56,6 +57,7 @@
 | **表格边框 + 列间竖线** | 无（源：`ChatMarkdownTable.kt`） | `ui/MarkdownView.ets` | 🟡 | 2026-10-17 新增。原表格只有底色、没有边框，「不像一张表」 |
 | **失败行重试** | 无（源：`TurnFailureRow`） | `ui/ChatMessage.ets` | 🟡 | 2026-10-17 新增 |
 | **AI 生成内容标识（会话级常驻，与思考条合并）** | 无 | `ui/ChatStatusBar.ets` | ✅ | 1.0.2 已有标识；2026-10-17 与思考条合并成**一条状态条**（有思考显示思考、否则显示标识），并**真机确认**底部单条「内容由 AI 生成」在位。⚠️ 原 `ai-generated-label-evidence.png` 已过期，需重截 |
+| **回答被截断提示** | 实时帧 `chat.turn.end`（`reason.kind === 'max-tokens'`） | `core/ChatTruncation.ts` + `ui/MessageParts.ets` | ✅（未上机） | 源 `HarnessTruncationViewModel.kt` / `ChatModels.kt`。**不是失败**：`sessions.history` 不返回 `turn/end`，只能由实时帧写进状态（`truncatedNotice`，伪 seq=0），新一轮 `chat.turn.start` 清掉；历史侧另有 `turnEndItem` 的 `max-tokens` 分支兜底。渲染为黄色警示行（深浅各一套色），独立成消息、不折进过程组。9 用例 + 接线门禁 1 例。见坑 58 |
 | **图片全屏查看 + 保存** | 消息附件 | `core/ImageSave.ts` + `ui/MessageParts.ets` + `ui/ChatDetail.ets` | 🟡 | 2026-10-17 新增。保存走**零权限系统面板**而不是写相册 —— 相册写入要 `WRITE_IMAGEVIDEO`（system_basic），声明会导致**安装失败**（坑 26）。取消与失败分档处理；文件名按魔数补扩展名 |
 | **消息级分叉（`atSeq`）** | `POST /chat/sessions/{id}/fork` | `core/ChatFork.ts` + `ui/ChatMessage.ets` + `ui/ChatDetail.ets` | 🟡 | 2026-10-17 新增。只给**用户消息且 `seq > 0`**（源 `ChatForkPoint.kt` 判据）。分叉会真实新建会话 ⇒ 必须二次确认；确认框与展开态同理住父组件（坑 29） |
 | **已归档会话入口** | `GET /chat/sessions?archived=true` | `ui/ArchivedSessionRow.ets` + `ui/ChatScreen.ets` | 🟡 | 2026-10-17 新增。**入口按能力位 `session-archive-list-v1` 守卫**，读不到能力位一律不显示（「未知 ≠ 缺失」，坑 33）—— 老 bridge 会忽略 `archived` 参数并返回未归档列表，照显示只会让用户以为「一条归档都没有」。底部**明说**本插件不支持恢复归档 |
@@ -73,6 +75,7 @@
 | 授权根目录 | 插件 `scopes` | `ui/FilesScreen.ets` | ✅ | App 不拥有服务器绝对路径，只用 `rootId + relativePath` |
 | 目录浏览 | `GET /files` | `ui/FilesScreen.ets` | ✅ | |
 | 行号编辑器 | `PUT /files` | `ui/FilesScreen.ets`（`NumberedTextEditor`） | 🟡 | 待验第 9 条（行高对齐、超长单行折行） |
+| **未保存改动确认** | 无（本地判据） | `core/HarnessTypes.ts`（`OpenDocument.hasUnsavedChanges`）+ `ui/EditorPane.ets` + `ui/FilesScreen.ets` | ✅（未上机） | 源 `FilesScreen.kt` / `UnsavedChangesDialog.kt`（v2.2.44 缺陷 W3）。打开时记原文并逐字比；保存键脏时变强调色；离开编辑器（顶栏 `←` 与系统返回键）走「保存 / 关闭 / 丢弃改动」三出口，存不了时保存键不亮。保存成功把基线挪到刚写进去的正文（否则永远判脏）。系统返回经 `AppStorage` 序号邮箱让入口页转请文件页弹面板（`onBackPress` 只能挂 `@Entry`）。6 用例，见坑 61 |
 | Markdown 源码 / 预览 | 无 | `ui/FilesScreen.ets` | ✅ | 预览复用 `MarkdownView`，与聊天页同一份实现 |
 | 图片预览 | `ImageCodec.ets` | `ui/FilesScreen.ets` | 🟡 | 待验第 5 条（格式兼容、长边 1024 内存） |
 | 二进制降级预览 | 无 | `ui/Components.ets`（`BinaryFilePreview`） | ✅ | 会话文件表与文件页**共用**同一组件 |
@@ -111,16 +114,17 @@
 
 ---
 
-## 统计（2026-10-20 第二次重数）
+## 统计（2026-10-21 第四次重数）
 
 | 状态 | 项数 |
 |---|---|
-| ✅ 已实现（其中 **1 行标注「未上机」**） | 31 |
+| ✅ 已实现（其中 **4 行标注「未上机」**） | 34 |
 | 🟡 已实现待真机验证 | 34 |
 | 🔵 有意的差异 | 3 |
 | ⛔ 不做 | 0 |
 
-> 合计 **68 行**（本轮新增「后台任务面板」1 行，🟡 由 33 → 34）。
+> 合计 **71 行**（2026-10-21 新增「连接页三态」「未保存改动确认」2 行，✅ 由 32 → 34；
+> 两行都**标了「未上机」**，无设备时不改写成「真机通过」）。
 >
 > **🟡 不等于"差"**，而是"等设备"。无设备时**不许**把 🟡 说成 ✅。
 > 逐条复测方法见 `PORT-MAP.md` §7「待真机验证」（25 条）。
@@ -129,9 +133,10 @@
 > 「工具调用专用块」「正文已知文件名链接化」「访问权限档位 Pill」三行都是那次统计之后才进表的。
 > 本轮**逐行重数**得 **31 / 33 / 3**（总行数 67）。加行请顺手重数，别让统计与表格分家。
 >
-> **1 行标的是 `✅（未上机）`**：工具调用专用块 —— 它**只是代码落盘 + `BUILD SUCCESSFUL` +
-> 单测通过**，**未在设备上确认**。按图例口径本应记 🟡；此处沿用 2026-10-20 给工具块定下的写法，
-> 把「已实现」与「已上机」两个维度**分开标注**，计数时算进 ✅，**读表请以行内标注为准**。
+> **2 行标的是 `✅（未上机）`**：工具调用专用块、回答被截断提示 —— 它们**只是代码落盘 +
+> `BUILD SUCCESSFUL` + 单测通过**，**未在设备上确认**。按图例口径本应记 🟡；此处沿用
+> 2026-10-20 给工具块定下的写法，把「已实现」与「已上机」两个维度**分开标注**，
+> 计数时算进 ✅，**读表请以行内标注为准**。
 >
 > **2026-10-20 上机后重标**：**正文已知文件名链接化**与**访问权限档位 Pill** 两行已由「未上机」
 > 升为 ✅（真机验收细节见 TESTING）。注意权限胶囊的**弹窗行点击**这一步受注入工具限制未单独触发

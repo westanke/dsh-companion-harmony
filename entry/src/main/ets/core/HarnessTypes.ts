@@ -39,6 +39,9 @@ import {
   Host,
 } from './ConnectionModels';
 import {
+  ChatDisplayItem,
+} from './ChatPresentationTypes';
+import {
   LiveChatState,
 } from './ChatPresentation';
 import {
@@ -99,10 +102,21 @@ export class OpenDocument {
    * 两者在界面上完全不同：前者要给「文件过大 + 下载」的出路，后者只是还没读。
    */
   skippedForSize: boolean;
+  /**
+   * 打开时的原始文本 —— 「有没有未保存改动」就靠和它逐字比。
+   *
+   * 为什么不放在界面组件里存一份：编辑器的值会随输入法、重绘、进程重建变化，而
+   * **返回**那条路径不一定经过同一个组件的生命周期（预览 ↔ 编辑 ↔ 返回都可能重建）。
+   * 判定放进数据层才有一份权威值。
+   *
+   * 为 null 表示这不是文本文件（图片 / PDF / 超大文件），谈不上改动。
+   */
+  originalText: string | null;
 
   constructor(entry: FileEntry, text: string | null = null, etag: string = '', hasBom: boolean = false,
               lineEnding: string = '\n', contentType: string | null = null,
-              bytes: Uint8Array | null = null, skippedForSize: boolean = false) {
+              bytes: Uint8Array | null = null, skippedForSize: boolean = false,
+              originalText: string | null = null) {
     this.entry = entry;
     this.text = text;
     this.etag = etag;
@@ -111,18 +125,29 @@ export class OpenDocument {
     this.contentType = contentType;
     this.bytes = bytes;
     this.skippedForSize = skippedForSize;
+    this.originalText = originalText;
   }
 
   /** 只改正文的副本（对应 Kotlin `document.copy(text = text)`）。 */
   withText(text: string): OpenDocument {
     return new OpenDocument(this.entry, text, this.etag, this.hasBom, this.lineEnding,
-      this.contentType, this.bytes, this.skippedForSize);
+      this.contentType, this.bytes, this.skippedForSize, this.originalText);
   }
 
-  /** 只改 etag 的副本（对应 Kotlin `document.copy(etag = etag)`）。 */
-  withEtag(etag: string): OpenDocument {
+  /**
+   * 保存成功后的副本：etag 换成新的，**同时把基线挪到刚写进去的正文**。
+   *
+   * 只换 etag 不换基线的话，保存成功后这个文档仍然被判成「有改动」——
+   * 脏点不会消失，用户会以为没存上；而再点一次返回还会弹出「未保存」的假警报。
+   */
+  withSaved(etag: string): OpenDocument {
     return new OpenDocument(this.entry, this.text, etag, this.hasBom, this.lineEnding,
-      this.contentType, this.bytes, this.skippedForSize);
+      this.contentType, this.bytes, this.skippedForSize, this.text);
+  }
+
+  /** 编辑器里的内容与打开时不一致，且这是能编辑的文本文件。 */
+  hasUnsavedChanges(): boolean {
+    return this.originalText !== null && this.text !== this.originalText;
   }
 }
 
@@ -357,6 +382,17 @@ export class HarnessState {
    * `expandedJobId` 也得在刷新后存活，不然用户点开一条任务的输出、一刷新就整个收回去。
    */
   jobsPanel: JobsPanelState | null = null;
+  /**
+   * 「回答被截断」提示**所属的会话**（null = 当前没有这条提示）。
+   *
+   * 为什么要单独存而不是从 history 里算：内核 `sessions.history` 不返回 `turn/end`，
+   * 历史里根本没有这条信息（源工程 2026-10-18 真机实测）。所以它只能由实时帧写入、
+   * 记在状态里跨历史刷新存活；带上 sessionId 是为了切会话时自动失效，
+   * 不必在每个切换入口记得清一次。
+   */
+  truncatedNoticeSession: string | null = null;
+  /** 与 [truncatedNoticeSession] 成对：那条提示本身（`ChatItemKind.TRUNCATED`）。 */
+  truncatedNotice: ChatDisplayItem | null = null;
   approvalState: ApprovalUiState = ApprovalUiState.none();
   /**
    * 当前会话待回答的问题（只留 state === continued 的那些）。
@@ -463,6 +499,8 @@ export class HarnessState {
     this.history = other.history;
     this.liveChat = other.liveChat;
     this.jobsPanel = other.jobsPanel;
+    this.truncatedNoticeSession = other.truncatedNoticeSession;
+    this.truncatedNotice = other.truncatedNotice;
     this.approvalState = other.approvalState;
     this.questions = other.questions;
     this.answeringCallId = other.answeringCallId;

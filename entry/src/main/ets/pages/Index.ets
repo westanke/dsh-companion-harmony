@@ -1,8 +1,8 @@
 import { common } from '@kit.AbilityKit';
-import { HarnessState } from '../core/HarnessViewModel';
-import { initHarness, harnessState, harnessVm } from '../ui/AppRuntime';
+import { HarnessState, OpenDocument } from '../core/HarnessViewModel';
+import { currentMainSection, initHarness, harnessState, harnessVm, requestUnsavedPrompt } from '../ui/AppRuntime';
 import { ConnectScreen } from '../ui/ConnectScreen';
-import { AppShell } from '../ui/AppShell';
+import { AppShell, MainSection } from '../ui/AppShell';
 
 /**
  * 应用根页 —— 移植自原工程 `ui/App.kt`（369 行）的**页面判据**部分。
@@ -96,14 +96,36 @@ struct Index {
    *
    * 只清选中、**不断连接**：`selectSession(null)` 只重置会话相关状态（历史 / 审批 / 问答 /
    * 补全），连接与事件流照旧，退回列表是即时的。
+   *
+   * 第二段是**文件页的未保存改动**：顶栏返回箭头只是离开编辑器的其中一条路径，
+   * 系统返回键是另一条；只拦一处，等于「不用点那个按钮就能绕过确认」。判定与面板
+   * 都在文件分节里，这里只做「停在那且改过没存 → 请它弹面板」这一件事
+   * （邮箱走法见 `AppRuntime.requestUnsavedPrompt`）。
    */
   onBackPress(): boolean {
     const vm = harnessVm();
     const st: HarnessState | null = this.st();
-    if (vm === null || st === null || st.selectedSessionId === null) {
+    if (vm === null || st === null) {
       return false;
     }
-    void vm.selectSession(null);
-    return true;
+    // 先判文件页：`selectedSessionId` 跨分节存活，若先判它，用户停在文件分节按返回
+    // 会莫名其妙地把后台那个会话的选清除掉，而不是处理眼前这份文档。
+    if (currentMainSection() === MainSection.Files && this.documentDirty()) {
+      requestUnsavedPrompt();
+      // 消费掉这次返回：先让用户决定「留下 / 丢弃 / 保存」，而不是默默退出应用。
+      return true;
+    }
+    if (st.selectedSessionId !== null) {
+      void vm.selectSession(null);
+      return true;
+    }
+    return false;
+  }
+
+  /** 文件页当前那份文档改过还没存（判定在数据层，见 `OpenDocument.hasUnsavedChanges`）。 */
+  private documentDirty(): boolean {
+    const st: HarnessState | null = this.st();
+    const document: OpenDocument | null = st === null ? null : st.document;
+    return document !== null && document.hasUnsavedChanges();
   }
 }

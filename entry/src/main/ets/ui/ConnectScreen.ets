@@ -24,6 +24,7 @@ import { Endpoint, EndpointProbe, Host } from '../core/ConnectionModels';
 import { HarnessState, HarnessViewModel } from '../core/HarnessViewModel';
 import { harnessState, harnessVm } from './AppRuntime';
 import { BrandMark, WarningBanner, StatusLabel, endpointKindLabel } from './Components';
+import { HostCardState, hostCardState, shouldReconnectOnTap } from '../core/ConnectionLiveness';
 import { localErrorText } from './ErrorText';
 import { readClipboardText } from '../platform/Clipboard';
 
@@ -299,8 +300,13 @@ export struct ConnectScreen {
             Text(this.fmt1($r('app.string.endpoint_count'), host.endpoints.length))
               .fontSize(11)
               .fontColor($r('sys.color.ohos_id_color_text_secondary'))
-            if (host.id === this.st().activeHostId && this.st().connected) {
+            if (this.cardState(host) === HostCardState.CONNECTED) {
               StatusLabel({ label: $r('app.string.connected'), active: true })
+                .margin({ left: 8 })
+            } else if (this.cardState(host) === HostCardState.DISCONNECTED) {
+              // 「连过、此刻断开」：红点。与「从没连过」必须区分开，
+              // 否则用户看到的是同一个灰点，只能凭记忆猜（源工程提交 91743f2）。
+              StatusLabel({ label: $r('app.string.connect_offline'), active: false, offline: true })
                 .margin({ left: 8 })
             }
           }
@@ -381,29 +387,40 @@ export struct ConnectScreen {
     .margin({ bottom: 8 })
     .borderRadius(10)
     .borderWidth(1)
-    .borderColor(host.id === this.st().activeHostId && this.st().connected
+    .borderColor(this.cardState(host) === HostCardState.CONNECTED
       ? $r('sys.color.ohos_id_color_text_primary_activated')
       : $r('sys.color.ohos_id_color_text_secondary'))
     .backgroundColor($r('sys.color.ohos_id_color_background'))
     .alignItems(HorizontalAlign.Start)
   }
 
+  /** 卡片三态（判据见 `core/ConnectionLiveness.ts`；这里只负责取状态）。 */
+  private cardState(host: Host): HostCardState {
+    const st: HarnessState = this.st();
+    return hostCardState(host.id, st.activeHostId, st.connected);
+  }
+
   /**
-   * 主机卡片底部按钮的文案 —— 三种状态三种说法。
+   * 主机卡片底部按钮的文案 —— 三档状态、四种说法。
    *
-   * - 已连接（`isActive`）：「进入应用」（纯本地跳转）；
+   * - 已连接：「进入应用」（纯本地跳转）；
+   * - 是当前活跃连接、但此刻已断开：「重新连接」；
    * - 这台刚探活全失败：「重试连接」；
    * - 其余：「连接」。
    *
-   * 中间那一档是给「网络断了」用的：原先失败前后按钮都写「连接」，用户点完回来
-   * 看到的是同一屏同样的字，只能怀疑自己没点上。判据只看**当前选中主机**的探活结果
-   * （`endpointProbes` 也只装当前主机的），换一台电脑不受影响。
+   * 「已断开」与「重试连接」必须分开：前者说明**这台曾经连上过**、只是链路没了；
+   * 后者是本次点击刚失败。原先只有「连接 / 进入应用」两档，断网前后的按钮
+   * 一字不差，用户只能怀疑自己没点上（真机反馈）。
    */
   private hostButtonText(host: Host): ResourceStr {
-    const st: HarnessState = this.st();
-    if (host.id === st.activeHostId && st.connected) {
+    const card: HostCardState = this.cardState(host);
+    if (card === HostCardState.CONNECTED) {
       return $r('app.string.enter_app');
     }
+    if (card === HostCardState.DISCONNECTED) {
+      return $r('app.string.reconnect');
+    }
+    const st: HarnessState = this.st();
     if (host.id === st.selectedHostId && this.probeFailureCount() > 0) {
       return $r('app.string.connect_retry');
     }
@@ -413,17 +430,17 @@ export struct ConnectScreen {
   /**
    * 底部按钮的启用条件 —— 与源工程同款的两分支。
    *
-   * 已连接（`isActive`）时只要地址非空即可点（纯本地跳转，不受 `busy` 影响）；
+   * 已连接时只要地址非空即可点（纯本地跳转，不受 `busy` 影响）；
    * 未连接时要额外等 `busy`/`connecting` 落下去（要做网络动作）。
    */
   private connectButtonEnabled(host: Host): boolean {
-    const st: HarnessState = this.st();
     if (host.endpoints.length === 0) {
       return false;
     }
-    if (host.id === st.activeHostId && st.connected) {
+    if (this.cardState(host) === HostCardState.CONNECTED) {
       return true;
     }
+    const st: HarnessState = this.st();
     return !st.busy && !st.connecting;
   }
 
@@ -435,9 +452,10 @@ export struct ConnectScreen {
     if (vm === null) {
       return;
     }
-    // 这台已经连上了（冷启动自动重连成功就会停在这个状态）：直接进去，不必再探活一遍。
-    // 没连上的才走 connectHost（并发探活 + 自动选路）。
-    if (!(st.connected && host.id === st.activeHostId)) {
+    // 判据是「这台是不是当前活跃连接 **且** 客户端还握在手里」，**不是** `connected`。
+    // 后者是历史值：断网后仍可能为 true，于是这里短路掉、按钮被门闩判回连接页，
+    // 用户看到的就是「断网后点按钮毫无反应」（源工程提交 91743f2）。
+    if (shouldReconnectOnTap(host.id, st.activeHostId, vm.activeConnection() !== null)) {
       void vm.connectHost(host.id);
     }
   }

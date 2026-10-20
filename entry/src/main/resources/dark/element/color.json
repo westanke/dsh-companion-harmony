@@ -3,6 +3,22 @@
     {
       "name": "ai_mark",
       "value": "#FF9E9E"
+    },
+    {
+      "name": "turn_truncated_bg",
+      "value": "#33280F"
+    },
+    {
+      "name": "turn_truncated_border",
+      "value": "#7A5F25"
+    },
+    {
+      "name": "turn_truncated_text",
+      "value": "#F2C46B"
+    },
+    {
+      "name": "connection_offline",
+      "value": "#EF9A9A"
     }
   ]
 }

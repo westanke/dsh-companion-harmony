@@ -285,6 +285,14 @@
       "value": "Connected"
     },
     {
+      "name": "connect_offline",
+      "value": "Disconnected"
+    },
+    {
+      "name": "reconnect",
+      "value": "Reconnect"
+    },
+    {
       "name": "connecting_endpoints",
       "value": "Probing %d address(es)…"
     },
@@ -367,6 +375,10 @@
     {
       "name": "disconnect",
       "value": "Disconnect"
+    },
+    {
+      "name": "discard_changes",
+      "value": "Discard"
     },
     {
       "name": "discover_models",
@@ -1461,8 +1473,24 @@
       "value": "This turn failed"
     },
     {
+      "name": "turn_max_tokens_hint",
+      "value": "The answer was truncated; the output so far is kept in the conversation. Send “continue” to let the model resume."
+    },
+    {
+      "name": "turn_max_tokens_title",
+      "value": "Output token limit reached"
+    },
+    {
       "name": "turn_stopped_title",
       "value": "Stopped"
+    },
+    {
+      "name": "unsaved_changes_message",
+      "value": "This file has changes that were not saved. Going back now discards them."
+    },
+    {
+      "name": "unsaved_changes_title",
+      "value": "Unsaved changes"
     },
     {
       "name": "upgrade_notice",

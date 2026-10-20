@@ -36,6 +36,16 @@ export enum ChatItemKind {
   CONTEXT = 'CONTEXT',
   TOOL = 'TOOL',
   FAILURE = 'FAILURE',
+  /**
+   * 模型撞到**输出 token 上限**、回答被截断时的那条提示。
+   *
+   * 与 [FAILURE] 分开是有意的，内核也是这么分的：它给的是**独立的
+   * `turn-max-tokens` 节点**，而不是 `turn-error`（见内核
+   * `TURN_PROCESS_INDEPENDENT_KINDS`，那里两者并列）。理由是语义：
+   * 截断**不是失败** —— 已有的输出是有效内容，报成红框会让用户以为整轮白跑。
+   * 渲染成黄色警示，文案对齐内核 `message.maxTokens` / `message.maxTokens.hint`。
+   */
+  TRUNCATED = 'TRUNCATED',
 }
 
 /**

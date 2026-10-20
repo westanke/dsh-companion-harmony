@@ -121,6 +121,12 @@ export struct EditorPane {
     return document.text;
   }
 
+  /** 正文与打开时不一致（判据在数据层，见 `OpenDocument.hasUnsavedChanges`）。 */
+  private isDirty(): boolean {
+    const document: OpenDocument | null = this.doc();
+    return document !== null && document.hasUnsavedChanges();
+  }
+
   /** 保存按钮的三条闸门（见文件头判据 4）。 */
   private canSave(): boolean {
     const document: OpenDocument | null = this.doc();
@@ -291,7 +297,11 @@ export struct EditorPane {
         Text('💾')
           .fontSize(16)
           .padding(9)
-          .fontColor($r('sys.color.ohos_id_color_text_secondary'))
+          // 脏状态直接画在保存键上：没改动时是普通图标，一改动立刻变强调色。
+          // 这是「用户怎么知道我改了还没存」的第一现场提示（对位源工程 `FilesScreen.kt:502`）。
+          .fontColor(this.isDirty()
+            ? $r('sys.color.ohos_id_color_text_primary_activated')
+            : $r('sys.color.ohos_id_color_text_secondary'))
           .opacity(this.canSave() ? 1 : 0.4)
           .enabled(this.canSave())
           .onClick((): void => {

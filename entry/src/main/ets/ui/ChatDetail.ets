@@ -105,10 +105,13 @@ import {
   ChatDisplayItem, ChatItemKind, LiveChatState, todoItemsOf,
 } from '../core/ChatPresentation';
 import { visibleHistoryItems } from '../core/ChatVisibleItems';
+import { truncationItemsOf } from '../core/ChatTruncation';
 import {
   ChatDisplayEntry, chatDisplayEntryKey, groupChatDisplay,
 } from '../core/ChatDisplayGroups';
-import { ChatLinkReason, ChatLinkTarget, ChatLinkTargetKind } from '../core/ChatLinkTarget';
+import {
+  ChatLinkReason, ChatLinkTarget, ChatLinkTargetKind, stripLocationSuffix,
+} from '../core/ChatLinkTarget';
 import { joinCwd, linkifyKnownFiles } from '../core/PathLinks';
 import { liveThinkingText } from '../core/ChatThinkBar';
 import { composerOverlayActive } from '../core/ComposerSuggestions';
@@ -443,6 +446,14 @@ export struct ChatDetail {
     for (let i = 0; i < live.length; i++) {
       out.push(live[i]);
     }
+    // 「回答被截断」提示排在**尾部**：它属于刚结束的那一轮，历史里查不到（内核
+    // `sessions.history` 不返回 turn/end），只能由实时帧写进状态。
+    // 会话对不上时 `truncationItemsOf` 返回空表 —— 切会话自动失效，不必各个入口手动清。
+    const notices: ChatDisplayItem[] = truncationItemsOf(this.st().truncatedNoticeSession,
+      this.st().truncatedNotice, this.st().selectedSessionId);
+    for (let i = 0; i < notices.length; i++) {
+      out.push(notices[i]);
+    }
     return out;
   }
 
@@ -699,7 +710,9 @@ export struct ChatDetail {
     if (target.reason === ChatLinkReason.RELATIVE_PATH) {
       const cwd: string | null = this.cwdAbsolute();
       if (cwd !== null && cwd.length > 0) {
-        this.openSessionFileFromLink(joinCwd(cwd, target.path));
+        // 相对路径同样要剥位置后缀：`docs/x.md:1` 拼进 cwd 后就成了
+        // `cwd/docs/x.md:1`，服务端只会回「不是普通文件」（真机实测 2026-10-20）。
+        this.openSessionFileFromLink(joinCwd(cwd, stripLocationSuffix(target.path.trim())));
         return;
       }
       // 拿不到 cwd（本工程实测 `/` 之前的字段多为空）时给同一句提示：

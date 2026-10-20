@@ -25,7 +25,7 @@
 
 import { promptAction } from '@kit.ArkUI';
 import { HarnessState } from '../core/HarnessViewModel';
-import { harnessVm } from './AppRuntime';
+import { MAIN_SECTION_KEY, harnessVm } from './AppRuntime';
 import { BrandMark, StatusLabel } from './Components';
 import { localErrorText } from './ErrorText';
 import { ChatScreen } from './ChatScreen';
@@ -89,7 +89,11 @@ export struct AppShell {
   @StorageLink('dshFilesRevealSeq') @Watch('onFilesRevealRequested') filesRevealSeq: number = 0;
   /** 窄屏抽屉是否展开。 */
   @State drawerOpen: boolean = false;
-  @State section: MainSection = MainSection.Chat;
+  /**
+   * 当前分节。`@Watch` 只做一件事：把它写进 `AppStorage`，供入口页的 `onBackPress`
+   * 判断「此刻停在文件分节吗」（见 `AppRuntime.MAIN_SECTION_KEY` 的注释）。
+   */
+  @State @Watch('onSectionChanged') section: MainSection = MainSection.Chat;
   /** 是否宽屏（>= 840vp 常驻侧栏）。用 onAreaChange 跟踪，初值按窄屏处理。 */
   @State wide: boolean = false;
 
@@ -102,6 +106,8 @@ export struct AppShell {
 
   aboutToAppear(): void {
     this.syncSectionFromScopes();
+    // 初次装配也要发布一次：`@Watch` 只在**变化**时触发，而初值不会触发。
+    this.publishSection();
     const vm = harnessVm();
     if (vm !== null) {
       this.unsubscribe = vm.subscribe((): void => {
@@ -150,6 +156,15 @@ export struct AppShell {
     // 收到新请求时先收起抽屉：窄屏下抽屉是浮层，切完分节还开着会挡住新页面。
     this.drawerOpen = false;
     this.section = MainSection.Files;
+  }
+
+  /** 分节变化时把它发布到 `AppStorage`（见 `section` 字段的注释）。 */
+  onSectionChanged(): void {
+    this.publishSection();
+  }
+
+  private publishSection(): void {
+    AppStorage.setOrCreate(MAIN_SECTION_KEY, this.section);
   }
 
   aboutToDisappear(): void {

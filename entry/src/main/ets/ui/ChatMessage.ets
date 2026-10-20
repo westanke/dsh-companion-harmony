@@ -47,7 +47,7 @@ import {
   GenUiDiagnosis, diagnoseGenUi, MessageSegment, MessageSegmentKind, splitMessageBody,
 } from '../core/GenUiBlocks';
 import { GenUiDebugLine, GenUiSegment, MessageAttachments, ToolCallDetailBlock,
-  TurnFailureRow } from './MessageParts';
+  TruncatedNoticeRow, TurnFailureRow } from './MessageParts';
 import { InlineText } from './InlineText';
 import { MarkdownView } from './MarkdownView';
 import { writeClipboardText } from '../platform/Clipboard';
@@ -496,6 +496,9 @@ export struct ChatMessageView {
             onRetry: this.onRetry,
           })
         }
+      } else if (this.item.kind === ChatItemKind.TRUNCATED) {
+        // 黄色警示，不是失败行：已有输出是有效内容，不需要「重试上一轮」。
+        TruncatedNoticeRow()
       } else {
         ActivityRow({ item: this.item, onAnswer: this.onAnswer })
       }

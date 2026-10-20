@@ -80,6 +80,14 @@ export struct StatusLabel {
    */
   @Prop label: ResourceStr = '';
   @Prop active: boolean = false;
+  /**
+   * 「曾连接、此刻已断开」：红点 + 红字。
+   *
+   * 为什么需要第三档：原先只有「亮/不亮」两态，于是「这台从没连过」与「连过但断网了」
+   * 在屏幕上**长得一模一样**（都是灰点），用户只能凭记忆猜 —— 而连接页的整个用途
+   * 就是让他看清这件事（源工程 `HostCardState.DISCONNECTED`）。
+   */
+  @Prop offline: boolean = false;
 
   build() {
     Row() {
@@ -87,12 +95,14 @@ export struct StatusLabel {
         .width(7)
         .height(7)
         .fill(this.active ? $r('sys.color.ohos_id_color_text_primary_activated')
-          : $r('sys.color.ohos_id_color_text_secondary'))
+          : (this.offline ? $r('app.color.connection_offline')
+            : $r('sys.color.ohos_id_color_text_secondary')))
       Text(this.label)
         .fontSize(12)
         .margin({ left: 6 })
         .fontColor(this.active ? $r('sys.color.ohos_id_color_text_primary_activated')
-          : $r('sys.color.ohos_id_color_text_secondary'))
+          : (this.offline ? $r('app.color.connection_offline')
+            : $r('sys.color.ohos_id_color_text_secondary')))
     }
   }
 }

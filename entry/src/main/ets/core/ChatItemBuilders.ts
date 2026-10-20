@@ -44,11 +44,14 @@ export function oneEntryItems(entry: HistoryEntry, toolResults: Map<string, Tool
 }
 
 /**
- * 历史里的 `turn/end` 帧 → 失败行；不是失败就返回 null（整条不渲染）。
+ * 历史里的 `turn/end` 帧 → 失败行（或截断提示）；两者都不是就返回 null（整条不渲染）。
  *
  * 判据与插件 `turnFailureOf` **同一套**：`reason.kind === 'error'`，
- * 或 `aborted` 且原因是退出登录。`max-tokens` 不在这里 —— 那是「回答被截断」，
- * 官方渲染成黄色警示而非失败，客户端按普通收尾处理，不误报。
+ * 或 `aborted` 且原因是退出登录。
+ *
+ * `max-tokens` **不是**失败：内核给的是独立的 `turn-max-tokens` 节点，
+ * 官方渲染成黄色警示。此前这里把它落进兜底 `null`，于是这条提示整条消失 ——
+ * 而 `chat.html` 的注释还写着「内核会替你渲染」，可本工程的渲染全归客户端。
  */
 export function turnEndItem(event: SessionEvent): ChatDisplayItem | null {
   const data: JsonMap | null = event.dataMap();
@@ -60,8 +63,16 @@ export function turnEndItem(event: SessionEvent): ChatDisplayItem | null {
     return null;
   }
 
+  const rawKind: string | null = ChatJson.str(reason, 'kind');
+  // 输出 token 上限：排在失败判定**之前**，且不抢既有分支。
+  // 给的是真 seq（历史里确实存在这一帧），与实时提示的伪 seq=0 刻意不同。
+  if (rawKind === 'max-tokens') {
+    return new ChatDisplayItem(`${event.seq}-turn-max-tokens`, event.seq, ChatItemKind.TRUNCATED,
+      null, '', false, [], [], [], null, event.time);
+  }
+
   let failure: ChatTurnFailure | null = null;
-  const kind: string | null = ChatJson.str(reason, 'kind');
+  const kind: string | null = rawKind;
   if (kind === 'error') {
     // error 不是对象的兜底与插件 `turnFailureOf` 一致（`String(error)`）：
     // 内核偶尔会给一个字符串错误，那时消息本身就是信息，不能整条丢掉。

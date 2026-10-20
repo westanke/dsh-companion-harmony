@@ -277,7 +277,7 @@ export class HarnessViewModelSessions extends HarnessViewModelFiles {
       resolved.rootId, parent,
       new OpenDocument(entry, text, content !== null ? content.etag : '',
         decoded !== null ? decoded.hasBom : false, decoded !== null ? decoded.lineEnding : '\n',
-        content !== null ? content.contentType : null, docBytes, false));
+        content !== null ? content.contentType : null, docBytes, false, text));
   }
 
   /**

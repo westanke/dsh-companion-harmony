@@ -22,9 +22,9 @@
  *
  * 2. **「没根目录」与「目录是空的」是两种状态**，文案不同（`no_roots` / `empty_directory`）：
  *    前者要用户去连接页授权一个目录，后者只是这个目录里没东西。
- * 1. **三个系统对话框（新建 / 重命名移动 / 回收站）合成一个 `bindSheet` 宿主 + `sheetKind`**
- *    （与 `ChatScreen.ets` / `ChatDetail.ets` 同一套做法）：ArkUI 系统弹窗装不下带输入框与
- *    可滚列表的内容，一个宿主只有一个显隐来源，也不会互相打架。
+ * 1. **四个系统对话框（新建 / 重命名移动 / 回收站 / 未保存改动）合成一个 `bindSheet` 宿主 +
+ *    `sheetKind`**（与 `ChatScreen.ets` / `ChatDetail.ets` 同一套做法）：ArkUI 系统弹窗装不下
+ *    带输入框、可滚列表与**三个**出口的内容，一个宿主只有一个显隐来源，也不会互相打架。
  */
 
 import { common } from '@kit.AbilityKit';
@@ -37,10 +37,11 @@ import { EmptyState, FileBrowser } from './FileBrowser';
 import { EditorPane } from './EditorPane';
 import { BROWSER_WIDTH_VP, TRASH_LIST_MAX_HEIGHT_VP } from './FilesLayout';
 
-/** 面板宿主的三态（`sheetKind` 只在本文件内使用，故用数字常量而非导出枚举）。 */
+/** 面板宿主的四态（`sheetKind` 只在本文件内使用，故用数字常量而非导出枚举）。 */
 const SHEET_NEW_ENTRY: number = 0;
 const SHEET_MOVE: number = 1;
 const SHEET_TRASH: number = 2;
+const SHEET_UNSAVED: number = 3;
 
 /** 文件分节：宽屏左右分栏；窄屏「目录列表 ↔ 编辑器」二选一。 */
 @Component
@@ -48,6 +49,11 @@ export struct FilesScreen {
   wide: boolean = false;
 
   @StorageLink('dshRevision') revision: number = 0;
+  /**
+   * 入口页发来的「弹未保存确认」请求（系统返回键那条路径）。
+   * 本页持有 `bindSheet` 宿主，所以面板只能由它开（见 `AppRuntime.UNSAVED_BACK_SEQ_KEY`）。
+   */
+  @StorageLink('dshUnsavedBackSeq') @Watch('onUnsavedBackRequested') unsavedBackSeq: number = 0;
 
   // ——— 面板宿主（见文件头差异 1） ———
   @State sheetOpen: boolean = false;
@@ -135,6 +141,66 @@ export struct FilesScreen {
   private openMove(): void {
     this.moveDraft = this.selectedPath();
     this.openSheet(SHEET_MOVE);
+  }
+
+  /** 收到「系统返回键要求弹未保存确认」的请求。 */
+  onUnsavedBackRequested(): void {
+    if (this.st().document === null) {
+      return;
+    }
+    this.openSheet(SHEET_UNSAVED);
+  }
+
+  /** 当前文档改过还没存（判据在数据层，见 `OpenDocument.hasUnsavedChanges`）。 */
+  private documentDirty(): boolean {
+    const document: OpenDocument | null = this.selectedDocument();
+    return document !== null && document.hasUnsavedChanges();
+  }
+
+  /** 保存按钮的闸门：正文存在、文件本身可写、这台设备被授权写（与 `EditorPane.canSave` 同一套）。 */
+  private documentSavable(): boolean {
+    const document: OpenDocument | null = this.selectedDocument();
+    return document !== null && document.text !== null
+      && document.entry.writable && this.scopes().includes('files.write');
+  }
+
+  /**
+   * 退出编辑器回目录。
+   *
+   * 两条离开路径共用它，**都要过未保存确认**：顶栏返回箭头只是其中一条，
+   * 若只拦一处，「点箭头就能绕过确认」等于这道确认没做（源工程 `FilesScreen.kt:188` 的原话）。
+   */
+  private leaveDocument(): void {
+    if (this.documentDirty()) {
+      this.openSheet(SHEET_UNSAVED);
+      return;
+    }
+    this.closeDocument();
+  }
+
+  /** 真的退出编辑器（清掉选中文档并刷新目录）。 */
+  private closeDocument(): void {
+    const vm: HarnessViewModel | null = this.vm();
+    if (vm === null) {
+      return;
+    }
+    vm.selectEntryForAction(new FileEntry());
+    void vm.loadDirectory();
+  }
+
+  /** 「丢弃改动」出口：明确是用户自己选的，所以直接退出，不再追问。 */
+  private discardChanges(): void {
+    this.closeSheet();
+    this.closeDocument();
+  }
+
+  /** 「保存」出口：存完**留在编辑器里**（与源工程一致），不替用户决定退出。 */
+  private saveThenStay(): void {
+    const vm: HarnessViewModel | null = this.vm();
+    if (vm !== null) {
+      void vm.saveDocument();
+    }
+    this.closeSheet();
   }
 
   private openTrash(): void {
@@ -248,7 +314,58 @@ export struct FilesScreen {
   @Builder
   sheetContent() {
     Column() {
-      if (this.sheetKind === SHEET_TRASH) {
+      if (this.sheetKind === SHEET_UNSAVED) {
+        Column() {
+          Text($r('app.string.unsaved_changes_title'))
+            .fontSize(18)
+            .fontWeight(FontWeight.Medium)
+            .width('100%')
+          Text($r('app.string.unsaved_changes_message'))
+            .fontSize(13)
+            .fontColor($r('sys.color.ohos_id_color_text_secondary'))
+            .width('100%')
+            .margin({ top: 10 })
+          // 三个出口各自的后果写在按钮上，界面不替用户做决定：
+          // 保存（留在编辑器）／关闭（留下继续改）／丢弃（丢掉改动回目录）。
+          Button($r('app.string.save'))
+            .type(ButtonType.Capsule)
+            .width('100%')
+            .height(42)
+            .margin({ top: 18 })
+            // 存不了时不亮这个键：亮着点了必然失败，而用户还以为存上了。
+            .enabled(this.documentSavable())
+            .opacity(this.documentSavable() ? 1 : 0.4)
+            .onClick((): void => {
+              this.saveThenStay();
+            })
+          Row() {
+            Button($r('app.string.close'))
+              .type(ButtonType.Capsule)
+              .layoutWeight(1)
+              .height(42)
+              .backgroundColor($r('sys.color.ohos_id_color_component_normal'))
+              .fontColor($r('sys.color.ohos_id_color_text_primary'))
+              .onClick((): void => {
+                this.closeSheet();
+              })
+            Button($r('app.string.discard_changes'))
+              .type(ButtonType.Capsule)
+              .layoutWeight(1)
+              .height(42)
+              .margin({ left: 10 })
+              .backgroundColor($r('sys.color.ohos_id_color_component_normal'))
+              .fontColor($r('sys.color.ohos_id_color_alert'))
+              .onClick((): void => {
+                this.discardChanges();
+              })
+          }
+          .width('100%')
+          .margin({ top: 10 })
+        }
+        .width('100%')
+        .height('100%')
+        .alignItems(HorizontalAlign.Start)
+      } else if (this.sheetKind === SHEET_TRASH) {
         Column() {
           Text($r('app.string.trash'))
             .fontSize(18)
@@ -445,12 +562,8 @@ export struct FilesScreen {
           EditorPane({
             showBack: true,
             onBack: (): void => {
-              const vm: HarnessViewModel | null = this.vm();
-              if (vm !== null) {
-                // 返回目录：把选中文件清掉即可（`loadDirectory` 会顺带刷新目录）。
-                vm.selectEntryForAction(new FileEntry());
-                void vm.loadDirectory();
-              }
+              // 有未保存改动先问；没有就直接回目录。
+              this.leaveDocument();
             },
             onDownload: (): void => {
               void this.downloadSelected();

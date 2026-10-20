@@ -615,14 +615,18 @@ test('ApprovalUiState 四个工厂给出对应的 kind', () => {
   assert.equal(ApprovalUiState.deciding(items[0], items).kind, ApprovalUiKind.DECIDING);
 });
 
-test('OpenDocument.withText / withEtag 只改一个字段', () => {
+test('OpenDocument.withText / withSaved 只改该改的字段', () => {
   const entry = new FileEntry();
   entry.path = 'a.txt';
-  const doc = new OpenDocument(entry, 'old', 'e1', false, '\n', 'text/plain', null, false);
+  const doc = new OpenDocument(entry, 'old', 'e1', false, '\n', 'text/plain', null, false, 'old');
+  // withText 只换正文：etag 与「打开时的原文」都不动（否则脏状态会被自己抹掉）。
   assert.equal(doc.withText('new').text, 'new');
   assert.equal(doc.withText('new').etag, 'e1');
-  assert.equal(doc.withEtag('e2').etag, 'e2');
-  assert.equal(doc.withEtag('e2').text, 'old');
+  assert.equal(doc.withText('new').originalText, 'old');
+  // withSaved 换 etag 并把基线挪到当前正文（保存成功 = 脏状态清零）。
+  assert.equal(doc.withText('new').withSaved('e2').etag, 'e2');
+  assert.equal(doc.withText('new').withSaved('e2').text, 'new');
+  assert.equal(doc.withText('new').withSaved('e2').originalText, 'new');
 });
 
 test('PendingAttachment 保留 id 与原图字节（同一文件可选多次，按 id 认）', () => {

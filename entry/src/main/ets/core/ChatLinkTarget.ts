@@ -38,6 +38,43 @@ export enum ChatLinkReason {
   UNKNOWN_SCHEME = 'unknown-scheme',
 }
 
+/** 末尾的 `#L12` / `#L12-L34` 片段（大小写不敏感；行范围第二段常也带 `L`）。 */
+const HASH_LINE_SUFFIX: RegExp = /#L\d+(?:-L?\d+)?$/i;
+/** 末尾的 `:12` / `:12-34`（行号或行范围）。 */
+const COLON_LINE_SUFFIX: RegExp = /:\d+(?:-\d+)?$/;
+
+/**
+ * 剥掉链接目标末尾的**位置后缀**，只留文件路径。
+ *
+ * 模型引用文档时几乎总带位置：`docs/project/STATUS.md:1`、
+ * `/abs/STATUS.md#L101`、编译器风格的 `src/a.ts:12:5`。这些后缀**不是路径的一部分**，
+ * 直接丢给 `roots/resolve` 会被判成「不是普通文件 / 不在授权根内」——
+ * 用户看到的就是「文档打不开」，而文件本身明明存在（真机实测 2026-10-20）。
+ *
+ * 只认两种确定形态（`:数字` / `#L数字`），不做泛化猜测：文件名里真带冒号的极罕见，
+ * 而「猜错就把路径改坏」的代价比「漏剥一次」高。
+ */
+export function stripLocationSuffix(path: string): string {
+  let out: string = path;
+  const hash: RegExpMatchArray | null = out.match(HASH_LINE_SUFFIX);
+  if (hash !== null && hash.index !== undefined) {
+    out = out.substring(0, hash.index);
+  }
+  // 循环两次：`file.ts:12:5` 是「行:列」两段，一次只剥得掉最后一个。
+  for (let i = 0; i < 2; i++) {
+    const colon: RegExpMatchArray | null = out.match(COLON_LINE_SUFFIX);
+    if (colon === null || colon.index === undefined) {
+      break;
+    }
+    // 剥完不能把路径剥成空串（例如目标本身是 `:12`），那样只会换个错误再报一次。
+    if (colon.index === 0) {
+      break;
+    }
+    out = out.substring(0, colon.index);
+  }
+  return out;
+}
+
 /**
  * 分类结果。
  *
@@ -105,11 +142,27 @@ export class ChatLinkTarget {
 
     if (target.startsWith('/')) {
       // 以 / 开头且不是 //，就是我们唯一认得的服务端绝对路径形态。
-      return ChatLinkTarget.serverPath(target);
+      // 先剥位置后缀：`.../STATUS.md#L101` 里的 `#L101` 不是路径。
+      return ChatLinkTarget.serverPath(stripLocationSuffix(target));
     }
 
-    const colon: number = target.indexOf(':');
-    const scheme: string = (colon >= 0 ? target.substring(0, colon) : '').toLowerCase();
+    // 相对路径也可能带位置后缀（`docs/x.md:1`）。它的冒号**不是 scheme 分隔符**：
+    // 不先剥掉，`docs/x.md` 会被当成 scheme 判成「未知协议」，界面就不会去拼 cwd ——
+    // 真机上这就是「带 :数字 的文档打不开」的另一半（2026-10-20）。
+    //
+    // 只在剥掉后**不再含冒号**时才剥：否则 `http://host:8080`、`C:\x:1` 这类
+    // 会被改坏（前者是端口，后者根本不是我们支持的形态）。
+    let head: string = target;
+    const colonSuffix: RegExpMatchArray | null = target.match(COLON_LINE_SUFFIX);
+    if (colonSuffix !== null && colonSuffix.index !== undefined && colonSuffix.index > 0) {
+      const prefix: string = target.substring(0, colonSuffix.index);
+      if (prefix.indexOf(':') < 0) {
+        head = prefix;
+      }
+    }
+
+    const colon: number = head.indexOf(':');
+    const scheme: string = (colon >= 0 ? head.substring(0, colon) : '').toLowerCase();
     if (scheme === 'http' || scheme === 'https') {
       return ChatLinkTarget.web(target);
     }

@@ -224,10 +224,12 @@ export class HarnessViewModelFiles extends HarnessViewModelCatalog {
         return;
       }
       const decoded: DecodedText | null = decodeUtf8(content.bytes);
+      // 原文与正文同时取同一份：`originalText` 是「有没有改过」的唯一基线（见 `OpenDocument`）。
+      const decodedText: string | null = decoded !== null ? decoded.text : null;
       this.update((s: HarnessState): void => {
-        s.document = new OpenDocument(entry, decoded !== null ? decoded.text : null, content.etag,
+        s.document = new OpenDocument(entry, decodedText, content.etag,
           decoded !== null ? decoded.hasBom : false, decoded !== null ? decoded.lineEnding : '\n',
-          content.contentType, null, false);
+          content.contentType, null, false, decodedText);
         s.error = decoded === null ? BINARY_FILE : null;
       });
     });
@@ -269,8 +271,9 @@ export class HarnessViewModelFiles extends HarnessViewModelCatalog {
       const body: Uint8Array = utf8Encode(encoded);
       const bytes: Uint8Array = document.hasBom ? concatBytes(UTF8_BOM, body) : body;
       const etag: string = await api.writeFile(root, document.entry.path, bytes, document.etag);
+      // 保存成功 = 脏状态清零：基线要挪到**刚写进去的正文**，不能只换 etag（见 `withSaved`）。
       this.update((s: HarnessState): void => {
-        s.document = s.document === null ? null : s.document.withEtag(etag);
+        s.document = s.document === null ? null : s.document.withSaved(etag);
       });
       const page: DirectoryPage = await api.entries(root, this.state.currentPath);
       this.update((s: HarnessState): void => {

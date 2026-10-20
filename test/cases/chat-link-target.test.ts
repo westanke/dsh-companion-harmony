@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  ChatLinkReason, ChatLinkTarget, ChatLinkTargetKind,
+  ChatLinkReason, ChatLinkTarget, ChatLinkTargetKind, stripLocationSuffix,
 } from '../../entry/src/main/ets/core/ChatLinkTarget.ts';
 
 /**
@@ -126,4 +126,60 @@ test('剥壳后为空仍按空目标处理', () => {
   const target = ChatLinkTarget.classify('<>');
   assert.equal(target.kind, ChatLinkTargetKind.UNSUPPORTED);
   assert.equal(target.reason, ChatLinkReason.EMPTY);
+});
+
+// -------------------------------------------- 文档后的「:行号」后缀（2026-10-20 真机反馈）
+
+test('绝对路径末尾的 :行号 不参与路径解析', () => {
+  // 真机症状：正文里 `docs/project/STATUS.md:1` 点开变成
+  // `/…/STATUS.md:1`，服务端判「不是普通文件」—— 文件明明存在，用户却打不开。
+  const one = ChatLinkTarget.classify('/media/wangke/OFFICE/workspace/dsh-remote-bridge/docs/project/STATUS.md:1');
+  assert.equal(one.kind, ChatLinkTargetKind.SERVER_PATH);
+  assert.equal(one.path, '/media/wangke/OFFICE/workspace/dsh-remote-bridge/docs/project/STATUS.md');
+
+  // 行范围与「行:列」同样剥干净。
+  assert.equal(ChatLinkTarget.classify('/a/b.md:12-34').path, '/a/b.md');
+  assert.equal(ChatLinkTarget.classify('/a/b.ts:12:5').path, '/a/b.ts');
+});
+
+test('绝对路径末尾的 #L行号 也不参与路径解析', () => {
+  // 另一种常见写法：`/abs/STATUS.md#L101`。`#` 在 URI 里是片段，
+  // 服务端把它当文件名的一部分只会回「不是普通文件」。
+  assert.equal(ChatLinkTarget.classify('/abs/STATUS.md#L101').path, '/abs/STATUS.md');
+  assert.equal(ChatLinkTarget.classify('/abs/STATUS.md#L101-L120').path, '/abs/STATUS.md');
+  assert.equal(ChatLinkTarget.classify('/abs/STATUS.md#l7').path, '/abs/STATUS.md');
+});
+
+test('相对路径的位置后缀在拼 cwd 之前剥掉', () => {
+  // 相对路径仍归「不支持」（不猜基准），但界面拼 cwd 前必须剥掉 `:1`，
+  // 否则拼出来的是 `cwd/docs/STATUS.md:1` —— 换汤不换药地打不开。
+  const target = ChatLinkTarget.classify('docs/project/STATUS.md:1');
+  assert.equal(target.kind, ChatLinkTargetKind.UNSUPPORTED);
+  assert.equal(target.reason, ChatLinkReason.RELATIVE_PATH);
+  assert.equal(stripLocationSuffix(target.path), 'docs/project/STATUS.md');
+});
+
+test('带 :1 的相对路径仍走「相对路径」分支，不被误判成未知协议', () => {
+  // 这是真机上「带 :数字 的文档打不开」的根因之一：冒号被当成 scheme 分隔符，
+  // 于是 `docs/x.md:1` 判成 unknown-scheme，界面连拼 cwd 的机会都没有。
+  for (const raw of ['docs/project/STATUS.md:1', 'docs/x.md#L1']) {
+    const target = ChatLinkTarget.classify(raw);
+    assert.equal(target.kind, ChatLinkTargetKind.UNSUPPORTED, `${raw} 应归不支持`);
+    assert.equal(target.reason, ChatLinkReason.RELATIVE_PATH, `${raw} 应归相对路径`);
+  }
+});
+
+test('剥位置后缀不破坏带端口的网页地址', () => {
+  const target = ChatLinkTarget.classify('http://example.com:8080/a');
+  assert.equal(target.kind, ChatLinkTargetKind.WEB);
+  assert.equal(target.path, 'http://example.com:8080/a');
+});
+
+test('位置后缀只剥确定形态，不动正常文件名', () => {
+  // 没有位置后缀的路径一字不改；网页的 `#anchor` 也不碰（那是页面内跳转，交给浏览器）。
+  assert.equal(stripLocationSuffix('/a/b/c.md'), '/a/b/c.md');
+  assert.equal(stripLocationSuffix('/a/2026-10-20'), '/a/2026-10-20');
+  assert.equal(ChatLinkTarget.classify('https://e.com/a#L1').path, 'https://e.com/a#L1');
+  // 目标本身就是 `:12` 时不能剥成空串。
+  assert.equal(stripLocationSuffix(':12'), ':12');
 });

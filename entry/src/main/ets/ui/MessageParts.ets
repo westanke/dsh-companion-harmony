@@ -10,6 +10,7 @@
  * | `AttachmentImage` | 单张附件图（先解码再画） | `AttachmentNotice` 的图片支 |
  * | `MessageAttachments` | 一条消息的图片列表 | `MessageAttachments` |
  * | `TurnFailureRow` | 一轮运行的终局失败行 | `TurnFailureRow` |
+ * | `TruncatedNoticeRow` | 「回答被截断」提示行（黄色警示，不是失败） | `TruncatedNoticeRow` |
  * | `ToolTextBlock` | 可滚动可复制的等宽文本（工具输入/输出） | `ToolTextBlock` |
  * | `ToolCallDetailBlock` | 一条工具调用的详情块 | `ToolCallDetailBlock` |
  *
@@ -356,6 +357,52 @@ export struct TurnFailureRow {
     .gesture(GestureGroup(GestureMode.Parallel, LongPressGesture().onAction((): void => {
       this.copyAll();
     })))
+  }
+}
+
+/**
+ * 「回答被截断」提示行（源工程 `TruncatedNoticeRow`）。
+ *
+ * 为什么**不复用** `TurnFailureRow`：截断不是失败 —— 已有的输出是有效内容，
+ * 红框 + 重试按钮会让用户以为整轮白跑。安卓用的是 Material3 的
+ * `tertiaryContainer`（黄）而不是 `errorContainer`（红），这里对齐成
+ * 淡黄底 + 琥珀色文字，深浅主题各一份颜色（`resources/{base,dark}/element/color.json`）。
+ *
+ * 两行文案都在资源里：标题说「为什么停下」，副文案告诉用户「发"继续"就行」——
+ * 缺了后者，用户只会以为模型坏了。
+ */
+@Component
+export struct TruncatedNoticeRow {
+  build() {
+    Row() {
+      // U+FE0E 是「文本呈现」选择符：不加它这个字符可能被渲染成彩色 emoji，
+      // fontColor 会被无视，与琥珀色主题不搭。
+      Text('⚠\uFE0E')
+        .fontSize(14)
+        .fontColor($r('app.color.turn_truncated_text'))
+      Column() {
+        Text($r('app.string.turn_max_tokens_title'))
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.turn_truncated_text'))
+          .width('100%')
+        Text($r('app.string.turn_max_tokens_hint'))
+          .fontSize(12)
+          .fontColor($r('app.color.turn_truncated_text'))
+          .width('100%')
+          .margin({ top: 2 })
+          .copyOption(CopyOptions.LocalDevice)
+      }
+      .layoutWeight(1)
+      .margin({ left: 7 })
+      .alignItems(HorizontalAlign.Start)
+    }
+    .width('100%')
+    .padding({ left: 8, right: 8, top: 7, bottom: 7 })
+    .backgroundColor($r('app.color.turn_truncated_bg'))
+    .borderRadius(8)
+    .border({ width: 1, color: $r('app.color.turn_truncated_border') })
+    .alignItems(VerticalAlign.Top)
   }
 }
 /**

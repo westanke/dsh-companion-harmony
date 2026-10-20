@@ -316,3 +316,54 @@ test('每条助手正文必须带可感知的 AI 标识（中英双主题）', (
   assert.ok(baseColor.includes('"ai_mark"') && darkColor.includes('"ai_mark"'),
     `ai_mark 颜色必须在 base 与 dark 各定义一份，否则深色主题对比度不足`);
 });
+
+// ---------------------------------------------------------------- 回答被截断必须看得见
+
+/**
+ * 「已达到输出 token 上限 / 回答被截断」这条提示在安卓端有、本工程曾经**整条消失**。
+ *
+ * 它比普通消息更容易漏接：内核发的是 `turn/end { reason: { kind: 'max-tokens' } }`
+ * 而**不是**失败帧（插件不会再发 `chat.turn.failed`），且 history 不返回 `turn/end` ——
+ * 两条路都断，只有实时帧能把它带进来。核心判据由 `chat-truncation.test.ts` 用行为断言盯着，
+ * 这里只钉「界面确实把它画出来」这一半：
+ * 1. `ChatMessage` 有 TRUNCATED 分支，且不走失败行（截断不是失败）；
+ * 2. `MessageParts` 的提示行文案走资源 key（中英各一份）；
+ * 3. 黄底 / 边框 / 文字色在 base 与 dark 各定义一份。
+ */
+test('「回答被截断」提示必须接到界面上，且深浅主题各一份颜色', () => {
+  const msg: string = codeLines(read('ChatMessage.ets')).join('\n');
+  const parts: string = codeLines(read('MessageParts.ets')).join('\n');
+  sanity(msg.includes('ChatItemKind.TRUNCATED'), `ChatMessage.ets 里找不到 TRUNCATED，判据可能写错了`);
+  sanity(parts.includes('TruncatedNoticeRow'), `MessageParts.ets 里找不到 TruncatedNoticeRow`);
+
+  const missing: string[] = [];
+  if (!msg.includes('TruncatedNoticeRow()')) {
+    missing.push('- ChatMessage 的 TRUNCATED 分支没有渲染提示行：用户只看到回答戛然而止');
+  }
+  if (!parts.includes('turn_max_tokens_title') || !parts.includes('turn_max_tokens_hint')) {
+    missing.push('- 提示行文案没走资源 key：英文界面会回落到中文');
+  }
+  if (!parts.includes("'app.color.turn_truncated_bg'")) {
+    missing.push('- 提示行没走自定义黄底：复用失败红框会让人以为整轮白跑');
+  }
+
+  assert.ok(
+    missing.length === 0,
+    `「回答被截断」提示接线不完整：\n${missing.join('\n')}\n` +
+      `怎么办：判据放 core/ChatTruncation.ts，状态由实时帧写入，界面用黄色警示行独立渲染。`,
+  );
+
+  const base = join(ROOT, 'entry', 'src', 'main', 'resources');
+  const baseColor: string = readFileSync(join(base, 'base', 'element', 'color.json'), 'utf8');
+  const darkColor: string = readFileSync(join(base, 'dark', 'element', 'color.json'), 'utf8');
+  const baseString: string = readFileSync(join(base, 'base', 'element', 'string.json'), 'utf8');
+  const enString: string = readFileSync(join(base, 'en_US', 'element', 'string.json'), 'utf8');
+  for (const key of ['turn_truncated_bg', 'turn_truncated_border', 'turn_truncated_text']) {
+    assert.ok(baseColor.includes(`"${key}"`) && darkColor.includes(`"${key}"`),
+      `${key} 必须在 base 与 dark 各定义一份，否则深色主题下警示条不可读`);
+  }
+  for (const key of ['turn_max_tokens_title', 'turn_max_tokens_hint']) {
+    assert.ok(baseString.includes(`"${key}"`) && enString.includes(`"${key}"`),
+      `${key} 必须中文与英文各一份（strings-parity 也会盯，这里给更明确的出口）`);
+  }
+});

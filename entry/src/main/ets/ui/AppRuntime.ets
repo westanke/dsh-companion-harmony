@@ -51,6 +51,44 @@ export function requestFilesSection(): void {
   AppStorage.setOrCreate(FILES_REVEAL_SEQ_KEY, seq + 1);
 }
 
+/**
+ * 「系统返回键要求弹未保存确认」的请求序号。
+ *
+ * 与 `FILES_REVEAL_SEQ_KEY` 是同一套邮箱走法，只是方向反过来：这一次是**父页（入口页）
+ * 请求子页弹面板**。`onBackPress` 只能挂在 `@Entry` 组件上（`pages/Index.ets`），
+ * 而那个「未保存改动」的面板由 `ui/FilesScreen.ets` 持有（它才有 `bindSheet` 宿主）。
+ * 入口页拿不到子组件的方法，于是写一个递增序号，`FilesScreen` 用 `@StorageLink` +
+ * `@Watch` 收到后开面板。
+ *
+ * 为什么**必须**有这一条：顶栏返回箭头只是离开编辑器的其中一条路径，
+ * 系统返回键/侧滑手势是另一条 —— 只拦一处，等于「不用点那个按钮就能绕过未保存确认」，
+ * 那道确认就白做了（源工程 `FilesScreen.kt:216` 的原话）。
+ */
+export const UNSAVED_BACK_SEQ_KEY: string = 'dshUnsavedBackSeq';
+
+/** 发一次「请弹出未保存改动确认」的请求（由入口页的系统返回拦截调用）。 */
+export function requestUnsavedPrompt(): void {
+  const seq: number = AppStorage.get<number>(UNSAVED_BACK_SEQ_KEY) ?? 0;
+  AppStorage.setOrCreate(UNSAVED_BACK_SEQ_KEY, seq + 1);
+}
+
+/**
+ * 当前主界面分节（`MainSection` 的原始数值）在 `AppStorage` 里的键。
+ *
+ * 入口页的 `onBackPress` 需要知道「此刻停在哪个分节」才能决定要不要为未保存改动
+ * 拦下这次返回 —— 而分节是外壳 `AppShell` 自己的 `@State`，入口页读不到。
+ * 于是外壳每次切分节就把它写进 `AppStorage`，入口页现读现用。
+ *
+ * 存原始数值而不是 `MainSection`：`AppRuntime` 是 core 与 UI 之间的桥，
+ * 不该反过来依赖 `ui/AppShell.ets`（那会绕成环）。
+ */
+export const MAIN_SECTION_KEY: string = 'dshMainSection';
+
+/** 分节原始数值（`MainSection.Files` 见 `ui/AppShell.ets`）；不可知时返回 -1。 */
+export function currentMainSection(): number {
+  return AppStorage.get<number>(MAIN_SECTION_KEY) ?? -1;
+}
+
 let instance: HarnessViewModel | null = null;
 let unsubscribe: (() => void) | null = null;
 
@@ -153,6 +191,11 @@ export function pauseHarnessEvents(): void {
 export function resumeHarnessEvents(): void {
   const vm: HarnessViewModel | null = instance;
   if (vm !== null) {
+    // 先发起复核，再接事件流。复核是异步的（真正的结果要等 health 返回），
+    // 所以它并不能"挡住"事件流；两者的收敛路径是各自的：复核失败摘掉 `active`，
+    // 事件流断开走它自己的重连/报错。放在前面只是为了让它尽早开始。
+    // 对应源工程 `MainActivity.onResume` 里的 `recheckConnectionIfOnConnectScreen()`。
+    vm.recheckConnectionIfOnConnectScreen();
     void vm.resumeEvents();
   }
 }

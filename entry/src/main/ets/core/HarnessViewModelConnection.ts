@@ -86,6 +86,7 @@ import {
 import {
   SEND_MODE_QUEUE,
 } from './ComposerSendPolicy';
+import { applyTurnBoundary } from './ChatTruncation';
 import {
   HarnessState,
   CONFIG_INVALID,
@@ -98,9 +99,9 @@ import {
   isToolResultFrame,
   markSessionStopped,
 } from './HarnessHelpers';
-import { HarnessViewModelComposer } from './HarnessViewModelComposer';
+import { HarnessViewModelConnect } from './HarnessViewModelConnect';
 
-export class HarnessViewModelConnection extends HarnessViewModelComposer {
+export class HarnessViewModelConnection extends HarnessViewModelConnect {
   /** 覆盖基类钩子：真正的实现在本文件的 `restoreConnection`。 */
   protected startRestore(): void {
     void this.restoreConnection();
@@ -190,87 +191,6 @@ export class HarnessViewModelConnection extends HarnessViewModelComposer {
     });
   }
 
-  /** 给某台电脑追加一个可达地址（例如新增虚拟网地址）。 */
-  async addEndpoint(hostId: string, label: string, baseUrl: string): Promise<void> {
-    await this.launchOperation(async (): Promise<void> => {
-      const host: Host | null = this.deps.hostStore.host(hostId);
-      if (host === null) {
-        return;
-      }
-      const normalized: string = stripApiSuffix(normalizeEndpoint(baseUrl));
-      for (let i = 0; i < host.endpoints.length; i++) {
-        if (host.endpoints[i].baseUrl === normalized) {
-          return;
-        }
-      }
-      const endpoint: Endpoint = Endpoint.create(label, normalized, `ep-${this.deps.newId()}`);
-      const next: Host = host.copy();
-      next.endpoints = host.endpoints.concat([endpoint]);
-      next.updatedAt = this.deps.now();
-      this.deps.hostStore.upsert(next);
-      this.update((s: HarnessState): void => {
-        s.hosts = this.deps.hostStore.loadHosts();
-      });
-    });
-  }
-
-  /** 删除某台电脑的一个地址。保留最后一个地址的行为由界面负责拦截。 */
-  async removeEndpoint(hostId: string, endpointId: string): Promise<void> {
-    await this.launchOperation(async (): Promise<void> => {
-      const host: Host | null = this.deps.hostStore.host(hostId);
-      if (host === null) {
-        return;
-      }
-      if (host.endpoints.length <= 1) {
-        throw new Error(LAST_ENDPOINT);
-      }
-      const endpoints: Endpoint[] = [];
-      for (let i = 0; i < host.endpoints.length; i++) {
-        if (host.endpoints[i].id !== endpointId) {
-          endpoints.push(host.endpoints[i]);
-        }
-      }
-      let preferred: string | null = host.preferredEndpointId;
-      if (preferred !== null) {
-        let found: boolean = false;
-        for (let i = 0; i < endpoints.length; i++) {
-          if (endpoints[i].id === preferred) {
-            found = true;
-            break;
-          }
-        }
-        if (!found) {
-          preferred = null;
-        }
-      }
-      const next: Host = host.copy();
-      next.endpoints = endpoints;
-      next.preferredEndpointId = preferred;
-      next.updatedAt = this.deps.now();
-      this.deps.hostStore.upsert(next);
-      this.update((s: HarnessState): void => {
-        s.hosts = this.deps.hostStore.loadHosts();
-      });
-    });
-  }
-
-  /** 重命名一台电脑。 */
-  async renameHost(hostId: string, displayName: string): Promise<void> {
-    await this.launchOperation(async (): Promise<void> => {
-      const host: Host | null = this.deps.hostStore.host(hostId);
-      if (host === null) {
-        return;
-      }
-      const next: Host = host.copy();
-      next.displayName = trimText(displayName);
-      next.updatedAt = this.deps.now();
-      this.deps.hostStore.upsert(next);
-      this.update((s: HarnessState): void => {
-        s.hosts = this.deps.hostStore.loadHosts();
-      });
-    });
-  }
-
   /**
    * 删除一台电脑（含其凭据）。
    *
@@ -284,12 +204,6 @@ export class HarnessViewModelConnection extends HarnessViewModelComposer {
     this.update((s: HarnessState): void => {
       s.hosts = this.deps.hostStore.loadHosts();
       s.selectedHostId = s.selectedHostId === hostId ? null : s.selectedHostId;
-    });
-  }
-
-  selectHost(hostId: string | null): void {
-    this.update((s: HarnessState): void => {
-      s.selectedHostId = hostId;
     });
   }
 
@@ -373,41 +287,6 @@ export class HarnessViewModelConnection extends HarnessViewModelComposer {
     this.update((s: HarnessState): void => {
       s.busy = false;
     });
-  }
-
-  protected applyProbes(host: Host, probes: EndpointProbe[]): Host {
-    let acc: Host = host;
-    for (let i = 0; i < probes.length; i++) {
-      const p: EndpointProbe = probes[i];
-      acc = acc.withEndpointProbe(p.endpointId, p.latencyMs, p.error, this.deps.now());
-    }
-    return acc;
-  }
-
-  protected hostFromPairing(endpoint: string, token: string, device: DeviceView,
-                          displayName: string): Host {
-    const now: number = this.deps.now();
-    const baseUrl: string = stripApiSuffix(normalizeEndpoint(endpoint));
-    const endpointId: string = 'ep-paired';
-    const hosts: Host[] = this.deps.hostStore.loadHosts();
-    let existing: Host | null = null;
-    for (let i = 0; i < hosts.length; i++) {
-      if (hosts[i].id === `host-${device.id}`) {
-        existing = hosts[i];
-        break;
-      }
-    }
-    const trimmed: string = trimText(displayName);
-    // 主机名优先用用户填的设备名，其次是电脑自己报的名字（对应 Kotlin 的 orEmpty 兜底）。
-    const finalName: string = trimmed.length > 0 ? trimmed : device.name;
-    // `Endpoint.create` 会在 label 为空时退回 baseUrl，所以这里直接拿主机名当标签。
-    const issuedAt: number = existing !== null && existing.credential !== null && existing.credential.issuedAt > 0
-      ? existing.credential.issuedAt : now;
-    const credential: Credential = new Credential(CredentialKind.DEVICE_TOKEN, token, device.id,
-      device.name, device.scopes, issuedAt, null);
-    return new Host(`host-${device.id}`, finalName,
-      [Endpoint.create(finalName, baseUrl, endpointId)], endpointId, credential,
-      existing !== null ? existing.createdAt : now, now);
   }
 
   /**
@@ -705,6 +584,9 @@ export class HarnessViewModelConnection extends HarnessViewModelComposer {
         if (event.type === 'chat.turn.end' && sessionId !== null && !this.isSessionRunning(sessionId)) {
           void this.refreshPendingQuestions();
         }
+        // 截断提示：内核不发 chat.turn.failed，历史里也翻不到 turn/end，
+        // 只有实时帧能把它带进来（见 `core/ChatTruncation.ts` 文件头）。
+        this.noteTurnBoundary(event, sessionId);
       } else if (event.type === 'chat.agent-preset.selected') {
         this.chatSessionRefreshPending = true;
         this.scheduleChatRefresh();
@@ -747,6 +629,13 @@ export class HarnessViewModelConnection extends HarnessViewModelComposer {
       // 就是请求风暴。去抖到「安静 500ms」后只取一次（见 `core/EventDebouncer.ts`）。
       this.directoryDebouncer.trigger();
     }
+  }
+
+  /** 轮边界事件：截断落提示、新一轮清掉（判据与实现在 `core/ChatTruncation.ts`）。 */
+  protected noteTurnBoundary(event: WorkspaceEvent, sessionId: string | null): void {
+    this.update((s: HarnessState): void => {
+      applyTurnBoundary(s, event, sessionId);
+    });
   }
 
   /**

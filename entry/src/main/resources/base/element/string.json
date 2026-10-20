@@ -329,6 +329,14 @@
       "value": "已连接"
     },
     {
+      "name": "connect_offline",
+      "value": "已断开"
+    },
+    {
+      "name": "reconnect",
+      "value": "重新连接"
+    },
+    {
       "name": "connecting_endpoints",
       "value": "正在探测 %d 个地址…"
     },
@@ -411,6 +419,10 @@
     {
       "name": "disconnect",
       "value": "断开连接"
+    },
+    {
+      "name": "discard_changes",
+      "value": "丢弃改动"
     },
     {
       "name": "discover_models",
@@ -1625,8 +1637,24 @@
       "value": "本轮运行失败"
     },
     {
+      "name": "turn_max_tokens_hint",
+      "value": "回答被截断，已有输出保留在对话中。发送“继续”可让模型接着输出。"
+    },
+    {
+      "name": "turn_max_tokens_title",
+      "value": "已达到输出 token 上限"
+    },
+    {
       "name": "turn_stopped_title",
       "value": "任务已停止"
+    },
+    {
+      "name": "unsaved_changes_message",
+      "value": "这个文件改过但还没保存，直接返回会丢掉这些改动。"
+    },
+    {
+      "name": "unsaved_changes_title",
+      "value": "有未保存的改动"
     },
     {
       "name": "upgrade_notice",

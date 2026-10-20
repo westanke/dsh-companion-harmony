@@ -1577,6 +1577,46 @@
       "value": "轨迹"
     },
     {
+      "name": "trajectory_turn",
+      "value": "第 %d 轮"
+    },
+    {
+      "name": "trajectory_unknown_turn",
+      "value": "轮次之间"
+    },
+    {
+      "name": "trajectory_tools",
+      "value": "%d 个工具调用"
+    },
+    {
+      "name": "trajectory_user",
+      "value": "用户消息"
+    },
+    {
+      "name": "trajectory_assistant",
+      "value": "助手消息"
+    },
+    {
+      "name": "trajectory_tool",
+      "value": "工具调用"
+    },
+    {
+      "name": "trajectory_deliverable",
+      "value": "交付物"
+    },
+    {
+      "name": "trajectory_turn_end",
+      "value": "轮次结束"
+    },
+    {
+      "name": "trajectory_other",
+      "value": "其他事件"
+    },
+    {
+      "name": "trajectory_no_payload",
+      "value": "（这条事件没有载荷）"
+    },
+    {
       "name": "trash",
       "value": "回收站"
     },

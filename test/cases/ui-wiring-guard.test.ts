@@ -217,3 +217,51 @@ test('连接页必须自己把 state.error 报出来并清掉', () => {
       `怎么办：对齐 AppShell.reportErrorIfAny()（localErrorText + lastReported + clearError）。`,
   );
 });
+
+// ---------------------------------------------------------------- 全屏覆盖层要自己让开状态栏
+
+/**
+ * `bindContentCover` 的内容**不吃安全区**，从屏幕最顶上画（真机实证）：
+ * 轨迹页标题压在系统时钟上、关闭 `✕` 压在电池图标上。
+ *
+ * 更糟的是这条缺陷会和「一片空白」混在一起 —— 用户先看到半屏空白，再看到标题糊在状态栏里，
+ * 根本分不清哪块是页面、哪块是系统。
+ *
+ * 判据：
+ * 1. 节点行里**不许再有**「1px 宽 + height('100%')」的竖线：行高由内容撑开时，
+ *    这个百分比没有参照，会按整屏算 —— 每个节点占一屏，整页看着就是空的（坑 56 正身）。
+ * 2. 根容器必须按状态栏高度让位（`topInset`）。
+ * 3. 类型名必须走**本地化资源**（`trajectory_user` 等），而不是 emoji 或事件原名 ——
+ *    真机反馈「不认识」正是这一条缺失造成的。
+ * 4. 必须能展开原始载荷（`prettyPayload`），且自订阅 vm（`bindContentCover` 的 content
+ *    builder 不随 vm 重绘，靠父组件传 `history` 会停在首帧）。
+ */
+test('全屏覆盖层（轨迹页）必须让开状态栏，且按源工程口径呈现', () => {
+  const text: string = read('TrajectoryScreen.ets');
+  const code: string = codeLines(text).join('\n');
+  sanity(code.includes('topInset'), `TrajectoryScreen.ets 里找不到 topInset，判据可能写错了`);
+  sanity(text.includes('trajectory_user'), `TrajectoryScreen.ets 里找不到 trajectory_user，判据可能写错了`);
+
+  const missing: string[] = [];
+  if (/\.width\(\s*1\s*\)[\s\S]{0,120}?\.height\(\s*'100%'\s*\)/.test(code)) {
+    missing.push('- 节点行里还有「1px 竖线 + height(\'100%\')」：无定高行里百分比会按整屏算，一屏只出一个节点');
+  }
+  if (!code.includes('getWindowAvoidArea') || !code.includes('padding({ top: this.topInset })')) {
+    missing.push('- 根容器没有按状态栏让位：cover 内容会从屏幕最顶上画，标题压在系统时钟、关闭按钮压在电池图标上');
+  }
+  if (!code.includes('trajectory_assistant') || !code.includes('trajectory_tool') || !code.includes('trajectory_other')) {
+    missing.push('- 节点类型没有本地化：用户看到的是事件原名（`tool/call`），不是「工具调用」');
+  }
+  if (!code.includes('prettyPayload') || !code.includes('expandedSeq')) {
+    missing.push('- 节点不能展开原始载荷：排查时看不到「当时真正收到了什么」');
+  }
+  if (!code.includes("@StorageLink('dshRevision')") || !code.includes('harnessState()')) {
+    missing.push('- 面板没有自订阅 vm：`bindContentCover` 的 content builder 不随 update() 重跑，会停在首帧');
+  }
+
+  assert.ok(
+    missing.length === 0,
+    `轨迹页的呈现前提不成立：\n${missing.join('\n')}\n` +
+      `怎么办：对齐源工程 ChatTrajectorySheet（本地化类型名 + #seq + 可展开 JSON），并给根容器留状态栏内边距。`,
+  );
+});

@@ -41,7 +41,7 @@
 ```bash
 source ./_toolchain/env.sh
 hvigorw assembleHap --no-daemon     # 构建（改 .ets 后先 touch 对应文件，否则 UP-TO-DATE）
-cd test && npm test                 # 单元测试（当前 783 用例，随代码变化勿当常量）
+cd test && npm test                 # 单元测试（当前 793 用例，随代码变化勿当常量）
 ```
 
 **签名必须手动签**（hvigor 拒明文口令，`signingConfigs` 保持空数组）：
@@ -151,6 +151,9 @@ ui/     ← 只消费 HarnessState，调 HarnessViewModel 动作；不持有协�
 - `FIT_CONTENT 里别写百分比高度`
 - `错误只在连上后的界面报`
 - `展开态把可点行换掉了`
+- `无定高行里写 height('100%') 会按整屏算`（轨迹页一屏只出一个节点）
+- `bindContentCover 内容不吃安全区`（全屏模态要自己让开状态栏）
+- `轨迹页别直接印事件原名`（类型名走本地化 + 过滤内部噪音帧）
 
 > 新坑位：名字加进上面清单 + 原文写进 `docs/PORT-MAP.md` §6 并补 `### 同名` 锚点。
 

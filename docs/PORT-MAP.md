@@ -2731,3 +2731,64 @@ export struct SessionFilesSheet {
 判据见 `test/cases/ui-wiring-guard.test.ts` 第四条：标题行必须在 `if (this.expanded)`
 之前、两种箭头都在、`onClick` 排在展开分支之前。
 
+---
+
+**坑 56：全屏 `bindContentCover` 节点行用 `height('100%')` —— 无父高度时按整屏算，一页只出一个节点**
+
+真机反馈：进「轨迹」→ 页面上只有孤零零一个 `job/registered #1492`，剩下全白。
+
+`ui/TrajectoryScreen.ets` 的 `nodeRow()` 里画时间轴竖线，在左侧放了一个 `Column`，
+高度写 `height('100%')` —— 本意是「让竖线从这一行的顶通到底」。问题是：
+**那行的高度没有定值**，Row 的高度由内容撑开，内容又依赖百分比 → 百分比没有确定父高度，
+只能退回按**整屏**算。于是每个节点行变成一整屏高，一屏只能看到一个节点。
+
+**修法**：**竖线直接删掉**（源工程本来就没有这条线，它是移植时自己加的装饰）。
+节点行改由内容撑开（`#seq` + 类型名 + 工具名，上下 `padding 4`），真机实测行距 106px ≈ 34vp，
+一屏 18 条，时间轴靠序号列自然对齐。
+
+> 只把竖线改成定高（`NODE_ROW_HEIGHT_VP = 34`）也能让 `100%` 有参照，但那是**为一个不存在于
+> 源工程的装饰**去给整行上约束，白白多一层耦合；删掉更干净。
+
+> 同样一版真机还逮到第二半：`bindContentCover` 的内容**不吃安全区**，
+> 从屏幕最顶上画 → 标题压在状态栏时钟上、关闭按钮压在电池图标上。
+> 解法：在 `aboutToAppear` 里查 `window.getWindowAvoidArea(TYPE_SYSTEM)` 的 `topRect.height`，
+> 转成 vp 后给根容器 `.padding({ top: this.topInset })`。
+> 普通页面不用管 —— 页面自带安全区；**系统级模态**才需要自己让位。
+
+---
+
+**坑 57：轨迹页直接印事件原名 —— 265 个事件里一半是噪音，用户"能看见但看不懂"**
+
+真机反馈（坑 56 修好后）：**「能显示了，不认识」**。
+
+第一版把节点渲染成「emoji + 事件原名」，也没有类型过滤。真机上是满屏
+`job/registered #1492`、`step/start`、`session-log-*`、`agent/inbox/push` ——
+这些是**内核内部帧**，对排查有帮助的不到一半，却把第一屏全占了。
+「事件原名」还带来第二个问题：`user/message` 这种名字**不等于人话**
+（用户要看的是「用户消息」）。
+
+源工程 `ui/chat/ChatTrajectorySheet.kt` 的口径是：
+
+| 位置 | 内容 |
+|---|---|
+| 轮次标题 | 「第 N 轮」/「轮次之间」+「N 个工具调用」+ 耗时 |
+| 节点行 | `#seq`（定宽 52）+ **本地化类型名** + 工具名（主色） |
+| 点节点 | 展开 `JSON.stringify(raw, null, 2)`；无载荷时「（这条事件没有载荷）」 |
+
+**修法（数据层 + 渲染层各一半，缺一不可）**：
+
+1. `core/Trajectory.ts`：`trajectoryKindOf()` 改为可返回 `null`，把实现细节帧
+   （`step/start`、`step/end`、`turn/start`、`tool/result`、`session-log-*`、`agent/inbox/*`）
+   直接过滤；`UNKNOWN_TURN`（拿不到轮次号的事件）**永远垫底**，否则它们会插在轮次中间，
+   把「第 1 轮」的上下文切成两段。新增 `prettyPayload()` 负责缩进，`null` / `{}` / 异常都有回退。
+2. `ui/TrajectoryScreen.ets`：类型名全部走本地化资源（`trajectory_*`，中英各一套），
+   只有 `OTHER` 退回**事件原名** —— 认不出的类型不翻译成「其他事件」，那个词不提供任何线索，
+   而「它到底叫什么」正是用户此刻要的。展开块用 `Row + Blank(52) + layoutWeight(1)`
+   缩进，**别用 `width('100%') + margin left`**（会超出父宽、右侧被裁，真机截帧实证）。
+
+> 通用规律：**移植只搬家不解释，等于把源工程的「给人看」做成了「给日志看」**。
+> 凡是源工程有 `nodeTypeLabel()` 这类映射的地方，一个都不能省；本地化资源要中英双套补齐。
+
+> 判据见 `test/cases/ui-wiring-guard.test.ts` 第五条，`trajectory.test.ts` 覆盖过滤 / 垫底 /
+> `prettyPayload` 三类行为。
+

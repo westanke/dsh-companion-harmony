@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { JsonMap } from '../../entry/src/main/ets/core/JsonAccess.ts';
 import { ChatHistory } from '../../entry/src/main/ets/core/ModelsEvents.ts';
 import {
-  TrajectoryNodeKind, TrajectoryTurn, UNKNOWN_TURN, shortDuration, trajectoryOf,
+  TrajectoryNodeKind, TrajectoryTurn, UNKNOWN_TURN, prettyPayload, shortDuration, trajectoryOf,
 } from '../../entry/src/main/ets/core/Trajectory.ts';
 
 /**
@@ -40,20 +40,49 @@ test('认得的事件类型各归各类', () => {
   ]);
 });
 
-test('不认的事件留成 OTHER，不丢（轨迹页的意义就在「都列出来」）', () => {
+test('不认的语义事件留成 OTHER，不丢（轨迹页的意义就在「都列出来」）', () => {
   const turns: TrajectoryTurn[] = trajectoryOf(history([
-    event('step/end', 1, 100, { turn: 1 }),
+    event('job/registered', 1, 100, { turn: 1 }),
   ]));
   assert.equal(turns[0].nodes.length, 1);
   assert.equal(turns[0].nodes[0].kind, TrajectoryNodeKind.OTHER);
 });
 
+/**
+ * 噪音帧过滤 —— 对位源工程 `trajectoryKindOf` 返回 null 的那一支。
+ *
+ * 真机反馈「不认识」时，第一屏正是这些 `step/start`、`job/registered` 混着几十条
+ * `session-log-*`；它们不是「发生过什么」，是内核的实现细节。
+ */
+test('实现细节帧不进轨迹：step 边界 / turn 起点 / tool 结果 / 内部日志 / 收件箱拼接', () => {
+  const turns: TrajectoryTurn[] = trajectoryOf(history([
+    event('turn/start', 1, 100, { turn: 1 }),
+    event('step/start', 2, 200, { turn: 1 }),
+    event('tool/call', 3, 300, { turn: 1, name: 'bash' }),
+    event('tool/result', 4, 400, { turn: 1 }),
+    event('step/end', 5, 500, { turn: 1 }),
+    event('session-log-deepseek/delivery-accepted', 6, 600, { turn: 1 }),
+    event('agent/inbox/spliced', 7, 700, { turn: 1 }),
+    event('turn/end', 8, 800, { turn: 1 }),
+  ]));
+  assert.equal(turns.length, 1);
+  assert.deepEqual(turns[0].nodes.map((n): number => n.seq), [3, 8]);
+});
+
+test('全是被过滤的噪音 → 空轨迹（不是一堆「其他事件」）', () => {
+  const turns: TrajectoryTurn[] = trajectoryOf(history([
+    event('step/start', 1, 100, { turn: 1 }),
+    event('step/end', 2, 200, { turn: 1 }),
+  ]));
+  assert.deepEqual(turns, []);
+});
+
 test('节点保留事件类型原名：OTHER 节点靠它显示「这到底是什么」，而不是笼统的「其他」', () => {
   const turns: TrajectoryTurn[] = trajectoryOf(history([
-    event('step/end', 1, 100, { turn: 1 }),
+    event('job/registered', 1, 100, { turn: 1 }),
     event('assistant/message', 2, 200, { turn: 1 }),
   ]));
-  assert.equal(turns[0].nodes[0].eventType, 'step/end');
+  assert.equal(turns[0].nodes[0].eventType, 'job/registered');
   assert.equal(turns[0].nodes[1].eventType, 'assistant/message');
 });
 
@@ -111,11 +140,11 @@ test('turn 取不到 → 归入 UNKNOWN_TURN，且不丢弃', () => {
     event('tool/call', 3, 300, { other: true }),
   ]));
   assert.equal(turns.length, 2);
-  // `UNKNOWN_TURN` 取 0（而不是 -1）正是为了让它在**升序**里自然排在最前，
-  // 不必为「未知轮次」单开一条排序特例 —— 所以它排在有编号的轮次之前。
-  assert.equal(turns[0].turn, UNKNOWN_TURN);
-  assert.equal(turns[0].nodes.length, 2);
-  assert.equal(turns[1].turn, 1);
+  // 未知轮次**永远垫底**（对位源工程）：它们多是 splice 消息、compaction 这类边缘记录，
+  // 数量不固定、信息密度低，放最前面会把真正的轮次顶出第一屏。
+  assert.equal(turns[0].turn, 1);
+  assert.equal(turns[1].turn, UNKNOWN_TURN);
+  assert.equal(turns[1].nodes.length, 2);
 });
 
 test('组内按 seq 升序，不依赖数组顺序', () => {
@@ -198,4 +227,23 @@ test('满一分钟给出 m:ss，秒补前导零', () => {
   assert.equal(shortDuration(60000), '1:00');
   assert.equal(shortDuration(185000), '3:05');
   assert.equal(shortDuration(600000), '10:00');
+});
+
+// ── 原始载荷的美化 ──
+
+test('原始载荷排成缩进 JSON（详情里才看得清字段）', () => {
+  const pretty: string | null = prettyPayload({ turn: 1, name: 'bash' });
+  assert.notEqual(pretty, null);
+  const text: string = pretty as string;
+  assert.ok(text.includes('\n'), '必须换行，否则又挤成一坨');
+  assert.ok(text.includes('  "turn": 1'), '必须缩进两个空格');
+  assert.ok(text.includes('"name": "bash"'));
+});
+
+test('没有载荷 → null（由 UI 显示「这条事件没有载荷」）', () => {
+  assert.equal(prettyPayload(null), null);
+});
+
+test('空对象仍是合法载荷 → 给 {}，不与「没有载荷」混为一谈', () => {
+  assert.equal(prettyPayload({}), '{}');
 });

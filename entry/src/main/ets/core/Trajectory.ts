@@ -8,8 +8,10 @@
  * 轨迹是**给人查的**：每一轮里到底发生了什么、各花了多久、哪些是工具调用 ——
  * 排查「这一步为什么慢」「它到底调了什么」时看的是这个页面。
  *
- * 所以这里**不做过滤**：不认的事件也留成 `OTHER` 节点 —— 轨迹页的价值恰恰在于
- * 「把当时发生的都列出来」，隐藏它等于让它失去意义。
+ * 所以这里不做**二次加工**：认得的语义事件都留成节点（不认的类型归 `OTHER`）——
+ * 轨迹页的价值恰恰在于「把当时发生的都列出来」，隐藏它等于让它失去意义。
+ * 唯一被丢弃的是**不构成记录**的实现细节帧（step 边界、内部日志），判据见
+ * `trajectoryKindOf` —— 那一层过滤是源工程踩过「第一屏全是其他事件」才加的。
  *
  * ## 数据全部来自历史事件，不需要服务端额外配合
  *
@@ -154,6 +156,11 @@ export function trajectoryOf(history: ChatHistory | null): TrajectoryTurn[] {
   const grouped: Map<number, TrajectoryNode[]> = new Map<number, TrajectoryNode[]>();
   for (let i = 0; i < events.length; i++) {
     const event = events[i].event;
+    const kind: TrajectoryNodeKind | null = trajectoryKindOf(event.type);
+    // 不构成记录的噪音帧（step 边界、内部日志）直接跳过 —— 判据见 `trajectoryKindOf`。
+    if (kind === null) {
+      continue;
+    }
     const data: JsonMap | null = event.dataMap();
     const turn: number = JsonAccess.num(data, 'turn') ?? UNKNOWN_TURN;
     let bucket: TrajectoryNode[] | undefined = grouped.get(turn);
@@ -161,7 +168,7 @@ export function trajectoryOf(history: ChatHistory | null): TrajectoryTurn[] {
       bucket = [];
       grouped.set(turn, bucket);
     }
-    bucket.push(new TrajectoryNode(event.seq, event.time, trajectoryKindOf(event.type), event.type,
+    bucket.push(new TrajectoryNode(event.seq, event.time, kind, event.type,
       toolLabelOf(event.type, data), event.data));
   }
 
@@ -169,7 +176,16 @@ export function trajectoryOf(history: ChatHistory | null): TrajectoryTurn[] {
   grouped.forEach((_value: TrajectoryNode[], key: number): void => {
     turns.push(key);
   });
-  turns.sort((a: number, b: number): number => a - b);
+  // 真实轮次按 turn 升序在前，**未知轮次永远垫底**。
+  //
+  // 不只是好看：`turn` 缺失的多是 splice 进来的消息、compaction 这类边缘记录，
+  // 数量不固定、信息密度还低。放在最前面会把真正的轮次顶出第一屏 ——
+  // 真机反馈「第一屏全是其他事件」正是这么来的（源工程 `Trajectory.kt` 同样口径）。
+  turns.sort((a: number, b: number): number => {
+    const unknownA: number = a === UNKNOWN_TURN ? 1 : 0;
+    const unknownB: number = b === UNKNOWN_TURN ? 1 : 0;
+    return unknownA !== unknownB ? unknownA - unknownB : a - b;
+  });
 
   const out: TrajectoryTurn[] = [];
   for (let i = 0; i < turns.length; i++) {
@@ -198,7 +214,31 @@ export function shortDuration(millis: number): string {
   return `${minutes}:${padded}`;
 }
 
-function trajectoryKindOf(type: string): TrajectoryNodeKind {
+/**
+ * 事件类型 → 轨迹节点类别；`null` 表示**这一帧不进轨迹**。
+ *
+ * ## 为什么要过滤（对齐源工程，2026-10-17 那边真机反馈）
+ *
+ * 用户看到轨迹第一屏是 #0~#26 一整列「其他事件」，有效信息要往下翻。
+ * 对着真实会话数了一下，265 个事件里**一半是纯噪音**：
+ *
+ * | 类型 | 数量 | 是什么 |
+ * |---|---|---|
+ * | `step/start` / `step/end` | 42 + 42 | 每步的边界帧，同一轮里重复几十次 |
+ * | `session-log-deepseek/delivery-accepted` | 42 | 内部投递日志 |
+ * | `agent/inbox/spliced` | 4 | 收件箱拼接，内部簿记 |
+ *
+ * 这些都不是「发生过什么」的证据，只是实现细节。官方 Web 的轨迹
+ * （`@deepseek-ai/dsh-client-ui-trajectory`）只收 User / Assistant / Tool /
+ * subtool / compaction 这些**真正有语义的记录**，step 只作为边界标记、不单独成行。
+ *
+ * `tool/result` 也**不进**：它是 `tool/call` 的产物，详情在工具行里能展开看到；
+ * 单独成行会让「一次工具调用」在轨迹里占两行，读起来像调用了两次。
+ *
+ * 移植侧最初没有这层过滤，真机上满屏 `job/registered`、`step/start` 这类原始事件名，
+ * 用户的原话是「不认识」—— 这一节的判据不是排版偏好，而是可读性的前提。
+ */
+function trajectoryKindOf(type: string): TrajectoryNodeKind | null {
   if (type === 'user/message') {
     return TrajectoryNodeKind.USER;
   }
@@ -214,7 +254,34 @@ function trajectoryKindOf(type: string): TrajectoryNodeKind {
   if (type === 'turn/end') {
     return TrajectoryNodeKind.TURN_END;
   }
+  // 以下都是实现细节，不构成「发生过什么」的记录。
+  if (type === 'tool/result' || type === 'step/start' || type === 'step/end' || type === 'turn/start') {
+    return null;
+  }
+  if (type.startsWith('session-log-') || type.startsWith('agent/inbox/')) {
+    return null;
+  }
   return TrajectoryNodeKind.OTHER;
+}
+
+/**
+ * 把节点的原始载荷排成**缩进过的 JSON**（详情展开时用）。
+ *
+ * 为什么必须缩进：服务端给的是紧凑单行，几十个字段挤在一条里没法读；
+ * 轨迹页的价值就是「看清当时到底收到了什么」，糊成一坨等于没有。
+ * `raw === null` 返回 `null`，由 UI 显示「这条事件没有载荷」——
+ * 这里不返回空串，是为了让「没有载荷」与「载荷是空对象」在界面上可区分。
+ */
+export function prettyPayload(raw: Object | null): string | null {
+  if (raw === null) {
+    return null;
+  }
+  try {
+    return JSON.stringify(raw, null, 2);
+  } catch (err) {
+    // 循环引用等极端情况：退回原始串，至少不吞掉内容。
+    return `${raw}`;
+  }
 }
 
 /**

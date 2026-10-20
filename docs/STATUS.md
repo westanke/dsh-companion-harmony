@@ -165,6 +165,24 @@
   （新增 `cases/ui-wiring-guard.test.ts` 四条源码形状门禁，第 2 例现同时查面板内部与宿主根容器）。
   **①③④ 已上机验通**（2026-10-20 断网态验 ③、复网后验 ①④）；**②第二层修复已上机验通**；
   真机体感四修**全部上机验收完毕**（明细见 TESTING 真机验收表）。
+- **本轮改动（2026-10-20 晚，未出包，轨迹页两修）**：
+  ①真机反馈「轨迹页一片空白」。**根因**：`ui/TrajectoryScreen.ets` 的节点行为画左侧时间轴
+  写了一个 `height('100%')` 的竖条，而那一行**高度由内容撑开**（无定值）—— 百分比没有参照，
+  按**整屏**算，于是每个节点占掉一整屏，一屏只看到一个 `job/registered #1492`，其余全白。
+  **修法**：竖线**直接删除**（源工程没有这条装饰），节点行由内容撑开。同版真机还逮到第二处：
+  `bindContentCover` 内容不吃安全区，标题压在状态栏时钟上、`✕` 压在电池图标上 ——
+  补 `TYPE_SYSTEM` 顶部高度的 `topInset` 内边距。真机复验：修前一屏 1 个节点 →
+  修后一屏 18 个节点、面板与状态栏互不遮挡（截帧 `z1-traj-safe.jpeg`）。坑 56。
+  ②真机反馈「能显示了，不认识」。**根因**：第一版把节点渲染成「emoji + 事件原名」且不做类型过滤，
+  真机满屏 `job/registered`、`step/start`、`session-log-*`；源工程 `ChatTrajectorySheet.kt`
+  的口径是「第 N 轮 + N 个工具调用 + 耗时」+「`#seq` + 本地化类型名 + 工具名」+ 点击展开缩进 JSON。
+  **修法**：数据层补噪音过滤（`step/start`、`step/end`、`turn/start`、`tool/result`、
+  `session-log-*`、`agent/inbox/*`）并把未知轮次垫底；新增 `prettyPayload()`；
+  渲染层类型名全部走 `trajectory_*` 本地化资源（中英各一套），仅 `OTHER` 退回事件原名；
+  改为**自订阅 vm**（不再由 `ChatDetail` 传 `history`）。坑 57。
+  两修合计：`BUILD SUCCESSFUL` + **793 用例全绿**（`ui-wiring-guard` 第 5 例钉住呈现口径，
+  `trajectory.test.ts` 覆盖过滤 / 垫底 / `prettyPayload`）。真机复验：`#1739 助手消息`、
+  `第 1 轮 · 47 个工具调用`，点击后 JSON 缩进完整、右侧不裁切（截帧 `v13-traj-final.jpeg`）。
 - **本轮改动（1.0.3）**：①**追平 Android v2.2.42 的 39 条新能力**（第 1 / 2 / 3 / 4 批 +
   主题三档，代码全部落盘，见文末「2026-10-17 移植补齐」）；
   ②**真机逐项验证**并**修复**设置页说明文字不随字号档更新（`SwitchRow.title/description`

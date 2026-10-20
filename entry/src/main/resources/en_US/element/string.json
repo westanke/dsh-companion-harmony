@@ -1659,6 +1659,46 @@
     {
       "name": "trajectory_title",
       "value": "Execution trajectory"
+    },
+    {
+      "name": "trajectory_turn",
+      "value": "Turn %d"
+    },
+    {
+      "name": "trajectory_unknown_turn",
+      "value": "Between turns"
+    },
+    {
+      "name": "trajectory_tools",
+      "value": "%d tool calls"
+    },
+    {
+      "name": "trajectory_user",
+      "value": "User message"
+    },
+    {
+      "name": "trajectory_assistant",
+      "value": "Assistant message"
+    },
+    {
+      "name": "trajectory_tool",
+      "value": "Tool call"
+    },
+    {
+      "name": "trajectory_deliverable",
+      "value": "Deliverable"
+    },
+    {
+      "name": "trajectory_turn_end",
+      "value": "Turn end"
+    },
+    {
+      "name": "trajectory_other",
+      "value": "Other event"
+    },
+    {
+      "name": "trajectory_no_payload",
+      "value": "(no payload for this event)"
     }
   ]
 }

@@ -1339,11 +1339,10 @@ export struct ChatDetail {
     })
   }
 
-  /** 轨迹页的内容（只转发 history；显隐由上面那个 `bindContentCover` 管）。 */
+  /** 轨迹页的内容（**不传 history**：本页自订阅 vm，理由见 `TrajectoryScreen.ets` 文件头）。 */
   @Builder
   trajectorySheet() {
     TrajectoryScreen({
-      history: this.st().history,
       onClose: (): void => {
         this.trajectoryOpen = false;
       },

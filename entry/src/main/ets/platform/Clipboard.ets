@@ -21,6 +21,7 @@
  */
 
 import { pasteboard } from '@kit.BasicServicesKit';
+import { normalizePrimaryText } from '../core/ClipboardText';
 
 /**
  * 读剪贴板文本。
@@ -29,6 +30,12 @@ import { pasteboard } from '@kit.BasicServicesKit';
  * 剪贴板空、剪贴板里不是文本。**这三者对调用方等价**（都只能让用户改用手动粘贴），
  * 所以这里不区分 —— 但调用方拿到空串时**必须给出提示**，
  * 静默什么都不做会让人以为按钮坏了。
+ *
+ * ⚠️ **返回值一定是字符串**，这不是多余的话，是有过一次闪退教训的：
+ * `getPrimaryText()` 声明 `string`、运行时却会给 `undefined`，而调用方写的是
+ * `const text = readClipboardText(); if (text.length > 0)` —— 一个 `undefined`
+ * 换来的是整进程被杀（2026-10-20 AGC 驳回，详见 `core/ClipboardText.ts` 的文件头）。
+ * 归一这件事交给那个纯函数，好在 `node --test` 里钉住。
  */
 export function readClipboardText(): string {
   try {
@@ -37,7 +44,7 @@ export function readClipboardText(): string {
       return '';
     }
     const data: pasteboard.PasteData = board.getDataSync();
-    return data.getPrimaryText();
+    return normalizePrimaryText(data.getPrimaryText());
   } catch (e) {
     // 无 READ_PASTEBOARD 权限时走到这里（BusinessError 201）。见文件头。
     return '';

@@ -137,6 +137,7 @@ ui/     ← 只消费 HarnessState，调 HarnessViewModel 动作；不持有协�
 - `@Prop 深拷贝保原型`
 - `改名必须连 bundleName 一起换`
 - `依赖登记按元素，读一次不等于整页登记`
+- `平台返回值按运行时判类型`
 
 > 新坑位：名字加进上面清单 + 原文写进 `docs/PORT-MAP.md` §6 并补 `### 同名` 锚点。
 

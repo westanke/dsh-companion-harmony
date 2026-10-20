@@ -272,6 +272,10 @@
   **凭据**：`secret MIRROR_PAT`（`repo` + `workflow` scope）—— `push --mirror` 必然写
   `.github/workflows/*`，`GITHUB_TOKEN` 永远推不动（坑 C 同根因）。
   **发布源随之改为 Gitee**：tag 与资产先发 Gitee，GitHub 由 CI 追平。
+  **实测两条平台限制**（`sync-releases.py` 内已处理，坑 D）：① GitHub Release 的资产扩展名
+  有白名单，`.app` 不在其中，上传直接 422 `extension that is not allowed` —— AGC 上架包
+  只在 Gitee 提供，GitHub 侧发能直装的 `.hap`；② Gitee 会把 tag 的源码包自动挂进 assets，
+  GitHub 每个 tag 自带一份，按 `tag + .zip/.tar.gz` 精确跳过。
 
 - **`core/DshClient.ts` 拆出传输层 `core/DshTransport.ts`**（775 + 233 行，两文件都在 900 行预算内）。
   **为什么拆**：加进后台任务三个端点后 `DshClient.ts` 越过 900 行预算（见 `docs/TECH-DEBT.md` 行数预算）。

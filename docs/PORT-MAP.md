@@ -2397,12 +2397,19 @@ entry/build/default/cache/default/default@CompileArkTS/esmodule/release/entry/sr
    `ui/SessionFilesSheet.ets` 改为自订阅（`@StorageLink('dshRevision')` + `harnessState()`），
    父组件 `ChatHeader.sheetContent()` 只传回调；详情态去掉 `@State kind`（改每帧现算，
    避免图片/PDF 在字节到位后被当文本渲染）。见坑 52。
-   ② **同面板下方大留白** —— 列表 `.height('72%')` 改 `constraintSize({ maxHeight: 420 })`
-   （FIT_CONTENT 里百分比按整屏算）。见坑 53。
+   ② **同面板下方大留白** —— 两层都要改：列表 `.height('72%')` 改
+   `constraintSize({ maxHeight: 420 })`，**外加**宿主根容器去掉 `.height('100%')`
+   （只改内层时真机依旧贴满，见坑 53）。
    ③ **连接页失败时一片「连接」** —— 新增 `ui/ErrorText.ets` 抽出 `localErrorText()`，
    `ui/ConnectScreen.ets` 接上与 `AppShell` 同一套的报错（`@Watch` + `lastReported` +
    `clearError()`）；主机按钮加第三档「重试连接」（`connect_retry`）。见坑 54。
-   新增 `test/cases/ui-wiring-guard.test.ts`（3 例源码形状门禁）。**均未上机。**
+   ④ **思考条展开后没有收回入口** —— 标题行常驻 + `⌄`/`⌃` 箭头，`onClick` 只挂标题行。见坑 55。
+   新增 `test/cases/ui-wiring-guard.test.ts`（4 例源码形状门禁）。
+   **真机（2026-10-20，`a709c2c` + 根容器修复包）**：①②④ 均已验通 ——
+   文件详情**首次点击即出内容**（33.2 KiB `text/plain` 正文直接渲染）；列表面板从贴满屏收缩到
+   内容高度（标题从 y=171 移到 y=730，列表按 420vp 上限内部滚动、下方无空白）；
+   思考条展开后标题行仍在、箭头翻成 `⌃`、正文限高 720px（240vp），再点收回。
+   ③ 的断网三档与失败报错另见 TESTING 真机验收表。
 
 **坑 42：ArkTS 没有判别联合类型 ——「四种长相」只能用单类 + `kind` 字段承载**
 
@@ -2651,7 +2658,7 @@ export struct SessionFilesSheet {
 `@StorageLink('dshRevision')`，且 `SessionFilesSheet` 里**不许再出现**
 `history:` / `open:` / `sessionId:` 这三个普通成员声明。
 
-**坑 53：`SheetSize.FIT_CONTENT` 面板里写 `height('72%')` —— 百分比按整屏算，面板被撑满**
+**坑 53：`SheetSize.FIT_CONTENT` 面板里写百分比 / `height('100%')` —— 按整屏算，面板被撑满**
 
 文件面板列表原先写 `.height('72%')`（照抄源工程 `fillMaxHeight(0.72f)` 的比例），
 面板本身走 `SheetSize.FIT_CONTENT`。真机表现：**弹窗很高、内容挤在上方、下面一大片留白**。
@@ -2659,11 +2666,18 @@ export struct SessionFilesSheet {
 原因：`FIT_CONTENT` 的语义是「内容多高、面板多高」——此时**没有确定的父高度**给百分比当参照，
 `'72%'` 只能退回按**整屏**算，于是面板被撑到贴满，条目只有三五个时下方全空。
 
-**修法**：`constraintSize({ maxHeight: 420 })` —— 条目多时列表在面板内部滚动，
-条目少时只占内容那么高。`JobsSheet` 用的是同一手法（`JOB_LIST_MAX_HEIGHT_VP`）。
+**修法（两处，缺一不可）**：
+
+1. 列表：`constraintSize({ maxHeight: 420 })` —— 条目多时列表在面板内部滚动，
+   条目少时只占内容那么高。`JobsSheet` 用的是同一手法（`JOB_LIST_MAX_HEIGHT_VP`）。
+2. **面板宿主根容器**（`ChatHeader.sheetContent()` 最外层 `Column`）去掉 `.height('100%')`。
+   这一句在 2026-10-20 真机上被逮到：只改内层时面板依旧贴满屏幕，因为
+   `FIT_CONTENT` 量的是**根容器**的高度，根容器 100% 就等于「内容 = 整屏」。
 
 > 规律：**FIT_CONTENT 里只写"内容自身需要的尺寸"**，上限用 `constraintSize`；
-> 百分比高度只适用于父高度确定的地方（这类面板里没有）。
+> 百分比 / 100% 高度只适用于父高度确定的地方（这类面板里没有）。
+> 形状门禁 `ui-wiring-guard` 第 2 例两处都查（面板内部 + 宿主根容器），
+> 免得下次又只修内层。
 
 **坑 54：`state.error` 只在 `AppShell` 里报 —— 而 `AppShell` 连上之后才挂载**
 

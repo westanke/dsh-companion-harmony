@@ -123,6 +123,22 @@ test('FIT_CONTENT 面板内不许用百分比高度', () => {
     `面板走 FIT_CONTENT，百分比高度会按整屏算，导致面板过高 + 下方大留白：\n${violations.join('\n')}\n` +
       `怎么办：用 constraintSize({ maxHeight: N })，内容不足时只占内容高度。`,
   );
+
+  // 面板**宿主**的根容器同样不许写 `height('100%')`：内层列表改对了也没用，
+  // 根容器撑成整屏时 FIT_CONTENT 拿到的内容高度就是整屏 —— 真机上列表只占半屏、
+  // 下面半屏空白，就是这么来的（坑 53 的第二半）。只查 sheetContent 顶层缩进，
+  // 内部固定高度面板（全访问确认）里的 100% 是有界的，不算违规。
+  const hostText: string = read('ChatHeader.ets');
+  const from: number = hostText.indexOf('sheetContent()');
+  const to: number = hostText.indexOf('build()', from);
+  sanity(from >= 0 && to > from, `ChatHeader.ets 里定位不到 sheetContent() 主体`);
+  const rootLines: string[] = hostText.substring(from, to).split('\n')
+    .filter((line: string): boolean => /^ {4}\.height\(\s*'100%'\s*\)/.test(line));
+  assert.ok(
+    rootLines.length === 0,
+    `面板宿主根容器写了 height('100%')：FIT_CONTENT 会按整屏算，条目少的面板下半屏全是留白。\n` +
+      `怎么办：删掉根容器这一句，让面板按内容收缩（固定高度面板由 sheetHeight() 定高）。`,
+  );
 });
 
 // ---------------------------------------------------------------- 展开态必须留收回入口

@@ -809,7 +809,12 @@ export struct ChatHeaderPanelHost {
       }
     }
     .width('100%')
-    .height('100%')
+    // **根容器不许写 `height('100%')`**（真机实证，见 PORT-MAP 坑 53）：面板走
+    // `SheetSize.FIT_CONTENT` 时，本意是「内容多高、面板多高」，可这里一旦撑成 100%，
+    // 面板拿到的内容高度就是整屏 —— 面板跟着变满屏，条目少的面板（会话文件列表六条）
+    // 下半屏全是空白。7 月那次只改了内层列表的 `72%`，根容器这一句没动，所以真机上
+    // 「下面留白很大」只轻了一点、没消失。去掉即可按内容收缩；固定高度的
+    // 「全访问确认 / 统计」面板不受影响（它们本来就由 `sheetHeight()` 定高 380）。
     .padding({ left: 18, right: 18, top: 8, bottom: 16 })
     .backgroundColor($r('sys.color.ohos_id_color_sub_background'))
   }

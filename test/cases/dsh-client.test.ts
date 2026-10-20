@@ -6,6 +6,7 @@ import {
   TimerBridge, WebSocketCallbacks, WebSocketTransport, EventSocketHandle,
 } from '../../entry/src/main/ets/core/DshClient.ts';
 import { PromptPart } from '../../entry/src/main/ets/core/Models.ts';
+import { killWasRequested } from '../../entry/src/main/ets/core/JobViews.ts';
 import { utf8Decode, utf8Encode } from '../../entry/src/main/ets/core/Codec.ts';
 
 // --- 假传输（记录每次请求，回放预设响应） -----------------------------------
@@ -522,3 +523,120 @@ test('DshClient：health 无令牌也能发（配对前就要能探活）', asyn
   assert.equal((await c.health()).ok, true);
   assert.equal(t.requests.length, 1);
 });
+
+// --- 后台任务（bridge ≥ 2.4.3）---------------------------------------------
+
+test('DshClient.sessionJobs：走会话维度路由，解 {jobs:[...]} 信封（不是 {items}）', async () => {
+  const t = new FakeTransport().reply(200,
+    '{"jobs":[{"id":"j1","kind":"bash","label":"npm run build","owner":"s1","status":"running",'
+    + '"progress":"3/10","startedAt":1000},'
+    + '{"id":"j2","kind":"bash","label":"sleep 1","status":"completed","startedAt":500,'
+    + '"finishedAt":900,"detail":"exit code: 0"}]}');
+  const c = client(t);
+  const jobs = await c.sessionJobs('s1');
+  assert.equal(t.last().method, 'GET');
+  assert.equal(t.last().url, 'http://192.168.1.126:3090/api/v1/chat/sessions/s1/jobs');
+  assert.equal(jobs.length, 2);
+  assert.equal(jobs[0].label, 'npm run build');
+  assert.equal(jobs[0].progress, '3/10');
+  assert.equal(jobs[0].isLive(), true);
+  assert.equal(jobs[0].finishedAt, null, '存活中没有 finishedAt');
+  assert.equal(jobs[1].isLive(), false);
+  assert.equal(jobs[1].finishedAt, 900);
+  assert.equal(jobs[1].detail, 'exit code: 0');
+  assert.equal(jobs[1].owner, null, '无主任务不带 owner 键');
+});
+
+test('DshClient.sessionJobs：空清单是正常结果（不是失败）', async () => {
+  const t = new FakeTransport().reply(200, '{"jobs":[]}');
+  assert.deepEqual(await client(t).sessionJobs('s1'), []);
+});
+
+test('DshClient.sessionJobs：缺 jobs 字段时按空清单处理，不抛', async () => {
+  const t = new FakeTransport().reply(200, '{}');
+  const jobs = await client(t).sessionJobs('s1');
+  assert.equal(jobs.length, 0);
+});
+
+test('DshClient.sessionJobs：畸形行退化为默认值而不是打崩面板', async () => {
+  // 服务端本该 502 拦住这类行（JOB_SHAPE_INVALID）；客户端是第二道防线 ——
+  // 一处形状意外不该让整块面板报错。
+  const t = new FakeTransport().reply(200,
+    '{"jobs":[{"id":7,"kind":null,"label":"","status":"running","startedAt":"soon"}]}');
+  const jobs = await client(t).sessionJobs('s1');
+  assert.equal(jobs.length, 1);
+  assert.equal(jobs[0].id, '', '数字 id 不是字符串 → 空串');
+  assert.equal(jobs[0].kind, '');
+  assert.equal(jobs[0].startedAt, 0);
+});
+
+test('DshClient.sessionJobs：任务不存在/会话不可见的 404 照旧抛出（不吞）', async () => {
+  const t = new FakeTransport().reply(404, '{"error":{"code":"ROUTE_NOT_FOUND","message":"no route"}}');
+  await assert.rejects(() => client(t).sessionJobs('s1'), (e: unknown): boolean =>
+    (e as { code?: string }).code === 'ROUTE_NOT_FOUND');
+});
+
+test('DshClient.jobOutput：不带 from 时不拼查询串；带 from 时按绝对偏移续读', async () => {
+  const t = new FakeTransport().reply(200,
+    '{"jobId":"j1","text":"hello","next":5,"lossy":false,"status":"running"}');
+  const c = client(t);
+  const first = await c.jobOutput('s1', 'j1');
+  assert.equal(t.last().url, 'http://192.168.1.126:3090/api/v1/chat/sessions/s1/jobs/j1/output');
+  assert.equal(first.next, 5);
+  assert.equal(first.lossy, false);
+
+  t.reply(200, '{"jobId":"j1","text":" world","next":11,"lossy":true,"status":"completed"}');
+  const second = await c.jobOutput('s1', 'j1', first.next);
+  assert.equal(t.last().url, 'http://192.168.1.126:3090/api/v1/chat/sessions/s1/jobs/j1/output?from=5');
+  assert.equal(second.text, ' world');
+  assert.equal(second.lossy, true, '丢过字节必须如实标出来');
+  assert.equal(second.status, 'completed');
+});
+
+test('DshClient.jobOutput：缺 status 时是 null（流被提前切断，不是终态）', async () => {
+  const t = new FakeTransport().reply(200, '{"jobId":"j1","text":"x","next":1}');
+  const out = await client(t).jobOutput('s1', 'j1', 0);
+  assert.equal(out.status, null);
+  assert.equal(out.lossy, false);
+});
+
+test('DshClient.killJob：POST 到 kill 路由，体是 {}，解 outcome', async () => {
+  const t = new FakeTransport().reply(200, '{"jobId":"j1","outcome":"requested"}');
+  const c = client(t);
+  const result = await c.killJob('s1', 'j1');
+  assert.equal(t.last().method, 'POST');
+  assert.equal(t.last().url, 'http://192.168.1.126:3090/api/v1/chat/sessions/s1/jobs/j1/kill');
+  assert.equal(t.bodyOf(), '{}');
+  assert.equal(result.outcome, 'requested');
+  assert.equal(result.jobId, 'j1');
+});
+
+test('DshClient.killJob：already-finished 是成功但不是「已终止」', async () => {
+  const t = new FakeTransport().reply(200, '{"jobId":"j1","outcome":"already-finished"}');
+  const result = await client(t).killJob('s1', 'j1');
+  assert.equal(result.outcome, 'already-finished');
+  assert.equal(killWasRequested(result.outcome), false);
+  assert.equal(killWasRequested('requested'), true);
+});
+
+test('DshClient.killJob：404 照旧抛出（本会话看不到它 / 不存在）', async () => {
+  const t = new FakeTransport().reply(404, '{"error":{"code":"JOB_NOT_FOUND","message":"nope"}}');
+  await assert.rejects(() => client(t).killJob('s1', 'zzz'), (e: unknown): boolean =>
+    (e as { code?: string }).code === 'JOB_NOT_FOUND');
+});
+
+test('后台任务三个端点的 URL 都只有一份基地址（坑 50 回归：别用 postJson 吃完整 URL）', async () => {
+  const t = new FakeTransport()
+    .reply(200, '{"jobs":[]}')
+    .reply(200, '{"jobId":"j1","text":"","next":0}')
+    .reply(200, '{"jobId":"j1","outcome":"requested"}');
+  const c = client(t);
+  await c.sessionJobs('s1');
+  await c.jobOutput('s1', 'j1');
+  await c.killJob('s1', 'j1');
+  for (const req of t.requests) {
+    const occurrences = req.url.split('/api/v1').length - 1;
+    assert.equal(occurrences, 1, `基地址重复：${req.url}`);
+  }
+});
+

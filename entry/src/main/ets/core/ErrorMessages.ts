@@ -398,6 +398,10 @@ const TOAST_ZH: Record<string, string> = {
   'answer_not_pending': '这个问题已经不用答了',
   'answer_no_write': '这台设备没有回复问题的权限',
   'answer_failed': '提交答案失败（%1$s）',
+  // 终止后台任务的两句反馈。「它已经结束了」不是「已终止」的成功说法：
+  // 用户在远程场景下看到这句才知道**不用再管了**（见 `HarnessViewModelJobs.killJob`）。
+  'jobs_kill_requested': '已发送终止请求',
+  'jobs_kill_already_finished': '它已经结束了，不用再管',
   // 终局失败帧那一句「标题」的兜底：纯逻辑层拿到的是资源 key（见 ChatTurnFailure.titleKey），
   // VM 在「本地化命中不了、服务端原文又是空的」时要用它兜一句人话。
   'turn_stopped_title': '任务已停止',
@@ -433,6 +437,8 @@ const TOAST_EN: Record<string, string> = {
   'answer_not_pending': 'That question no longer needs an answer',
   'answer_no_write': 'This device isn\'t allowed to answer questions',
   'answer_failed': 'Couldn\'t submit the answers (%1$s)',
+  'jobs_kill_requested': 'Kill requested',
+  'jobs_kill_already_finished': 'It already finished — nothing to do',
   'turn_stopped_title': 'Task stopped',
   'turn_failed_title': 'This turn failed',
   'FILE_TOO_LARGE': 'That file is too large to preview',

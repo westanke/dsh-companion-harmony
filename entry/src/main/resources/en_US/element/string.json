@@ -581,6 +581,86 @@
       "value": "Currently inherited from the DSH model catalog; leaving it unchanged will not create a fixed override"
     },
     {
+      "name": "jobs_title",
+      "value": "Background jobs"
+    },
+    {
+      "name": "jobs_empty",
+      "value": "No background jobs in this session"
+    },
+    {
+      "name": "jobs_refresh",
+      "value": "Refresh"
+    },
+    {
+      "name": "jobs_status_running",
+      "value": "Running"
+    },
+    {
+      "name": "jobs_status_stopping",
+      "value": "Stopping"
+    },
+    {
+      "name": "jobs_status_completed",
+      "value": "Completed"
+    },
+    {
+      "name": "jobs_status_killed",
+      "value": "Killed"
+    },
+    {
+      "name": "jobs_status_failed",
+      "value": "Failed"
+    },
+    {
+      "name": "jobs_status_unknown",
+      "value": "Unknown status"
+    },
+    {
+      "name": "jobs_kill",
+      "value": "Kill"
+    },
+    {
+      "name": "jobs_kill_confirm_title",
+      "value": "Kill this job?"
+    },
+    {
+      "name": "jobs_kill_confirm_body",
+      "value": "%s is still running. This cannot be undone."
+    },
+    {
+      "name": "jobs_kill_confirm_yes",
+      "value": "Kill"
+    },
+    {
+      "name": "jobs_cancel",
+      "value": "Cancel"
+    },
+    {
+      "name": "jobs_output_title",
+      "value": "Output"
+    },
+    {
+      "name": "jobs_output_lossy",
+      "value": "Earlier bytes were dropped; this output is incomplete"
+    },
+    {
+      "name": "jobs_output_empty",
+      "value": "This job produced no output"
+    },
+    {
+      "name": "jobs_view_output",
+      "value": "View output"
+    },
+    {
+      "name": "jobs_hide_output",
+      "value": "Hide output"
+    },
+    {
+      "name": "jobs_unowned",
+      "value": "Unowned"
+    },
+    {
       "name": "jump_to_latest",
       "value": "Jump to latest"
     },

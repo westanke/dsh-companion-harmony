@@ -641,6 +641,86 @@
       "value": "当前来自 DSH 模型目录；不修改时不会写成固定覆盖"
     },
     {
+      "name": "jobs_title",
+      "value": "后台任务"
+    },
+    {
+      "name": "jobs_empty",
+      "value": "这个会话现在没有后台任务"
+    },
+    {
+      "name": "jobs_refresh",
+      "value": "刷新"
+    },
+    {
+      "name": "jobs_status_running",
+      "value": "运行中"
+    },
+    {
+      "name": "jobs_status_stopping",
+      "value": "停止中"
+    },
+    {
+      "name": "jobs_status_completed",
+      "value": "已完成"
+    },
+    {
+      "name": "jobs_status_killed",
+      "value": "已终止"
+    },
+    {
+      "name": "jobs_status_failed",
+      "value": "已失败"
+    },
+    {
+      "name": "jobs_status_unknown",
+      "value": "状态未知"
+    },
+    {
+      "name": "jobs_kill",
+      "value": "终止"
+    },
+    {
+      "name": "jobs_kill_confirm_title",
+      "value": "终止这个任务？"
+    },
+    {
+      "name": "jobs_kill_confirm_body",
+      "value": "%s 还在运行，终止后无法恢复。"
+    },
+    {
+      "name": "jobs_kill_confirm_yes",
+      "value": "终止"
+    },
+    {
+      "name": "jobs_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "jobs_output_title",
+      "value": "输出"
+    },
+    {
+      "name": "jobs_output_lossy",
+      "value": "开头有字节被丢弃，这不是完整输出"
+    },
+    {
+      "name": "jobs_output_empty",
+      "value": "这个任务没有输出"
+    },
+    {
+      "name": "jobs_view_output",
+      "value": "查看输出"
+    },
+    {
+      "name": "jobs_hide_output",
+      "value": "收起输出"
+    },
+    {
+      "name": "jobs_unowned",
+      "value": "无主任务"
+    },
+    {
       "name": "jump_to_latest",
       "value": "跳到最新"
     },

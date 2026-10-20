@@ -5,7 +5,7 @@
   2026-10-20 收到 AGC 对上架包（**1.0.2**）的稳定性驳回：**连接页「粘贴」按钮闪退**。
   根因已确证并修复（`getPrimaryText()` 声明 `string` 实到给 `undefined` → `text.length` 抛
   TypeError → ArkUI 回调未捕获异常**杀进程**；见 PORT-MAP 坑 41），
-  已过 `BUILD SUCCESSFUL` + **748 用例全绿**，并**已上机复验确认修复有效**
+  已过 `BUILD SUCCESSFUL` + **783 用例全绿**，并**已上机复验确认修复有效**
   （2026-10-20，装 `13dbdea` 调试签名包实测，见 TESTING「真机验收记录」）。
   追平 Android 源工程 v2.2.42 的新增内容**已全部落盘**，
   已**编译 + 跑测通过**（`BUILD SUCCESSFUL` + `684 用例全绿`），并已**真机逐项验证**；
@@ -18,11 +18,13 @@
   + `ui/MarkdownView.ets` / `ui/ChatMessage.ets` / `ui/ChatDetail.ets` 渲染与点击接入）、
   **权限档位 Pill**（`core/ModelsConfig.ts` `PermissionCatalog` + `core/DshClient.ts`
   `permissionPresets()` 独立候选目录接口 + `ui/ChatHeader.ets` 顶栏小胶囊）、
+  **后台任务面板**（数据层 `core/JobViews.ts` + `core/HarnessViewModelJobs.ts` + 界面 `ui/JobsSheet.ets`
+  + 能力位守卫 `job-list-v1`，端到端；另在 `DshClient` 拆传输层时**顺手修掉四处 POST 端点拼出双份基地址**）、
   文件链接识别补 autolink 尖括号剥壳；
-  待做：后台任务面板、会话页九条交互整改，
+  待做：会话页九条交互整改，
   以及错误文案 / 截断提示 / 连接导入面板 / 设置页等存量项（逐提交处置见 PORT-MAP 收尾十四）。
-  以上三项中**正文文件链接化与权限档位 Pill 已于 2026-10-20 上机验**（部分子项受注入
-  工具限制未单独触发，见 TESTING），**工具调用专用块仍为「编译 + 单测通过、未上机」**（本轮新增坑 46–48 见 PORT-MAP）。
+  以上新增能力中**正文文件链接化与权限档位 Pill 已于 2026-10-20 上机验**（部分子项受注入
+  工具限制未单独触发，见 TESTING），**工具调用专用块与后台任务面板仍为「编译 + 单测通过、未上机」**（本轮新增坑 46–51 见 PORT-MAP）。
 - **版本**：1.0.3 / `versionCode` 1000003（**剪贴板闪退修复尚未并入版本号** ——
   `[未发布]` 段已记录，版本号待定：1.0.3 未上传 AGC 则折进 1.0.3 重出包，
   已上传则升 1.0.4，**待用户拍板**）
@@ -42,7 +44,7 @@
 - **兼容**：HarmonyOS 6.0 及以上（`compatibleSdkVersion` = 5.1.0(18)）
 - **设备类型**：phone / tablet / 2in1
 - **插件基线**：`dsh-remote-bridge` **≥ 2.0.4**（旧名 `dsh-workspace`）
-- **最近验证**：`748 用例全绿`（`cd test && npm test`，47 个用例文件）+ `BUILD SUCCESSFUL`
+- **最近验证**：`783 用例全绿`（`cd test && npm test`，48 个用例文件）+ `BUILD SUCCESSFUL`
   （首跑 4 条红已全部修掉，其中 1 条是门禁抓出的真缺陷，详见文末）
 - **真机**：ICL-AL10（HarmonyOS 7.0.0.109）已装 **1.0.3 调试签名包**（同调试签名
   **覆盖安装**，`wangke-PC` 配对数据**保住**——局域网 / 虚拟网两地址俱在）。

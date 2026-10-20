@@ -60,6 +60,7 @@
 | **消息级分叉（`atSeq`）** | `POST /chat/sessions/{id}/fork` | `core/ChatFork.ts` + `ui/ChatMessage.ets` + `ui/ChatDetail.ets` | 🟡 | 2026-10-17 新增。只给**用户消息且 `seq > 0`**（源 `ChatForkPoint.kt` 判据）。分叉会真实新建会话 ⇒ 必须二次确认；确认框与展开态同理住父组件（坑 29） |
 | **已归档会话入口** | `GET /chat/sessions?archived=true` | `ui/ArchivedSessionRow.ets` + `ui/ChatScreen.ets` | 🟡 | 2026-10-17 新增。**入口按能力位 `session-archive-list-v1` 守卫**，读不到能力位一律不显示（「未知 ≠ 缺失」，坑 33）—— 老 bridge 会忽略 `archived` 参数并返回未归档列表，照显示只会让用户以为「一条归档都没有」。底部**明说**本插件不支持恢复归档 |
 | **执行统计面板** | 无（源：`ChatStats`） | `core/SessionStats.ts` + `ui/SessionStatsSheet.ets` | 🟡 | 2026-10-17 新增。会话头部菜单只读入口。**刻意不显示 Token 用量 / 上下文占用**（要内核提供、本仓读不到），面板底部**如实说明读不到所以不显示**；空会话显示「这个会话还没有可统计的事件」而不是一排 0 |
+| **后台任务面板** | `GET/POST /chat/sessions/{id}/jobs…` | `core/JobViews.ts` + `core/HarnessViewModelJobs.ts` + `ui/JobsSheet.ets` | 🟡 | 2026-10-20 新增（源 `e609b04`，bridge ≥ 2.4.3）。会话 ⋯ 菜单入口，**按能力位 `job-list-v1` 守卫**（读不到能力位不显示 —— 老 bridge 上这条路由 404，显示了只会让人点进去看报错）。**补齐的是「长任务跑飞了只能干等」这个洞**：远程场景下能看清单、能终止、能按需读输出。三条判读口径都写进代码：`already-finished`（它已经结束了）≠ `requested`（已发送终止请求）、输出 `lossy` 亮明「不完整」、读失败不谎报「没有任务」。**v1 不实时推送**（REST 一帧 + 刷新按钮） |
 | **执行轨迹页** | 无（源：`ChatTrajectory`） | `core/Trajectory.ts` + `ui/TrajectoryScreen.ets` | 🟡 | 2026-10-17 新增。按 `turn` 分组、组内按 `seq` 排序。**不做类型过滤**：认不出的类型留 `OTHER` 并显示**事件类型原名**（不写笼统「其他」——「这到底是什么」正是排查时要看的）；组级耗时取不到可信值（时钟倒退 / 跨度为 0）就不印 |
 | **事件断档检测 / 重连后 resync** | WebSocket `seq` + `chat.session.snapshot` | `core/ChatSeqMonitor.ts` + `HarnessViewModelConnection` | 🟡 | 2026-10-17 新增。**严格跳号才重拉整份历史**；重复与倒退算去重、**不算断档**（否则每次重连都白拉一遍）。基线 `cursor` 落后本地最大 seq 才刷新；序号序列**每会话独立** ⇒ `selectSession` 即清空 |
 | **交付物实时出现（不刷新整页）** | `chat.deliverables.presented` | `HarnessViewModelConnection` | 🟡 | 2026-10-17 新增 |
@@ -110,15 +111,17 @@
 
 ---
 
-## 统计（2026-10-20）
+## 统计（2026-10-20 第二次重数）
 
 | 状态 | 项数 |
 |---|---|
 | ✅ 已实现（其中 **1 行标注「未上机」**） | 31 |
-| 🟡 已实现待真机验证 | 33 |
+| 🟡 已实现待真机验证 | 34 |
 | 🔵 有意的差异 | 3 |
 | ⛔ 不做 | 0 |
 
+> 合计 **68 行**（本轮新增「后台任务面板」1 行，🟡 由 33 → 34）。
+>
 > **🟡 不等于"差"**，而是"等设备"。无设备时**不许**把 🟡 说成 ✅。
 > 逐条复测方法见 `PORT-MAP.md` §7「待真机验证」（25 条）。
 >

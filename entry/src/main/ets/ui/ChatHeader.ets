@@ -1,16 +1,16 @@
 /**
- * 聊天详情页的**头部 + 三个面板宿主** —— 从 `ui/ChatDetail.ets` 拆出
+ * 聊天详情页的**头部 + 五个面板宿主** —— 从 `ui/ChatDetail.ets` 拆出
  * （见该文件头的「拆分说明」）。
  *
  * | 装什么 | 对应源工程 |
  * |---|---|
  * | 头部（标题链 / 在线状态 / `📂` `↻` `✕` `⋯`） | `ConversationHeader`（738–877） |
  * | `⋯` 菜单（模型 · 权限档位 · 插话 的压平形态） | `DropdownMenu` 内嵌的 `PermissionMenuItems` |
- * | 三个面板合成的一个 `bindSheet` 宿主 | 会话文件 / 会话配置 / 完整访问确认 |
+ * | 五个面板合成的一个 `bindSheet` 宿主 | 会话文件 / 会话配置 / 完整访问确认 / 执行统计 / 后台任务 |
  *
  * ## 为什么面板宿主也跟着头部走
  *
- * 头部是「会话文件 / 会话配置」两个面板**唯一**的入口（`📂` 与 `⋯`），而「完整访问确认」
+ * 头部是「会话文件 / 会话配置 / 后台任务」三个面板**唯一**的入口（`📂` 与 `⋯`），而「完整访问确认」
  * 面板的开关状态（`fullAccessApprovalId` / `fullAccessAck`）又与头部菜单里的权限档位共用
  * 一套判据。把头部与这套面板宿主放在一起，`openSheet` / `closeSheet` / `sheetContent` /
  * `sheetHeight` 就不再需要跨组件回调；只有「审批区请求二次确认」这一条从父组件进来
@@ -25,15 +25,16 @@
  * - `message` 同理：与 `ChatComposer` 共享父组件那一份（插话时读它，发送后清它）。
  * - `wide` 走 `@Prop`（单向只读）：普通成员在子组件里会**永远停在首帧值**。
  * - 函数 / 回调用**普通成员**：`@Prop` 不允许函数类型，函数也不需要响应式。
- * - `SHEET_FILES` / `SHEET_CONFIG` / `SHEET_FULL_ACCESS` 定义在**本文件**（被父组件导入的
- *   那一侧）：父组件要用 `SHEET_FULL_ACCESS` 直接写 `sheetKind`，两个文件互相 import 会形成
- *   循环依赖，故常量跟着面板体走（与 `ui/SessionSheets.ets` 同一条理由）。
+ * - `SHEET_FILES` / `SHEET_CONFIG` / `SHEET_FULL_ACCESS` / `SHEET_STATS` / `SHEET_JOBS` 定义在
+ *   **本文件**（被父组件导入的那一侧）：父组件要用 `SHEET_FULL_ACCESS` 直接写 `sheetKind`，
+ *   两个文件互相 import 会形成循环依赖，故常量跟着面板体走（与 `ui/SessionSheets.ets` 同一条理由）。
  */
 import { common } from '@kit.AbilityKit';
 import {
   AgentPreset, ChatHistory, ChatSession, ModelSelection, PendingApproval, PermissionOption,
   PermissionSelect,
 } from '../core/Models';
+import { supportsJobListing } from '../core/BridgeCapabilities';
 import { ApprovalUiKind, HarnessState, HarnessViewModel } from '../core/HarnessViewModel';
 import { permissionSelectOf } from '../core/ChatPresentation';
 import { canSubmit } from '../core/ComposerSendPolicy';
@@ -42,16 +43,18 @@ import { StatusLabel } from './Components';
 import { SessionFilesSheet } from './SessionFilesSheet';
 import { SessionConfigSheet } from './ModelSheet';
 import { SessionStatsSheet } from './SessionStatsSheet';
+import { JobsSheet } from './JobsSheet';
 
-/** 面板宿主的四态（会话文件 / 会话配置 / 完整访问确认 / 执行统计）。
+/** 面板宿主的五态（会话文件 / 会话配置 / 完整访问确认 / 执行统计 / 后台任务）。
  * 定义在**被导入的一侧**（见文件头「状态与装饰器」最后一条）——
  * 父组件要用 `SHEET_FULL_ACCESS` 直接写 `sheetKind`，两边互相 import 会形成循环依赖。 */
 export const SHEET_FILES: number = 0;
 export const SHEET_CONFIG: number = 1;
 export const SHEET_FULL_ACCESS: number = 2;
 export const SHEET_STATS: number = 3;
+export const SHEET_JOBS: number = 4;
 
-/** 聊天详情页头部 + 三个面板宿主（会话文件 / 会话配置 / 完整访问确认）。 */
+/** 聊天详情页头部 + 五个面板宿主（会话文件 / 会话配置 / 完整访问确认 / 执行统计 / 后台任务）。 */
 @Component
 export struct ChatHeaderPanelHost {
   /** 窄屏时显示返回键（宽屏详情常驻，没有「返回列表」这回事）。 */
@@ -303,7 +306,7 @@ export struct ChatHeaderPanelHost {
       },
     });
 
-    // 下面两项是**只读的查看入口**（统计 / 轨迹），不改任何状态，所以一直可用。
+    // 下面三项是**只读的查看入口**（统计 / 轨迹 / 后台任务），不改任何状态，所以一直可用。
     // 放在菜单末尾：它们是排查用的次要动作，不该挤占模型与权限的位置。
     out.push({
       value: this.resText($r('app.string.session_stats_title')),
@@ -319,7 +322,36 @@ export struct ChatHeaderPanelHost {
         this.onOpenTrajectory();
       },
     });
+    // 后台任务入口**按能力位显示**：老 bridge 上这条路由是 404，显示了入口只会让用户
+    // 点进去看报错（见 `BridgeCapabilities.supportsJobListing`）。这也是「未知 ≠ 缺失」
+    // 那条口径的用法：读不到能力清单时不显示入口，而不是弹一句警告。
+    if (supportsJobListing(this.st().bridgeCapabilities)) {
+      out.push({
+        value: this.resText($r('app.string.jobs_title')),
+        enabled: true,
+        action: (): void => {
+          this.openJobsPanel();
+        },
+      });
+    }
     return out;
+  }
+
+  /**
+   * 打开后台任务面板。
+   *
+   * 顺序很关键：**先让 vm 准备好这一份面板状态，再打开 sheet**。反过来的话
+   * sheet 会先渲染一帧「还没有面板状态」的空壳（`jobsPanel === null`），
+   * 看起来像闪了一下。没有选中会话时不打开 —— 任务清单是**会话维度**的。
+   */
+  private openJobsPanel(): void {
+    const vm: HarnessViewModel | null = this.vm();
+    const id: string | null = this.selectedId();
+    if (vm === null || id === null) {
+      return;
+    }
+    vm.openJobsPanel(id);
+    this.openSheet(SHEET_JOBS);
   }
 
   /** 权限档位被点中：完整访问要走二次确认，其余直接提交。 */
@@ -643,6 +675,8 @@ export struct ChatHeaderPanelHost {
     // 全访问二次确认面板是固定短内容（一个勾选框 + 两行文案），继续用固定高度 380。
     // 统计面板（`SHEET_STATS`）内容比它还短（四行数字 + 两段说明），也给 380 ——
     // `FIT_CONTENT` 下这块会在底部留出一段空白，看起来像"没加载完"。
+    // 后台任务面板（`SHEET_JOBS`）同理走 `FIT_CONTENT`：内容长度完全跟着任务条数走，
+    // 内部列表自己限制最大高度并滚动（见 `JobsSheet`），面板本身不该先撑成整屏。
     if (this.sheetKind === SHEET_FULL_ACCESS || this.sheetKind === SHEET_STATS) {
       return 380;
     }
@@ -714,6 +748,10 @@ export struct ChatHeaderPanelHost {
         })
       } else if (this.sheetKind === SHEET_STATS) {
         SessionStatsSheet({ history: this.st().history })
+      } else if (this.sheetKind === SHEET_JOBS) {
+        // 面板自己从 `AppRuntime` 读 `state.jobsPanel` 并订阅 revision，
+        // 所以这里一个参数都不用传（理由见 `JobsSheet` 文件头）。
+        JobsSheet()
       } else {
         Column() {
           Text($r('app.string.permission_full_access_title'))
@@ -793,6 +831,15 @@ export struct ChatHeaderPanelHost {
       dragBar: true,
       onDisappear: (): void => {
         this.sheetOpen = false;
+        // 后台任务面板**关闭即清状态**：面板是临时的，残留一份旧会话的任务清单
+        // 只会误导（下次打开的是另一个会话时尤其明显）。与源工程 `onDismissRequest`
+        // 里那一句 `closeJobsPanel()` 对位。
+        if (this.sheetKind === SHEET_JOBS) {
+          const vm: HarnessViewModel | null = this.vm();
+          if (vm !== null) {
+            vm.closeJobsPanel();
+          }
+        }
       },
     })
   }

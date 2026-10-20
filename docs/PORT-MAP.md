@@ -2358,7 +2358,7 @@ entry/build/default/cache/default/default@CompileArkTS/esmodule/release/entry/sr
 | `a96f5e7` | 工具调用专用块 + 权限档位 Pill | **已完成**：工具块数据层 + 界面接入（`core/ToolBlocks.ts` + `ui/ToolBlockBody.ets`）；权限档位 Pill 走独立候选目录接口（见下「本轮已完成」6，坑 47） |
 | `a344e3f` | 会话页九条交互整改 + 权限档位打通 + 文件链接可打开 | 文件链接部分**已端到端移植**（`core/PathLinks.ts` + `core/InlineSegments.ts` + `ui/InlineText.ets` + 渲染 / 点击接入 + `ChatLinkTarget.classify` 剥壳，见「本轮已完成」5）；权限档位打通见 6；其余九条交互整改随后 |
 | `9863579` | 存量改动（错误文案 / 截断提示 / 连接导入面板 / 偏好 / 设置页 / 诊断基建） | 随后（用户可见项优先） |
-| `e609b04` | 后台任务面板（会话 ⋯ 菜单 →「后台任务」） | 随后 |
+| `e609b04` | 后台任务面板（会话 ⋯ 菜单 →「后台任务」） | **已完成**：`core/JobViews.ts` + `core/DshClient.ts` 三端点 + `core/HarnessViewModelJobs.ts`（继承链第 7 层）+ `ui/JobsSheet.ets` + `ui/ChatHeader.ets` 入口（能力位 `job-list-v1` 守卫）。见「本轮已完成」7、坑 50、坑 51 |
 | `f02c5b9` | 表格紧贴上一行被渲染成竖线纯文本 | **刻意未移植**（见坑 43） |
 | `bfa9aed` | 补三组回归用例（发送键三态 / 正文文件链接化 / autolink 尖括号） | 判据已并入本轮新增用例 |
 
@@ -2377,6 +2377,20 @@ entry/build/default/cache/default/default@CompileArkTS/esmodule/release/entry/sr
    （**失败自己吞掉、不连坐整条连接，也不擦掉已有目录**）+ `permissionSelectOf(history, catalog)`
    （内联 options 优先，缺失才用目录兜底；档位名走 `currentValue` → `preset` → `sandbox` 降级）
    + `ui/ChatHeader.ets` 顶栏小胶囊与 ⋯ 菜单标题行修复（**候选为空也照渲染**）。见坑 47。
+7. **后台任务面板**（源 `e609b04`，需 bridge ≥ 2.4.3）—— `core/JobViews.ts`（新，wire 类型 +
+   `isJobLive` / `jobDurationText` / `killWasRequested` 三个纯函数）、
+   `core/DshClient.ts` 的 `sessionJobs()` / `jobOutput()` / `killJob()`（会话维度三条路由，
+   信封是 `{jobs:[…]}` 而非别处的 `{items:[…]}`）、`core/HarnessViewModelJobs.ts`（新，
+   继承链第 7 层，`openJobsPanel` / `closeJobsPanel` / `loadJobs` / `killJob` / `toggleJobOutput`）、
+   `ui/JobsSheet.ets`（新，面板）、`ui/ChatHeader.ets`（`SHEET_JOBS` + ⋯ 菜单项 + 关闭即清状态）、
+   `core/HarnessTypes.ts`（`JobsPanelState` 进共享状态）、`core/BridgeCapabilities.ts`
+   （`job-list-v1` 能力位守卫，`supportsJobListing()`）。**入口按能力位守卫**：读不到能力位一律不显示。
+   **行为判据**：`already-finished` ≠ `requested` 两种反馈文案；`lossy` 必须亮出来；
+   清单读失败不擦旧清单也不谎报「没有任务」；「存活中」用白名单判（见 `isJobLive` 注释）。
+   **v1 不实时推送**（REST 一帧 + 刷新按钮）。
+   本轮还顺带把 `DshClient` 的传输层拆成 `core/DshTransport.ts`（**行数预算**所致，对外接口零变化），
+   并修掉四处 POST 端点的双份基地址（坑 50）。新增 `test/cases/jobs-panel.test.ts`（24 例）
+   与 `dsh-client.test.ts` 的后台任务 10 例。
 
 **坑 42：ArkTS 没有判别联合类型 ——「四种长相」只能用单类 + `kind` 字段承载**
 
@@ -2515,3 +2529,70 @@ which must be a container component.
   **从服务端侧面取证**（命令是否真的落地），别让「界面没变」直接等于「代码没生效」。
 - 「点不动」与「功能坏了」在屏幕上长得一样，在服务端日志里一眼可分 ——
   既不要把工具局限写成代码缺陷，也不要把真实缺陷用「工具不行」糊过去。
+
+**坑 50：`postJson` 吃相对路径、`postJsonUrl` 吃完整 URL —— 名字太像，喂错会拼出双份基地址**
+
+`DshClient` 里有成对的两个后缀：
+
+| 方法 | 参数含义 | 行为 |
+| --- | --- | --- |
+| `postJson(relative)` | 相对路径（如 `chat/sessions`） | 内部**自己**拼 `this.base` |
+| `postJsonUrl(fullUrl)` | **完整 URL**（`pathUrl(...)` 的返回值） | 直接用，不再拼 |
+
+两者只差一个 `Url`，语义却相反。本工程原有四处写成
+`this.postJson(this.pathUrl([...]), body, true)` —— 参数是**完整 URL**，交给只认相对路径的那个方法，
+最终请求打到了：
+
+```
+http://192.168.1.126:3090/api/v1/api/v1/chat/sessions/s1/fork
+                                ^^^^^^^^^ 双份 `/api/v1`
+```
+
+受害的四个端点：**消息级分叉**（`fork`）、**`/` 命令执行**（`commands`）、**上传附件**（`attachments`）、
+**模型发现**（`settings/providers/{id}/discover`）。真机表现是「分叉会话失败 / 命令跑了没反应 /
+上传失败」，错误码是 **404 `ROUTE_NOT_FOUND`** —— 与「服务端版本太老、没有这个功能」**长得一模一样**，
+于是很容易被误判成插件过旧（本工程已有单独一条「老 bridge 404 必须容忍」的纪律，见坑 47，
+正是这些 404 让那条纪律变得更有迷惑性：**真 404 与拼错 URL 的 404 在响应里都是 `ROUTE_NOT_FOUND`**）。
+
+**为什么这次才被发现**：写后台任务三个端点时，IDE 补全把 `postJson` / `postJsonUrl` 并列摆在眼前，
+顺手实测了一遍各端点的**最终 URL** 才发现（新写的 `killJob` 差点照着旧写法再复制一遍）。
+
+纪律：
+- **新写端点先打印一次最终 URL**（`node` 里给一个假 transport 就行，几秒钟的事），
+  别只靠「编译过了」——这条错法**类型完全合法**，编译器一个字都不会说。
+- 回归用例钉住不变式：`test/cases/dsh-client.test.ts` 里那条
+  「后台任务三个端点的 URL 都只有一份基地址」断言每个请求 URL 里 `'/api/v1'` 恰好出现 **1** 次。
+  要加新端点时，把该端点也丢进这类断言。
+
+**坑 51：`export { … } from './x'` 转发**纯类型** —— ESM 运行时会抛「does not provide an export named …」**
+
+拆分 `DshClient.ts` 时，为了让 `platform/` 层那句 `import { HttpTransport } from '../core/DshClient'`
+一个字都不用改，第一版写成一个大 `export { … }` 把接口也一起转发了：
+
+```typescript
+// ❌ 接口混在值转发里
+export { HttpRequest, HttpResponse, HttpTransport, TimerBridge, DshClientDeps } from './DshTransport';
+```
+
+`hvigorw assembleHap` **编译通过**，但 `cd test && npm test` 立刻报
+
+```
+SyntaxError: The requested module '../entry/src/main/ets/core/DshClient.ts'
+does not provide an export named 'HttpTransport'
+```
+
+因为 `HttpTransport` / `TimerBridge` / `DshClientDeps` / `WebSocketTransport` / `WebSocketCallbacks` /
+`EventSocketHandle` / `EventsSubscription` 都是**纯类型**（`interface`），
+在 ESM 里**根本没有运行时存在** —— 转发它们等于向运行时索要一个不存在的绑定。
+
+**修法**：值与类型分两条出口，类型走 `export type`：
+
+```typescript
+// ✅ 类与常量走值转发，接口走类型转发
+export { HttpRequest, HttpResponse, EventsChannel, CONNECT_TIMEOUT_MS } from './DshTransport';
+export type { HttpTransport, WebSocketTransport, TimerBridge, DshClientDeps } from './DshTransport';
+```
+
+> 顺带一条：**ArkTS 编译绿不代表能跑**。类型转发这类问题只在**运行时**暴露 ——
+> 而本工程的离线单测是 node + tsx，正好会当场撞上。所以「拆完编译通过」之后**必须跑一次 `npm test`**。
+

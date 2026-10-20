@@ -22,7 +22,7 @@
 > `interface` 显式展开、规避继承覆盖歧义而采用的扁平判别式写法），
 > 按 Kotlin 的 800 行卡会把正常的模块判成债。
 > 本轮用户要求「按 **900 行左右** 拆分」，遂**收紧至 900**。上调阶段在册的
-> `ui/GenUiCard.ets`(897)、`ui/ModelsScreen.ets`(865)、`core/DshClient.ts`(854)
+> `ui/GenUiCard.ets`(897)、`ui/ModelsScreen.ets`(865)、`core/DshClient.ts`(775)
 > 仍在 900 以内，继续留在 `DEBT-003` 跟踪。
 
 ## 在册文件
@@ -93,7 +93,7 @@
 |---|---|---|---|---|
 | DEBT-001 | 无文档一致性自动校验 | 全仓 | 源工程用 Gradle `docsCheck` 任务；ArkTS 侧无等价解析器，手写脚本性价比待评估 | 建立 `scripts/docs-check.sh` 校验 CHANGELOG / STATUS / 用例数一致 |
 | DEBT-002 | 无 lint / 静态检查配置 | 仓库根 | 当前仅靠 `hvigorw` 构建与人工审查 | 引入 `code-linter` 配置后把新增告警当门禁 |
-| DEBT-003 | 三个未超预算但职责重叠的文件 | `ui/ModelsScreen.ets`(865+`ModelSheet` 511)、`core/DshClient.ts`(854)、`ui/GenUiCard.ets`(897) | 预算上调后退出在册，但重叠与分层问题仍在 | 见 `docs/decisions/` 对应 ADR，随 1.1.0 拆解 |
+| DEBT-003 | 三个未超预算但职责重叠的文件 | `ui/ModelsScreen.ets`(865+`ModelSheet` 511)、`core/DshClient.ts`(775)、`ui/GenUiCard.ets`(897) | 预算上调后退出在册，但重叠与分层问题仍在 | 见 `docs/decisions/` 对应 ADR，随 1.1.0 拆解 |
 | DEBT-004 | `@Prop` 审计未逐条上机（**分支内**动态成员） | `ui/ChatDetailPanels.ets` 的 `QuestionCard.answered` / `ApprovalPanel.submitting` / `canWrite`，`ui/MessageParts.ets` 的 `ToolTextBlock.isError`，`ui/PluginsScreen.ets` 的 `PluginRow.busy` | 只在「节点已出现、值又在同一次停留里变化」的时序下才暴露（如审批卡片已弹出、随后 `submitting` 翻转）；坑 40 的全仓审计**已确认键/分支覆盖了绝大多数**，这几处本轮拿不到真机时序证据，不凭「像动态」就改 | 在这几处各造一次真机时序（出现后值变化并 dump 取证）；确认为缺陷则补 `@Prop`，确认键/分支已保证重建则从本表删除 |
 
 ## 账怎么记

@@ -87,6 +87,25 @@ export function supportsArchiveListing(capabilities: Set<string> | null): boolea
   return capabilities !== null && capabilities.has(ARCHIVE_LIST_CAPABILITY);
 }
 
+/** 「后台任务面板」的能力位名。 */
+export const JOB_LIST_CAPABILITY: string = 'job-list-v1';
+
+/**
+ * 服务端是否支持「后台任务」面板（能力位 `job-list-v1` / `job-kill-v1` /
+ * `job-output-v1`，bridge ≥ 2.4.3）。
+ *
+ * **为什么只查 `job-list-v1` 一个**：三个能力位在服务端 `capabilities.ts` 里
+ * **同批声明、同批发布**，不存在「只有 list 没有 kill」的中间态 —— 逐个都查只会把
+ * 判据写长，语义没有任何变化。哪天服务端真的拆开发布了，再把判据拆细不迟
+ * （到时候这条注释就是提示）。
+ *
+ * 读不到能力清单时返回 **false**（不显示入口）——这是安全方向：老 bridge 上
+ * 这个路由是 404，显示了入口只会让用户点进去看报错。
+ */
+export function supportsJobListing(capabilities: Set<string> | null): boolean {
+  return capabilities !== null && capabilities.has(JOB_LIST_CAPABILITY);
+}
+
 /**
  * 本 App 依赖、但服务端**没有声明**的能力位；空数组 = 没缺。
  *

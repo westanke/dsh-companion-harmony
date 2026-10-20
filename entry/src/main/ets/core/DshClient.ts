@@ -7,7 +7,16 @@
  * 所以这里抽出两个注入点：
  * - `HttpTransport`：一次请求 → 一次响应（含超时元数据）；
  * - `WebSocketTransport` + `TimerBridge`：长连接与「延迟重连」的定时能力。
- * 逻辑层只负责：URL 拼装、鉴权头注入、错误映射、WS 退避、以及把 JSON 解成 `Models.ts` 的类型。
+ * 逻辑层只负责：URL 拼装、鉴权头注入、错误映射、以及把 JSON 解成 `Models.ts` 的类型。
+ *
+ * ## 拆分说明（2026-10-20）
+ *
+ * 加入后台任务三个端点后本文件越过 900 行预算（见 `docs/TECH-DEBT.md` §行数预算），
+ * 遂把**传输侧**整体搬到 `core/DshTransport.ts`：超时常量、`HttpRequest` / `HttpResponse`、
+ * 三个平台注入接口、`DshClientDeps`、以及 `EventsChannel`（WS 退避重连）。
+ * 搬的是「平台能给我什么」，留下的是「业务怎么用」—— 后者才是本文件的名字所暗示的内容。
+ * 下面那段 `export { … } from './DshTransport'` 让**所有既有 import 一个字都不用改**
+ * （平台层 `import { HttpTransport } from '../core/DshClient'` 照旧成立）。
  *
  * 契约要点（详见 `docs/PORT-MAP.md` §2）：
  * - 端点全部挂在基地址根上，**不带任何前缀**（基地址已含 `/api/v1`）。
@@ -15,6 +24,8 @@
  * - WS 请求 URL 用**同源 http(s)**，由底层做协议升级，**不要**提前改写 `ws://`。
  * - WS 重连退避 `delay = (1<<retries) 封顶 30s`（1、2、4、8、16、30、30…）；重连后状态恢复始终靠 REST。
  * - 空体请求：GET 绝不带 body；POST/PUT/PATCH 的零长度体补 `{}`。
+ * - **拼 URL 的两种后缀别用错**（详见坑 50）：`postJson(相对路径)` 与
+ *   `postJsonUrl(完整URL)` 名字长得像，喂错参数会拼出**双份基地址**。
  */
 
 import {
@@ -24,25 +35,29 @@ import {
   PermissionCatalog, PluginInventory,
   PluginToggleRequest, PluginToggleResult, PromptPart, ProviderModel, ProviderPatch,
   ProviderSettings, QuestionAnswer, QuestionAnswerRequest, RenamedSession, ResolvedPath,
-  RootView, SessionModels, TrashEntry, UploadedAttachment, WorkspaceEvent,
+  RootView, SessionModels, TrashEntry, UploadedAttachment,
 } from './Models';
+import { JobKillResult, JobOutput, JobView } from './JobViews';
 import { JsonAccess, JsonMap } from './JsonAccess';
 import { normalizeEndpoint } from './EndpointUrl';
-import { utf8Decode, utf8Encode } from './Codec';
+import { utf8Encode } from './Codec';
 import { messageBody, uploadPayload } from './ChatContentParts';
 
-/** 连接超时（与上游 OkHttp 一致）。 */
-export const CONNECT_TIMEOUT_MS: number = 15000;
-/** 读超时。 */
-export const READ_TIMEOUT_MS: number = 45000;
-/** 写超时。 */
-export const WRITE_TIMEOUT_MS: number = 45000;
-/** WebSocket 心跳间隔。 */
-export const WS_PING_INTERVAL_MS: number = 20000;
-/** WS 退避上限。 */
-export const WS_MAX_BACKOFF_SECONDS: number = 30;
-/** 界面语言兜底（从未设置过时按中文，那是插件原本的口径）。 */
-export const DEFAULT_LANGUAGE_TAG: string = 'zh-CN';
+// 传输注入点整体在 `core/DshTransport.ts`；这里原样转发，保住全部既有 import 路径。
+// **接口必须走 `export type`**：它们是纯类型，用 `export {}` 转发在 ESM 运行时会报
+// 「does not provide an export named …」（tsx / node 单测直接红）。类与常量走普通 `export {}`。
+export {
+  CONNECT_TIMEOUT_MS, READ_TIMEOUT_MS, WRITE_TIMEOUT_MS, WS_PING_INTERVAL_MS, WS_MAX_BACKOFF_SECONDS,
+  DEFAULT_LANGUAGE_TAG, HttpRequest, HttpResponse, EventsChannel,
+} from './DshTransport';
+export type {
+  HttpTransport, WebSocketCallbacks, EventSocketHandle, WebSocketTransport,
+  TimerBridge, EventsSubscription, DshClientDeps,
+} from './DshTransport';
+import {
+  DshClientDeps, EventsChannel, EventsSubscription, HttpRequest, HttpResponse, HttpTransport,
+} from './DshTransport';
+import { WorkspaceEvent } from './Models';
 
 /**
  * 「这个路径打不开」的权威错误码集合 —— 都属于正常结果，不是故障。
@@ -65,201 +80,6 @@ export function isUnresolvableCode(code: string): boolean {
     }
   }
   return false;
-}
-
-// ---------------------------------------------------------------------------
-// 注入点
-// ---------------------------------------------------------------------------
-
-/** 一次 HTTP 请求的描述（平台无关）。 */
-export class HttpRequest {
-  method: string = 'GET';
-  url: string = '';
-  headers: Map<string, string> = new Map();
-  /** GET/HEAD 必须为 null；其余方法零长度体按调用方约定给 `{}` 的字节。 */
-  body: Uint8Array | null = null;
-  connectTimeoutMs: number = CONNECT_TIMEOUT_MS;
-  readTimeoutMs: number = READ_TIMEOUT_MS;
-  writeTimeoutMs: number = WRITE_TIMEOUT_MS;
-
-  constructor(method: string, url: string, headers: Map<string, string>, body: Uint8Array | null) {
-    this.method = method;
-    this.url = url;
-    this.headers = headers;
-    this.body = body;
-  }
-}
-
-/**
- * 一次 HTTP 响应。
- *
- * **约定：`headers` 的键必须是小写**（平台层负责转小写）。这样 `header('ETag')` 这类
- * 大小写不敏感查询就不需要在逻辑层遍历 Map —— ArkTS 的 Map 迭代语法比 `get` 更容易踩坑。
- */
-export class HttpResponse {
-  status: number = 0;
-  headers: Map<string, string> = new Map();
-  body: Uint8Array = new Uint8Array(0);
-
-  constructor(status: number, headers: Map<string, string>, body: Uint8Array) {
-    this.status = status;
-    this.headers = headers;
-    this.body = body;
-  }
-
-  isSuccessful(): boolean {
-    return this.status >= 200 && this.status < 300;
-  }
-
-  /** 大小写不敏感地取响应头；键由平台层保证为小写。 */
-  header(name: string): string | null {
-    const key: string = name.toLowerCase();
-    return this.headers.has(key) ? this.headers.get(key) as string : null;
-  }
-
-  text(): string {
-    return utf8Decode(this.body);
-  }
-}
-
-/** 平台传输实现：`@ohos.net.http`（或 rcp）达成。 */
-export interface HttpTransport {
-  request(req: HttpRequest): Promise<HttpResponse>;
-}
-
-/** WS 事件回调；`onDown` 在关闭或失败时**恰好调用一次**。 */
-export interface WebSocketCallbacks {
-  onOpen(): void;
-
-  onMessage(text: string): void;
-
-  onDown(reason: string): void;
-}
-
-/** 已打开的 WS 句柄。 */
-export interface EventSocketHandle {
-  close(): void;
-}
-
-/**
- * 平台 WS 实现：给定 URL 与握手头，打开长连接。
- * 传入的 URL 是**同源 http(s)**；平台层负责协议升级（`@ohos.net.webSocket` 接受 http(s) URL）。
- */
-export interface WebSocketTransport {
-  open(url: string, headers: Map<string, string>, callbacks: WebSocketCallbacks): EventSocketHandle;
-}
-
-/** 延迟执行能力（替代协程调度器），供 WS 退避使用。 */
-export interface TimerBridge {
-  schedule(delayMs: number, action: () => void): number;
-
-  cancel(handle: number): void;
-}
-
-/** 可关闭的事件订阅（对应上游返回的 `Closeable`）。 */
-export interface EventsSubscription {
-  close(): void;
-}
-
-/** 客户端的外部依赖（全部可注入，便于单测与平台替换）。 */
-export interface DshClientDeps {
-  /** 生成客户端请求 id（UUID v4）。 */
-  newId(): string;
-
-  /** 本机时区 id（如 `Asia/Shanghai`）。 */
-  timeZoneId(): string;
-
-  /** 当前界面语言（BCP-47，如 `zh-CN` / `en`）。 */
-  languageTag(): string;
-
-  /** 平台 WS 实现；不用事件推送时为 null。 */
-  socket: WebSocketTransport | null;
-
-  /** 平台定时器；不用事件推送时为 null。 */
-  timers: TimerBridge | null;
-}
-
-// ---------------------------------------------------------------------------
-// 事件通道（WS + 退避重连）
-// ---------------------------------------------------------------------------
-
-/**
- * 长连接事件通道。**重连后状态恢复始终靠 REST** —— 这里只负责「把帧送出去」与「掉线了告诉
- * 上层」，绝不假设补发能拼回完整状态。
- */
-export class EventsChannel implements EventsSubscription {
-  private url: string;
-  private headers: Map<string, string>;
-  private socket: WebSocketTransport;
-  private timers: TimerBridge;
-  private listener: (event: WorkspaceEvent) => void;
-  private connectionListener: (open: boolean) => void;
-  private closed: boolean = false;
-  private retries: number = 0;
-  private handle: EventSocketHandle | null = null;
-  private timerHandle: number = -1;
-
-  constructor(url: string, headers: Map<string, string>, socket: WebSocketTransport, timers: TimerBridge,
-              listener: (event: WorkspaceEvent) => void, connectionListener: (open: boolean) => void) {
-    this.url = url;
-    this.headers = headers;
-    this.socket = socket;
-    this.timers = timers;
-    this.listener = listener;
-    this.connectionListener = connectionListener;
-  }
-
-  start(): void {
-    this.connect();
-  }
-
-  private connect(): void {
-    if (this.closed) {
-      return;
-    }
-    // 每次连接尝试独立一个终态标记：同一次尝试里 onDown 只处理一次
-    // （平台层可能先报 onError 再报 onClose）。
-    let terminal: boolean = false;
-    const self: EventsChannel = this;
-    this.handle = this.socket.open(this.url, this.headers, {
-      onOpen: (): void => {
-        self.retries = 0;
-        self.connectionListener(true);
-      },
-      onMessage: (text: string): void => {
-        const event: WorkspaceEvent | null = WorkspaceEvent.fromJsonText(text);
-        if (event !== null) {
-          self.listener(event);
-        }
-      },
-      onDown: (): void => {
-        if (terminal) {
-          return;
-        }
-        terminal = true;
-        if (self.closed) {
-          return;
-        }
-        self.connectionListener(false);
-        const delaySeconds: number = Math.min(1 << Math.min(self.retries, 5), WS_MAX_BACKOFF_SECONDS);
-        self.retries += 1;
-        self.timerHandle = self.timers.schedule(delaySeconds * 1000, (): void => self.connect());
-      },
-    });
-  }
-
-  close(): void {
-    this.closed = true;
-    this.connectionListener(false);
-    if (this.timerHandle >= 0) {
-      this.timers.cancel(this.timerHandle);
-      this.timerHandle = -1;
-    }
-    if (this.handle !== null) {
-      this.handle.close();
-      this.handle = null;
-    }
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -516,7 +336,7 @@ export class DshClient {
 
   forkSession(sessionId: string, atSeq: number | null = null): Promise<string> {
     const body: string = atSeq === null ? '{}' : jsonObject([`"atSeq":${atSeq}`]);
-    return this.postJson(this.pathUrl(['chat', 'sessions', sessionId, 'fork']), body, true)
+    return this.postJsonUrl(this.pathUrl(['chat', 'sessions', sessionId, 'fork']), body, true)
       .then((map: JsonMap | null): string => JsonAccess.str(map, 'sessionId') ?? '');
   }
 
@@ -603,8 +423,71 @@ export class DshClient {
 
   executeCommand(sessionId: string, line: string): Promise<CommandExecution> {
     const body: string = jsonObject([jsonPair('line', line)]);
-    return this.postJson(this.pathUrl(['chat', 'sessions', sessionId, 'commands']), body, true)
+    return this.postJsonUrl(this.pathUrl(['chat', 'sessions', sessionId, 'commands']), body, true)
       .then((map: JsonMap | null): CommandExecution => CommandExecution.fromJson(JsonAccess.obj(map, 'execution')));
+  }
+
+  // --- 后台任务（bridge ≥ 2.4.3） ---------------------------------------------
+
+  /**
+   * 某会话可见的后台任务清单（`GET /chat/sessions/{sessionId}/jobs`）。
+   *
+   * 返回的是**完整清单**：服务端只读内核 roster 流的第一帧，内核保证
+   * 「Whole-set replacement, so a reconnect's first frame is already the truth」。
+   * 所以这里没有分页，也没有游标 —— 拉一次就是全部。
+   *
+   * 端点是**会话维度**的，不是顶层 `/jobs`：内核的 list/kill 都要 `sessionId`
+   * （返回「该会话自己的任务 + 所有无主任务」），owner fence 是唯一的访问规则。
+   * 做成顶层端点就得让客户端额外猜一个 session，那会把围栏语义搬到桥外面。
+   *
+   * 老 bridge 没有这条路由（404 `ROUTE_NOT_FOUND`），调用方必须先按能力位
+   * `job-list-v1` 把关（`core/BridgeCapabilities.supportsJobListing`）。
+   *
+   * 空清单是正常结果（这个会话确实没有任务），不是失败；失败走 `DshApiException`。
+   */
+  sessionJobs(sessionId: string): Promise<JobView[]> {
+    return this.getJsonUrl(this.pathUrl(['chat', 'sessions', sessionId, 'jobs']), true)
+      .then((map: JsonMap | null): JobView[] => {
+        // 信封是 `{ jobs: [...] }`（不是别处那条 `{items:[...]}`）—— 与源工程
+        // `JobListEnvelope(val jobs: List<JobView>)` 逐字对齐。
+        const raw: JsonMap[] = JsonAccess.objArr(map, 'jobs');
+        const out: JobView[] = [];
+        for (let i = 0; i < raw.length; i++) {
+          out.push(JobView.fromJson(raw[i]));
+        }
+        return out;
+      });
+  }
+
+  /**
+   * 读一个后台任务已保留的输出（`GET .../jobs/{jobId}/output`）。
+   *
+   * `from` 是**绝对字节偏移**：传上一次返回的 `JobOutput.next` 即增量续读，
+   * null 从最旧的保留字节开始。任务留存策略可能丢旧字节，丢过就会在
+   * `JobOutput.lossy` 上标记 —— 界面必须提示「这不是完整输出」。
+   */
+  jobOutput(sessionId: string, jobId: string, from: number | null = null): Promise<JobOutput> {
+    let url: string = this.pathUrl(['chat', 'sessions', sessionId, 'jobs', jobId, 'output']);
+    if (from !== null) {
+      url += `?from=${from}`;
+    }
+    return this.getJsonUrl(url, true)
+      .then((map: JsonMap | null): JobOutput => JobOutput.fromJson(map));
+  }
+
+  /**
+   * 终止一个后台任务（`POST .../jobs/{jobId}/kill`）。
+   *
+   * 两种成功语义必须区分：`requested`（已受理）与 `already-finished`
+   * （已是终态、无需再杀）。后者要显示「它已经结束了」—— 用户在远程场景下
+   * 看到这句话才知道**不用再管了**，与「已终止」不是一回事。
+   * 任务不存在或本会话看不到它时服务端返回 404 `JOB_NOT_FOUND`。
+   */
+  killJob(sessionId: string, jobId: string): Promise<JobKillResult> {
+    // 用 `postJsonUrl`（吃完整 URL）而不是 `postJson`（会把基地址再拼一次）——
+    // 见 PORT-MAP 坑 50：`postJson(this.pathUrl(...))` 会拼出双份基地址。
+    return this.postJsonUrl(this.pathUrl(['chat', 'sessions', sessionId, 'jobs', jobId, 'kill']), '{}', true)
+      .then((map: JsonMap | null): JobKillResult => JobKillResult.fromJson(map));
   }
 
   // --- 发消息 / 附件 ---------------------------------------------------------
@@ -633,7 +516,7 @@ export class DshClient {
    */
   uploadAttachment(sessionId: string, bytes: Uint8Array, name: string): Promise<UploadedAttachment> {
     const body: string = uploadPayload(bytes, name);
-    return this.postJson(this.pathUrl(['chat', 'sessions', sessionId, 'attachments']), body, true)
+    return this.postJsonUrl(this.pathUrl(['chat', 'sessions', sessionId, 'attachments']), body, true)
       .then((map: JsonMap | null): UploadedAttachment => UploadedAttachment.fromJson(map));
   }
 
@@ -685,7 +568,7 @@ export class DshClient {
     if (baseURL !== null) pairs.push(jsonPair('baseURL', baseURL));
     if (api !== null) pairs.push(jsonPair('api', api));
     if (apiKey !== null) pairs.push(jsonPair('apiKey', apiKey));
-    return this.postJson(this.pathUrl(['settings', 'providers', providerId, 'discover']), jsonObject(pairs), true)
+    return this.postJsonUrl(this.pathUrl(['settings', 'providers', providerId, 'discover']), jsonObject(pairs), true)
       .then((map: JsonMap | null): ProviderModel[] => {
         const raw: JsonMap[] = JsonAccess.objArr(map, 'models');
         const out: ProviderModel[] = [];

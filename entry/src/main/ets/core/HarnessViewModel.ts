@@ -17,7 +17,7 @@
  *    ArkTS 取资源只认编译期字面量，运行期拼 key 行不通（详见 `ErrorMessages.ts` 头注释）。
  * 6. **异常收敛**：安卓那 7 个 `IOException` 分支在这里收敛成「`NetworkException` 一条」。
  *
- * ## 拆分说明：这是一个 8 文件的模块，本文件是**索引 + 末端的空壳类**
+ * ## 拆分说明：这是一个 9 文件的模块，本文件是**索引 + 末端的空壳类**
  *
  * 拆分前是 3 345 行的一个文件。ArkTS 里跨文件共享私有状态只有"继承"一条路，
  * 而继承只能**单向**，所以拆出来的层必须按依赖关系排成一条链
@@ -27,13 +27,15 @@
  * | --- | --- | --- | --- |
  * | 0 | `HarnessTypes.ts` | 状态与类型（`HarnessState` / `OpenDocument` / …） | — |
  * | 0 | `HarnessHelpers.ts` | 纯函数与 `HarnessDeps` | 类型层 |
+ * | 0 | `JobViews.ts` | 后台任务的 wire 类型（`JobView` / `JobOutput` / …） | 类型层 |
  * | 1 | `HarnessViewModelBase.ts` | 字段/构造/订阅/`update`/执行壳（`withClient` 等） | 0 |
  * | 2 | `HarnessViewModelCatalog.ts` | 命令 / 模型 / 供应商 / 插件 | 1 |
  * | 3 | `HarnessViewModelFiles.ts` | 文件浏览与编辑 | 1 |
  * | 4 | `HarnessViewModelSessions.ts` | 会话（含打开会话文件） | 2、3 |
  * | 5 | `HarnessViewModelComposer.ts` | 发送与附件 | 1 |
  * | 6 | `HarnessViewModelConnection.ts` | 连接管理 + 启动恢复 + 事件流 | 2、3、4、5 |
- * | — | `HarnessViewModel.ts`（本文件） | 索引 + `class HarnessViewModel` 空壳 | 6 |
+ * | 7 | `HarnessViewModelJobs.ts` | 后台任务面板（列表 / 终止 / 输出） | 1、0 |
+ * | — | `HarnessViewModel.ts`（本文件） | 索引 + `class HarnessViewModel` 空壳 | 7 |
  *
  * **链序是这套拆法的机械后果，不是设计偏好**：例如第 4 层的选会话要调第 2 层的
  * `refreshCommands`、第 3 层的 `loadDirectory`，所以它们只能排在前面。
@@ -47,7 +49,14 @@
 export {
   MAX_EDIT_BYTES, PREVIEW_CHARS, CONFIG_INVALID, LAST_ENDPOINT, PLUGIN_TOO_OLD, FILE_TOO_LARGE, BINARY_FILE,
   COMMAND_FAILED, OpenDocument, SessionFileOpen, PendingAttachment, ApprovalUiKind, ApprovalUiState, HarnessState,
+  JobsPanelState,
 } from './HarnessTypes';
+
+/** 后台任务的 wire 类型也一并放出：界面与单测只认这一个入口。 */
+export {
+  JobView, JobOutput, JobKillResult, isJobLive, killWasRequested,
+  JOB_STATUS_RUNNING, JOB_STATUS_STOPPING, JOB_STATUS_COMPLETED, JOB_STATUS_KILLED, JOB_STATUS_FAILED,
+} from './JobViews';
 
 export {
   COMMAND_NAME, isHostCommandLine, QUESTION_REFRESH_EVENTS, removeQuestion, isToolResultFrame, markSessionStopped,
@@ -59,11 +68,11 @@ export {
 // 用值式 `export {}` 会在 node（tsx/esbuild）下报 "does not provide an export named"。
 export type { HarnessDeps } from './HarnessHelpers';
 
-import { HarnessViewModelConnection } from './HarnessViewModelConnection';
+import { HarnessViewModelJobs } from './HarnessViewModelJobs';
 
 /**
- * 对外的唯一入口。**故意是空壳**：实现散在继承链的六层里，好处是每个文件都能单独读；
+ * 对外的唯一入口。**故意是空壳**：实现散在继承链的七层里，好处是每个文件都能单独读；
  * 代价是类名与实现的物理位置分开了 —— 找方法请看文件头的链序表。
  */
-export class HarnessViewModel extends HarnessViewModelConnection {
+export class HarnessViewModel extends HarnessViewModelJobs {
 }

@@ -42,6 +42,10 @@ import {
   LiveChatState,
 } from './ChatPresentation';
 import {
+  JobOutput,
+  JobView,
+} from './JobViews';
+import {
   SEND_MODE_QUEUE,
 } from './ComposerSendPolicy';
 import {
@@ -226,6 +230,43 @@ export class ApprovalUiState {
 }
 
 /**
+ * 后台任务面板（`ui/JobsSheet.ets`）的界面状态。对位源工程 `JobsPanelState`。
+ *
+ * 面板挂在**当前会话**维度上：内核的 jobs 清单是「该会话自己的 + 所有无主任务」，
+ * 换会话就要换一份。所以 [sessionId] 记着它属于谁 —— 切会话/关面板由动作方把它整体
+ * 清成 null，而不是让面板显示上一个会话的任务。
+ *
+ * `null`（字段整体为空）= 面板关着。这里刻意**用就地改的可变字段**而不是 Kotlin 那种
+ * `copy(...)` 重建：本工程的状态机是「就地改 + revision++」，界面靠订阅 `dshRevision`
+ * 重绘（见 `HarnessViewModelBase.update`）—— 重建对象反而会让引用比对失效。
+ */
+export class JobsPanelState {
+  /** 这份清单属于哪个会话（终止与输出读取都靠它）。 */
+  sessionId: string = '';
+  /** 正在读清单（首次打开或手动刷新）。 */
+  loading: boolean = false;
+  jobs: JobView[] = [];
+  /**
+   * 读取失败的原因（已本地化文案）；null = 没失败。空清单 + null = **真的没有任务**。
+   * 二者必须分清：把「读取失败」显示成「没有任务」是拿失败谎报空。
+   */
+  error: string | null = null;
+  /** 正在终止的任务（null = 没在终止）。按 jobId 记，而不是一个布尔 —— 同时只能终止一条。 */
+  killingJobId: string | null = null;
+  /** 终止刚完成的那条的反馈（`已终止` / `它已经结束了`）；null = 没有反馈。 */
+  killNotice: string | null = null;
+  /** 展开看输出的任务（null = 全部收起）。刷新清单后要存活，所以进状态不留在局部。 */
+  expandedJobId: string | null = null;
+  /** 展开的那条的输出；null = 还在读（或该条没展开）。 */
+  expandedOutput: JobOutput | null = null;
+  outputLoading: boolean = false;
+
+  constructor(sessionId: string = '') {
+    this.sessionId = sessionId;
+  }
+}
+
+/**
  * 界面共享状态。字段与默认值**逐字对应** Kotlin 的 `data class HarnessState`。
  *
  * 这是普通 class（不是 immutable）：`HarnessViewModel.update(fn)` 就地改它。
@@ -308,6 +349,14 @@ export class HarnessState {
   selectedSessionId: string | null = null;
   history: ChatHistory | null = null;
   liveChat: LiveChatState | null = null;
+  /**
+   * 后台任务面板的状态（会话 ⋯ 菜单 →「后台任务」）；null = 面板关着。
+   *
+   * 数据进共享状态而不是留在 Sheet 组件里，是因为终止动作要跨两步
+   * （确认框 → kill → 刷新清单），这中间界面随时可能重绘；而「展开看输出」的
+   * `expandedJobId` 也得在刷新后存活，不然用户点开一条任务的输出、一刷新就整个收回去。
+   */
+  jobsPanel: JobsPanelState | null = null;
   approvalState: ApprovalUiState = ApprovalUiState.none();
   /**
    * 当前会话待回答的问题（只留 state === continued 的那些）。
@@ -413,6 +462,7 @@ export class HarnessState {
     this.selectedSessionId = other.selectedSessionId;
     this.history = other.history;
     this.liveChat = other.liveChat;
+    this.jobsPanel = other.jobsPanel;
     this.approvalState = other.approvalState;
     this.questions = other.questions;
     this.answeringCallId = other.answeringCallId;

@@ -5,7 +5,7 @@
  * |---|---|
  * | `ChatDetail`（417–736） | `ChatDetail`（装配层，本文件） |
  * | `ConversationHeader`（738–877） | `ui/ChatHeader.ets` 的 `ChatHeaderPanelHost.header` |
- * | 三个面板宿主（会话文件 / 会话配置 / 完整访问确认） | `ui/ChatHeader.ets` 的 `sheetContent` |
+ * | 五个面板宿主（会话文件 / 会话配置 / 完整访问确认 / 执行统计 / 后台任务） | `ui/ChatHeader.ets` 的 `sheetContent` |
  * | `ApprovalStatusLabel` / `ApprovalLoading`（1286–1317） | `ChatDetail.approvalArea` |
  * | `ApprovalPanel`（1319–1442） | `ui/ChatDetailPanels.ets` 的 `ApprovalPanel` |
  * | `QuestionCard`（1493–1643） | `ui/ChatDetailPanels.ets` 的 `QuestionCard` |

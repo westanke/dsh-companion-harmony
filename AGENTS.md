@@ -41,7 +41,7 @@
 ```bash
 source ./_toolchain/env.sh
 hvigorw assembleHap --no-daemon     # 构建（改 .ets 后先 touch 对应文件，否则 UP-TO-DATE）
-cd test && npm test                 # 单元测试（当前 531 用例，随代码变化勿当常量）
+cd test && npm test                 # 单元测试（当前 783 用例，随代码变化勿当常量）
 ```
 
 **签名必须手动签**（hvigor 拒明文口令，`signingConfigs` 保持空数组）：
@@ -145,6 +145,8 @@ ui/     ← 只消费 HarnessState，调 HarnessViewModel 动作；不持有协�
 - `投影只给 currentValue 就得另开目录接口`
 - `桩缺方法会同步抛、连坐整条链`
 - `注入点击驱动不了弹窗项，别当代码缺陷`
+- `postJson 与 postJsonUrl 后缀别喂错`
+- `转发纯类型必须 export type`
 
 > 新坑位：名字加进上面清单 + 原文写进 `docs/PORT-MAP.md` §6 并补 `### 同名` 锚点。
 

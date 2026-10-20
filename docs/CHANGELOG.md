@@ -81,9 +81,42 @@
   判据为「本行含 `|` 且下一行是分隔行」，**天然不受该缺陷影响**：实测（表头紧贴标题行 / 紧贴段落 /
   文档开头 / 围栏内伪表格 / 列表项后）五种现场全部正常出表格块，故不引入该归一化，
   免得白白多一层文本改写（证据记在 PORT-MAP「收尾十四」）。
+- **后台任务面板**（源 `e609b04`，会话 ⋯ 菜单 →「后台任务」，需 bridge ≥ 2.4.3）。
+  **为什么需要它**：远程场景下有个真焦虑 —— 在手机上让 agent 跑个长任务（构建、批量打包），
+  然后切到别的会话或把手机放下，**此时没有任何地方能看到「它还在跑吗」，更没有地方能让它停下**；
+  任务跑飞了只能干等，或者回到电脑前。源工程补的正是这个洞，本工程此前**零实现**。
+  **契约**（逐字对齐源 `data/JobViews.kt` / `data/DshClient.kt`）：三条端点全部是**会话维度**
+  （`GET /chat/sessions/{sessionId}/jobs` 读清单、`GET …/jobs/{jobId}/output` 读输出、
+  `POST …/jobs/{jobId}/kill` 终止）—— 内核的 list/kill 都要 `sessionId`，返回「该会话自己的任务 +
+  所有无主任务」，owner 围栏是唯一的访问规则；做成顶层端点就得让客户端额外猜一个 session。
+  落点：`core/JobViews.ts`（wire 类型 + 纯函数）、`core/DshClient.ts` 三个方法、
+  `core/HarnessViewModelJobs.ts`（继承链第 7 层，五个动作）、`ui/JobsSheet.ets`（面板）、
+  `ui/ChatHeader.ets` 菜单入口 + `SHEET_JOBS`。**入口按能力位 `job-list-v1` 守卫**，
+  读不到能力位一律不显示（「未知 ≠ 缺失」）—— 老 bridge 上这条路由是 404，显示入口只会让人点进去看报错。
+  **五条刻意为之，都写在代码里**：
+  ① 「存活中」用**白名单**（`running` / `stopping`）而不是「不属于终态就是在跑」——
+  将来内核多出一种状态，黑名单写法会挂上一个按不动的「终止」按钮，白名单只会不显示按钮（方向安全）；
+  ② `already-finished` 与 `requested` **不是一句文案**：前者说的是「它已经结束了，不用再管」，
+  远程用户看到这句才知道可以放下手机；
+  ③ 输出 **`lossy` 必须亮出来**：被留存策略吃掉的字节让这段输出**不完整**，
+  拿不完整的数据做「任务成没成」的判断比不给数据更坏；
+  ④ 清单读失败**不擦掉旧清单**，也不显示成「没有任务」（那是拿失败谎报空）；
+  ⑤ 关闭面板即清状态 —— 面板是会话维度的，残留上一个会话的任务清单只会误导。
+  **v1 不做实时推送**：服务端就是 REST 读一帧（内核 roster 流首帧即全量），
+  用「刷新」按钮 + 终止后自动刷新；在手机上挂轮询是替用户掏电费。
+  另：本轮把 `DshClient` 拆出传输层（`core/DshTransport.ts`，见下「变更」）并**修掉一个潜伏的口径错**
+  （坑 50：`postJson` 吃的是相对路径、`postJsonUrl` 才吃完整 URL，喂错会拼出双份基地址）。
 
 ### 修复
 
+- **`DshClient` 四处 POST 端点拼出双份基地址**（`fork` / `commands` / `attachments` / `settings/providers/discover`）。
+  **为什么是缺陷**：`postJson(path)` 内部会自己拼基地址，而调用处传的是 `pathUrl(...)` 已经拼好的
+  **完整 URL**，于是最终请求打到 `http://host:3090/api/v1/api/v1/chat/sessions/s1/fork`。
+  真机上表现为「分叉会话失败 / `/` 命令执行失败 / 上传附件失败」，且错误是 404 `ROUTE_NOT_FOUND`
+  —— 看着像「服务端没有这个功能」，实际是客户端自己拼错了地址。
+  **怎么发现的**：本次写后台任务三个端点时对着 `postJson` / `postJsonUrl` 两个名字差不多的后缀
+  实测各端点的最终 URL 才撞见（新写的 `killJob` 差点复制同一错法）。改法是四处统一换成 `postJsonUrl`，
+  并加一条回归用例（断言每个请求的 URL 里 `'/api/v1'` 恰好出现一次）。详见 PORT-MAP 坑 50。
 - **修 AGC 上架检测驳回的稳定性崩溃：连接页「粘贴」按钮闪退**
   （真机原文 `TypeError: Cannot read property length of undefined`
   at `ConnectScreen.ts:993:1`，测试机 Mate 60 / HarmonyOS 6.1 / API 24，触发链是触摸事件）。
@@ -103,6 +136,18 @@
   挪进 `core/` 后 6 条回归用例（含 `undefined` / `null` / 数字 / 对象）钉住了这个不变式 ——
   用例断言的是**返回值本身是字符串**，而不是「长度是 0」，因为崩的正是「先取 length」这一步。
   坑点原文见 [PORT-MAP.md](./PORT-MAP.md) 坑 41。
+
+### 变更
+
+- **`core/DshClient.ts` 拆出传输层 `core/DshTransport.ts`**（775 + 233 行，两文件都在 900 行预算内）。
+  **为什么拆**：加进后台任务三个端点后 `DshClient.ts` 越过 900 行预算（见 `docs/TECH-DEBT.md` 行数预算）。
+  搬走的是**平台注入点**（超时常量、`HttpRequest` / `HttpResponse`、`HttpTransport` /
+  `WebSocketTransport` / `TimerBridge` / `DshClientDeps` 四个接口、以及 `EventsChannel` 的 WS 退避重连），
+  留下的是**业务**（URL 拼装、鉴权头、错误映射、JSON → `Models.ts` 类型）—— 后者才是文件名暗示的内容。
+  **对外接口一个都没动**：`DshClient.ts` 用 `export { … } from './DshTransport'` 原样转发，
+  于是 `platform/` 层那句 `import { HttpTransport } from '../core/DshClient'` 一个字都不用改。
+  转发时**纯类型必须走 `export type { … }`** —— 用普通 `export {}` 转发接口，ESM 运行时会抛
+  「does not provide an export named …」，本工程单测当场报红（见 PORT-MAP 坑 51）。
 
 ### 文档
 

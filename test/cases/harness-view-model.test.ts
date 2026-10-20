@@ -21,6 +21,7 @@ import {
   PendingAttachment, SessionFileOpen, COMMAND_NAME, QUESTION_REFRESH_EVENTS, CONFIG_INVALID,
   LAST_ENDPOINT, PLUGIN_TOO_OLD, FILE_TOO_LARGE, BINARY_FILE, COMMAND_FAILED,
   isHostCommandLine, removeQuestion, isToolResultFrame, markSessionStopped,
+  JobsPanelState, JobView, JobOutput, JobKillResult,
 } from '../../entry/src/main/ets/core/HarnessViewModel.ts';
 import {
   ChatSession, CommandDescriptor, DeviceView, DirectoryPage, FileContent, FileEntry, HistoryEntry,
@@ -152,7 +153,8 @@ class FakeClient {
   healthError: Error | null = null;
   sendError: Error | null = null;
   counters = { health: 0, sendMessage: 0, executeCommand: 0, answerQuestions: 0, decideApproval: 0,
-    uploadAttachment: 0, pair: 0, readFile: 0, history: 0, sessions: 0 };
+    uploadAttachment: 0, pair: 0, readFile: 0, history: 0, sessions: 0,
+    sessionJobs: 0, jobOutput: 0, killJob: 0 };
   /** 历史页：先按 beforeSeq 返回老页，再返回当前页。 */
   olderHistory: ChatHistory | null = null;
   currentHistory: ChatHistory | null = null;
@@ -251,6 +253,39 @@ class FakeClient {
       return Promise.reject(this.permissionError);
     }
     return Promise.resolve(this.permissionCatalog);
+  }
+
+  // ——— 后台任务（bridge ≥ 2.4.3）———
+  /** 清单返回；默认空数组（= 这个会话真的没有任务）。 */
+  jobsValue: JobView[] = [];
+  jobsError: Error | null = null;
+  jobOutputValue: JobOutput = new JobOutput('job-1', '', 0, false, null);
+  jobOutputError: Error | null = null;
+  killResult: JobKillResult = new JobKillResult('job-1', 'requested');
+  killError: Error | null = null;
+
+  sessionJobs(sessionId: string): Promise<JobView[]> {
+    this.counters.sessionJobs += 1;
+    if (this.jobsError !== null) {
+      return Promise.reject(this.jobsError);
+    }
+    return Promise.resolve(this.jobsValue);
+  }
+
+  jobOutput(sessionId: string, jobId: string, from: number | null = null): Promise<JobOutput> {
+    this.counters.jobOutput += 1;
+    if (this.jobOutputError !== null) {
+      return Promise.reject(this.jobOutputError);
+    }
+    return Promise.resolve(this.jobOutputValue);
+  }
+
+  killJob(sessionId: string, jobId: string): Promise<JobKillResult> {
+    this.counters.killJob += 1;
+    if (this.killError !== null) {
+      return Promise.reject(this.killError);
+    }
+    return Promise.resolve(this.killResult);
   }
 
   trash(): Promise<TrashEntry[]> {

@@ -2186,7 +2186,29 @@ due to not trusted app source`），因为设备只信任 AGC 调试证书。所
   `token: ${{ secrets.SYNC_PAT || github.token }}`。表达式带 `|| github.token` 兜底 ——
   secret 缺失时退回默认令牌，普通提交照样能推、只有 workflow 提交失败，退化得比整条链挂掉温和。
   至此**含 workflow 改动的提交也能由镜像链自愈**，坑 C 的「永久停摆」被消除。
-  安全提示：本条写入的是 `gh` 的 OAuth 用户令牌，其 `repo` scope 是**账号级**的，
+  （2026-10-20 起 secret 名统一为 `MIRROR_PAT`，与安卓版同名，`mirror-sync.yml` 直推用。）
+
+---
+
+- **坑 D（2026-10-20 实测）：GitHub Release 的资产扩展名有白名单，`.app` 不在其中。**
+
+  `mirror-sync.yml` 第一次跑就红了：`releases` job 在创建 Release、下载资产之后报
+  `HTTP 422 ... {"resource":"ReleaseAsset","code":"custom","field":"name",
+  "message":"name has a file extension that is not allowed"}`。
+  **422 不会告诉你是哪个扩展名** —— 这是它最费时间的地方：看上去像「文件太大」「名字非法」
+  「重复上传」，实际是 `.app` 这一条。用 curl 手传 `.txt` 立刻成功，
+  说明问题只在扩展名本身；把响应体打出来（`http()` 里补 `e.read()`）才看见真话。
+
+  **处置**：AGC 上架包 `.app` 只发 Gitee，GitHub 侧发能直装的 `.hap` + `SHA256SUMS.txt` +
+  说明；`sync-releases.py` 里显式 `SKIP_SUFFIX = (".app",)` 并打一行 warning，
+  **不算失败**（否则每次同步都红，红色警报会被训练成背景噪音）。
+  ⛔ 不要用「改后缀成 `.zip` 再传」绕过：下载下来是什么、名字就该是什么，
+  否则用户拿着 `.zip` 去 AGC 上传会看不懂。
+
+  同批还处理了另两条：Gitee 会把 tag 的源码包（`v1.0.3.zip` / `.tar.gz`）自动挂进 assets，
+  而 GitHub 每个 tag 自带一份 —— 按 `tag + .zip/.tar.gz` 精确跳过，避免两个同名来源。
+
+  安全提示（属坑 C 的 PAT）：写入 secret 的是 `gh` 的 OAuth 用户令牌，其 `repo` scope 是**账号级**的，
   存进本仓 secrets 意味着本仓 Actions 可读写该账号**所有**仓库；更稳妥是改用**仅限本仓的
   fine-grained PAT**（需在网页创建），已向用户提示待其定夺。
   **端到端验证（2026-10-16，run `38902595071`）**：特地做一笔**只推镜像**、且含 workflow 改动的

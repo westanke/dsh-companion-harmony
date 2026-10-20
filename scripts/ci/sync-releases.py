@@ -29,7 +29,12 @@ import urllib.parse
 import urllib.request
 
 GITEE_REPO = "westanke/dsh-companion-harmony"
-ALLOWED_SUFFIX = (".app", ".hap", ".txt", ".md")
+# GitHub Release 对资产扩展名有白名单，**`.app` 不在其中**（实测 422：
+# `name has a file extension that is not allowed`）。所以 AGC 上架包 `.app`
+# 只发在 Gitee，GitHub 侧发能直装的 `.hap` 与校验和 —— 不塞一个换了后缀的假包，
+# 那会让「下载下来是什么」和名字对不上。
+ALLOWED_SUFFIX = (".hap", ".txt", ".md", ".zip")
+SKIP_SUFFIX = (".app",)
 MAX_ASSET_BYTES = 2 * 1024 * 1024 * 1024  # GitHub 单文件上限 2 GiB
 
 TOKEN = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN", "")
@@ -57,8 +62,14 @@ def http(method, url, body=None, headers=None, raw=False):
             req.add_header(k, v)
     if data is not None:
         req.data = data
-    with urllib.request.urlopen(req, timeout=120) as resp:
-        raw_resp = resp.read()
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            raw_resp = resp.read()
+    except urllib.error.HTTPError as e:
+        # 422 只说「Validation Failed」，不说哪条校验 —— 把响应体带出来，
+        # 否则 CI 日志里只有一行 422，等于让人猜。
+        detail = e.read().decode("utf-8", "replace")[:600]
+        raise RuntimeError("%s %s -> HTTP %s：%s" % (method, url, e.code, detail)) from None
     if raw:
         return raw_resp
     return json.loads(raw_resp.decode("utf-8")) if raw_resp else {}
@@ -91,10 +102,22 @@ def gh_release_by_tag(tag):
 
 def wanted_assets(release):
     result = []
+    # Gitee 会自动把 tag 的源码包（`v1.0.3.zip` / `v1.0.3.tar.gz`）挂进 assets 列表。
+    # GitHub 对每个 tag 也自带源码包，再传一份只会有两个同名来源 —— 跳过。
+    auto_zip = {release.get("tag_name", "") + s for s in (".zip", ".tar.gz")}
     for a in release.get("assets", []):
         name = a.get("name", "")
         url = a.get("browser_download_url", "")
-        if url and name.lower().endswith(ALLOWED_SUFFIX):
+        if not url:
+            continue
+        if name in auto_zip:
+            print("    ⚠ 跳过 %s：Gitee 自动生成的源码包，GitHub 每个 tag 自带一份" % name)
+            continue
+        lower = name.lower()
+        if lower.endswith(SKIP_SUFFIX):
+            print("    ⚠ 跳过 %s：GitHub Release 不接受 .app 扩展名，它只在 Gitee 提供" % name)
+            continue
+        if lower.endswith(ALLOWED_SUFFIX):
             result.append((name, url))
     return result
 

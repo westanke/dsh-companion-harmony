@@ -179,3 +179,12 @@ sha256sum <产物>         # 摘要
 
 - **Release 的发布源是 Gitee**：tag 与资产先发在 Gitee，GitHub 由 CI 回填；
   本地**不再手工在 GitHub 建 Release**（否则会被 CI 判为已存在、只补缺资产）。
+  CI 回填时的三条平台限制（已在 `scripts/ci/sync-releases.py` 里处理）：
+  ① **`.app` 不能发到 GitHub Release** —— 资产扩展名有白名单，`.app` 不在其中，
+     上传会被 422 `name has a file extension that is not allowed` 拒掉。
+     所以 AGC 上架包只在 Gitee 提供，GitHub 侧给能直装的 `.hap`；
+     不要为了「对齐」把它改名成 `.zip` —— 下载下来是什么就该叫什么。
+  ② **Gitee 自动挂的源码包**（`v1.0.3.zip` / `v1.0.3.tar.gz`）要跳过：
+     GitHub 每个 tag 自带源码包，重复传只会出现两个来源。
+  ③ GitHub uploads **不接受非 ASCII 资产名**，脚本会清成 ASCII 再传
+     （漏处理时 400/整段丢弃，见坑 D）。

@@ -103,17 +103,18 @@
   > （设备只信任调试证书）。
   > **`1.0.0` / `1.0.1` 的包全部作废**：1.0.0 图标为 216×216 单层图；1.0.1 仍带旧 bundleName
   > 与 DeepSeek 品牌名，且 Profile 已随旧应用失效。
-- **产物校验**（**1.0.3**，2026-10-20 22:13 重建后 `stat` / `sha256sum` 实测回填）：
+- **产物校验**（**1.0.3**，2026-10-20 22:24 重建后 `stat` / `sha256sum` 实测回填）：
 
   | 产物 | 字节 | SHA-256 |
   |---|---|---|
-  | `…-1.0.3-release-signed.app` | 533 154 | `02d6e3eb403dac1121b70ec556916baae3240485c3f71055e1da4cadb15824fb` |
-  | `…-1.0.3-release-signed.hap` | 1 543 442 | `6606333aa07851667bd80ab36371d0f7d4d8b2d6bdbdbf68f6d7f54fa1ad3492` |
-  | `…-1.0.3-release-debugsigned.hap` | 1 543 533 | `91698c1f87488028c02bd83902d6c88df894d950cde90cd019021abad8d61bd2` |
+  | `…-1.0.3-release-signed.app` | 533 156 | `ace421a0eead930ada48336720c32cf95b4d56f8dfa33c63e35f0a2d104bc971` |
+  | `…-1.0.3-release-signed.hap` | 1 543 444 | `c58443671bad5fd641d67bb06074dfed761c7a3f458e3b04c32606f10547cb4c` |
+  | `…-1.0.3-release-debugsigned.hap` | 1 543 532 | `c16875b8d19d342e1c9bf1da2b9ebed2d6ab7f305fc9646c10af9825ca6514ee` |
 
   > **10-17 那批 1.0.3 包全部作废**：不含本轮 AI 上标与轨迹页 / 文件面板 / 连接页修复，
   > 字节数与上面三行对不上的一律不是本版。
-  > `.app` 内层 hap 与 `…-1.0.3-release-signed.hap` 是**同一文件**（SHA 实测相等）。
+  > `.app` 内层 hap 与 `…-1.0.3-release-signed.hap` 是**同一文件**（SHA 实测相等），
+  > 双层 `verify-app` 均 `Verify success`。包内水印 `BUILD_COMMIT = 030437a`。
   > 演示录屏沿用 1.0.2 的 `…-1.0.2-demo-9x16.mp4`：37 415 192 字节，
   > `5be2680aacba5770379d847b2c71a29f02570af55e932943cd411591bd7e38bc`。
 

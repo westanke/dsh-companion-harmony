@@ -3,6 +3,10 @@
     {
       "name": "start_window_background",
       "value": "#FFFFFF"
+    },
+    {
+      "name": "ai_mark",
+      "value": "#E05C5C"
     }
   ]
 }

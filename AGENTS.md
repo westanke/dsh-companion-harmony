@@ -41,7 +41,7 @@
 ```bash
 source ./_toolchain/env.sh
 hvigorw assembleHap --no-daemon     # 构建（改 .ets 后先 touch 对应文件，否则 UP-TO-DATE）
-cd test && npm test                 # 单元测试（当前 793 用例，随代码变化勿当常量）
+cd test && npm test                 # 单元测试（当前 794 用例，随代码变化勿当常量）
 ```
 
 **签名必须手动签**（hvigor 拒明文口令，`signingConfigs` 保持空数组）：

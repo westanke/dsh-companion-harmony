@@ -265,3 +265,54 @@ test('全屏覆盖层（轨迹页）必须让开状态栏，且按源工程口�
       `怎么办：对齐源工程 ChatTrajectorySheet（本地化类型名 + #seq + 可展开 JSON），并给根容器留状态栏内边距。`,
   );
 });
+
+// ---------------------------------------------------------------- 每条助手正文必须带 AI 标识
+
+/**
+ * 《人工智能生成合成内容标识办法》要求显式标识「可被用户明显感知」，而应用市场审核会**逐条**
+ * 比对「生成内容是否带标识」——会话级一句兜不住（长会话里它会被滚出视野）。
+ *
+ * 这条门禁钉三件事，缺任何一条都会让标识在某些排版下**静默消失**：
+ * 1. `InlineText` 有行内上标（`aiMark` + `baselineOffset`），而不是另起一行；
+ * 2. `MarkdownView` 把标识传给**最后一块**，并在末块不是文字（代码 / 表格）时补 `markRow()`；
+ * 3. `ChatMessage` 的纯文字支与分段支都要开，否则正文夹 GenUI 卡片的消息会漏标。
+ * 颜色必须走 `app.color.ai_mark`（`resources/base|dark` 双份），否则深色下对比度不够。
+ */
+test('每条助手正文必须带可感知的 AI 标识（中英双主题）', () => {
+  const inline: string = codeLines(read('InlineText.ets')).join('\n');
+  const md: string = codeLines(read('MarkdownView.ets')).join('\n');
+  const msg: string = codeLines(read('ChatMessage.ets')).join('\n');
+  sanity(inline.includes('aiMark'), `InlineText.ets 里找不到 aiMark，判据可能写错了`);
+  sanity(md.includes('markRow'), `MarkdownView.ets 里找不到 markRow，判据可能写错了`);
+
+  const missing: string[] = [];
+  if (!inline.includes('baselineOffset')) {
+    missing.push('- InlineText 的 AI 没有抬基线：与正文同高的字母会被读成句子的一部分');
+  }
+  if (!inline.includes("'app.color.ai_mark'")) {
+    missing.push('- 标识颜色没走 app.color.ai_mark：深色主题下对比度会不够');
+  }
+  if (!md.includes('lastIsText') || !md.includes('markRow()')) {
+    missing.push('- MarkdownView 缺少末块兜底：末块是代码 / 表格时标识会整条消失');
+  }
+  if (!msg.includes('aiMark: true')) {
+    missing.push('- ChatMessage 的纯文字支没开 aiMark：最常见的形态反而不带标识');
+  }
+  if (!msg.includes('aiMarkRow()')) {
+    missing.push('- ChatMessage 的分段支没兜底：正文夹 GenUI 卡片的消息会漏标');
+  }
+
+  assert.ok(
+    missing.length === 0,
+    `AI 生成内容标识不完整（过审硬要求）：\n${missing.join('\n')}\n` +
+      `怎么办：标识贴在最后一段文字末尾（行内上标），无文字段时在内容下方补一行右对齐的小标识。`,
+  );
+
+  // 深浅两套颜色都必须存在（缺失时 ArkUI 回落到 base，深色下会糊）。
+  const baseColor: string = readFileSync(
+    join(ROOT, 'entry', 'src', 'main', 'resources', 'base', 'element', 'color.json'), 'utf8');
+  const darkColor: string = readFileSync(
+    join(ROOT, 'entry', 'src', 'main', 'resources', 'dark', 'element', 'color.json'), 'utf8');
+  assert.ok(baseColor.includes('"ai_mark"') && darkColor.includes('"ai_mark"'),
+    `ai_mark 颜色必须在 base 与 dark 各定义一份，否则深色主题对比度不足`);
+});

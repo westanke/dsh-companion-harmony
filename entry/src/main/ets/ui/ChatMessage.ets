@@ -107,10 +107,27 @@ struct AssistantBody {
     }
   }
 
+  /**
+   * 分段渲染（正文里夹着 GenUI 卡片）时的 AI 标识兜底。
+   *
+   * 纯文字那支由 `MarkdownView(aiMark: true)` 贴在最后一段文字末尾；这里没有「最后一段文字」
+   * 这个概念（末段可能是卡片），所以在整块内容下方补一个 —— 标识不能因为排版形态就消失。
+   */
+  @Builder
+  aiMarkRow() {
+    Row() {
+      Text('AI')
+        .fontSize(9)
+        .fontColor($r('app.color.ai_mark'))
+    }
+    .width('100%')
+    .padding({ top: 2 })
+  }
+
   build() {
     Column() {
       if (this.isPlain()) {
-        MarkdownView({ body: this.body, onLink: this.onLink })
+        MarkdownView({ body: this.body, onLink: this.onLink, aiMark: true })
         if (this.diagnosis() !== null) {
           GenUiDebugLine({ diagnosis: this.diagnosis() as GenUiDiagnosis })
         }
@@ -121,12 +138,14 @@ struct AssistantBody {
         if (this.diagnosis() !== null) {
           GenUiDebugLine({ diagnosis: this.diagnosis() as GenUiDiagnosis })
         }
+        this.aiMarkRow()
       }
-      // 《人工智能生成合成内容标识办法》要求的显式标识**已挪到状态条**
-      // （`ui/ChatStatusBar.ets`，跟思考条合并成同一条，见该文件头）。
-      // 原来每条助手正文下方各挂一行 —— 长会话里同一句提示重复几十遍，
-      // 用户根本不会读；改成会话级常驻一条之后，「可以被用户明显感知」这条反而更成立。
-      // 注意：标识**不是**从这个界面消失了，只是不再逐条重复。
+      // 《人工智能生成合成内容标识办法》的标识分两层：
+      // 1. **逐条**：每条助手正文末尾的浅红上标 `AI`（`MarkdownView(aiMark)` / `aiMarkRow()`），
+      //    审核会逐条核「生成内容是否带标识」，所以这一层不能省；
+      // 2. **会话级**：状态条常驻的「内容由 AI 生成」（`ui/ChatStatusBar.ets`，与思考条合并）。
+      // 早先只有第 2 层、且每条正文下各挂一整行文字 —— 长会话里同句重复几十遍没人读，
+      // 现在用「小上标 + 常驻一句」分工：好认，也不刷屏。
     }
     .width('100%')
     .constraintSize({ maxWidth: ASSISTANT_MAX_WIDTH_VP })

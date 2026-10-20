@@ -34,13 +34,15 @@
   > bundleName。bundleName 一变，**调试 / 发布 Profile 与证书必须重新签发**（见 `signing/README.txt`）。
 - **应用名**：包内 `app_name` = 「DSH 伴侣」（中文）/ 「DSH Companion」（英文）；
   连接页标题去品牌化为「连接服务端」。**应用信息、应用介绍中不得再出现第三方品牌名**。
-- **仓库**：[GitHub](https://github.com/westanke/dsh-companion-harmony)（`origin`，主）·
-  [Gitee](https://gitee.com/westanke/dsh-companion-harmony)（`gitee`，镜像）·
-  [AtomGit](https://atomgit.com/westanke163/dsh-companion-harmony)（`atomgit`，镜像；已建仓并推送）。
+- **仓库**：[Gitee](https://gitee.com/westanke/dsh-companion-harmony)（`gitee`，**主仓**）·
+  [AtomGit](https://atomgit.com/westanke163/dsh-companion-harmony)（`atomgit`，备源）·
+  [GitHub](https://github.com/westanke/dsh-companion-harmony)（`origin`，**从站，由 CI 自动同步**）。
   > AtomGit 与 GitHub 的**账号名不同**：AtomGit 是 `westanke163`（GitHub/Gitee 是 `westanke`）——
   > 写远端地址时别照抄 GitHub 的用户名。
-  因本机到 `github.com:443` 不稳，新增 `.github/workflows/sync-from-mirrors.yml`
-  让镜像**快进回补** GitHub（详见 PORT-MAP 收尾十一）。
+  **2026-10-20 改为安卓版同构方案**：本地只推 Gitee / AtomGit，GitHub 由
+  `.github/workflows/mirror-sync.yml`（每 3 小时 + 手动 `workflow_dispatch`）
+  `clone --mirror` 后 `push --mirror`，并用 `scripts/ci/sync-releases.py` 回填 Release 资产。
+  需要 secret `MIRROR_PAT`（`repo` + `workflow` scope）。详见 `docs/RELEASE.md` ⑦。
 - **兼容**：HarmonyOS 6.0 及以上（`compatibleSdkVersion` = 5.1.0(18)）
 - **设备类型**：phone / tablet / 2in1
 - **插件基线**：`dsh-remote-bridge` **≥ 2.0.4**（旧名 `dsh-workspace`）
@@ -101,15 +103,17 @@
   > （设备只信任调试证书）。
   > **`1.0.0` / `1.0.1` 的包全部作废**：1.0.0 图标为 216×216 单层图；1.0.1 仍带旧 bundleName
   > 与 DeepSeek 品牌名，且 Profile 已随旧应用失效。
-- **产物校验**（**1.0.3**，2026-10-17 `stat` / `sha256sum` 实测回填）：
+- **产物校验**（**1.0.3**，2026-10-20 22:13 重建后 `stat` / `sha256sum` 实测回填）：
 
   | 产物 | 字节 | SHA-256 |
   |---|---|---|
-  | `…-1.0.3-release-signed.app` | 498 246 | `0969772f19506bc7b397cd0075bea47d15ab5790b38131356569a5616eb0745e` |
-  | `…-1.0.3-release-signed.hap` | 1 436 097 | `25e2b3046db83904e9a1be794636c8740aba1b754dfa6d1407746874e9258db7` |
-  | `…-1.0.3-release-debugsigned.hap` | 1 436 186 | `d2265b591fec6d3b8df02c1ef450b28b1e143c22bc751be895e651956adca339` |
+  | `…-1.0.3-release-signed.app` | 533 154 | `02d6e3eb403dac1121b70ec556916baae3240485c3f71055e1da4cadb15824fb` |
+  | `…-1.0.3-release-signed.hap` | 1 543 442 | `6606333aa07851667bd80ab36371d0f7d4d8b2d6bdbdbf68f6d7f54fa1ad3492` |
+  | `…-1.0.3-release-debugsigned.hap` | 1 543 533 | `91698c1f87488028c02bd83902d6c88df894d950cde90cd019021abad8d61bd2` |
 
-  > `.app` 内层 hap 与 `…-1.0.3-release-signed.hap` 是**同一文件**。
+  > **10-17 那批 1.0.3 包全部作废**：不含本轮 AI 上标与轨迹页 / 文件面板 / 连接页修复，
+  > 字节数与上面三行对不上的一律不是本版。
+  > `.app` 内层 hap 与 `…-1.0.3-release-signed.hap` 是**同一文件**（SHA 实测相等）。
   > 演示录屏沿用 1.0.2 的 `…-1.0.2-demo-9x16.mp4`：37 415 192 字节，
   > `5be2680aacba5770379d847b2c71a29f02570af55e932943cd411591bd7e38bc`。
 
@@ -180,7 +184,7 @@
   `session-log-*`、`agent/inbox/*`）并把未知轮次垫底；新增 `prettyPayload()`；
   渲染层类型名全部走 `trajectory_*` 本地化资源（中英各一套），仅 `OTHER` 退回事件原名；
   改为**自订阅 vm**（不再由 `ChatDetail` 传 `history`）。坑 57。
-  两修合计：`BUILD SUCCESSFUL` + **793 用例全绿**（`ui-wiring-guard` 第 5 例钉住呈现口径，
+  两修合计：`BUILD SUCCESSFUL` + **794 用例全绿**（`ui-wiring-guard` 第 5 例钉住呈现口径，
   `trajectory.test.ts` 覆盖过滤 / 垫底 / `prettyPayload`）。真机复验：`#1739 助手消息`、
   `第 1 轮 · 47 个工具调用`，点击后 JSON 缩进完整、右侧不裁切（截帧 `v13-traj-final.jpeg`）。
 - **本轮改动（1.0.3）**：①**追平 Android v2.2.42 的 39 条新能力**（第 1 / 2 / 3 / 4 批 +

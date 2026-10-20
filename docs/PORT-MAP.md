@@ -2196,6 +2196,31 @@ due to not trusted app source`），因为设备只信任 AGC 调试证书。所
   **同一动作在坑 C 里用 `GITHUB_TOKEN` 时是被拒的**，此处成功即证 PAT 生效、坑 C 已闭环。
   事后三端（本地 / GitHub / Gitee / AtomGit）`master` 同为 `7dd40c4`。
 
+**2026-10-20 改版：与安卓版同构（国内源为主仓，GitHub 自动同步）。**
+用户要求「学安卓版的 git 方案，国内源为主仓，github 自动同步」。原方案是**本地推三个远端、
+GitHub 只做快进补缺**，缺点有两个：① 本地到 GitHub 不通时，tag / Release 还是得单独补；
+② 方向反了 —— GitHub 已是全网镜像入口，却要本地去「追」它。
+现方案（与 `dsh-companion` 完全一致）：
+
+| 角色 | 远端 | 谁推 |
+|---|---|---|
+| 主仓 | `gitee` | 本地直推 |
+| 备源 | `atomgit` | 本地直推 |
+| 从站 | `origin`（GitHub） | **CI** `mirror-sync.yml`：`clone --mirror` → `push --mirror` |
+
+- `sync-from-mirrors.yml`（快进补缺）**已删除**，换成 `mirror-sync.yml`：
+  `push --mirror` 让分支 / tag / 删除动作全部跟随主仓，比逐个 `--ff-only` 更彻底；
+  另加 `releases` job，用 `scripts/ci/sync-releases.py` 把 Gitee 的 Release 正文与资产
+  （`.app` / `.hap` / `SHA256SUMS.txt` / `RELEASE_NOTES_*.md`）幂等回填到 GitHub。
+- 触发：每 3 小时（`17 */3 * * *`）+ `workflow_dispatch`；并发组 `mirror-sync`，取消语义关闭
+  （中途取消会留下半截 refs）。
+- **凭据**：`secret MIRROR_PAT`（`repo` + `workflow` scope）。这条与坑 C 同一个根因 ——
+  `push --mirror` 必然写 `.github/workflows/*`，`GITHUB_TOKEN` 永远推不动。
+- **自举**：本文件首次进入仓库时 `scripts/ci/` 可能还没有，`releases` job 会打一行
+  「等下一轮同步」；`mirror` job 的逻辑内嵌在 workflow 里，不依赖仓库内脚本。
+- **发布源改为 Gitee**：tag 与资产先发 Gitee，GitHub 由 CI 回填；本地不再手工在 GitHub 建 Release
+  （否则 CI 判为已存在、只补缺资产，正文不会更新）。
+
 **解法二（应急）：GitHub REST API 补推**（Actions 未跑或不可用时手动补齐）。本次已实测跑通
 （本地 `e8977be` 经 API 补齐后，GitHub / Gitee / 本地三方 SHA 一致），两个坑记下：
 - **坑 A：提交信息必须取原始字节**。`git log --format=%B` 经 shell 命令替换会**吃掉结尾换行**，

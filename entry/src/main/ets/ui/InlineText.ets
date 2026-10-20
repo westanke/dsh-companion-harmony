@@ -52,6 +52,7 @@
  * 两套口径；而表格里出现会话文件名的概率远低于正文。这是有意的取舍，不是漏掉。
  */
 
+import { LengthMetrics } from '@kit.ArkUI';
 import { InlineKind, InlineSegment, inlineSegments } from '../core/InlineSegments';
 
 @Component
@@ -69,6 +70,18 @@ export struct InlineText {
   secondary: boolean = false;
   /** 点链接：只把目标递出去，怎么开由调用方决定。 */
   onLink: (url: string) => void = (): void => {};
+  /**
+   * 段尾是否追加**上标 AI 标识**（只由助手正文最后一段传 true）。
+   *
+   * 《人工智能生成合成内容标识办法》要求「显式标识」能被用户明显感知，而会话级提示
+   * 在长会话里会被滚出视野 —— 带人工审核的场景（应用市场）还会逐条核。所以在**每一条**
+   * 助手消息末尾补一个上标 `AI`：字号 9（正文 14 的 65%），抬到基线以上，颜色取
+   * `app.color.ai_mark`（浅色 / 深色各一套，见 `resources/base|dark/element/color.json`）。
+   *
+   * 用 `Span` 而不是另起一行：标识必须贴着正文（「这条内容」与「AI 生成」在视觉上是一体），
+   * 单独一行会被读成下一条消息的元信息。
+   */
+  aiMark: boolean = false;
 
   private textColor(): Resource {
     return this.secondary
@@ -136,6 +149,10 @@ export struct InlineText {
               }
             })
         }, (segment: InlineSegment, index: number) => this.spanKey(segment, index))
+        Span(this.aiMark ? ' AI' : '')
+          .fontSize(9)
+          .fontColor($r('app.color.ai_mark'))
+          .baselineOffset(LengthMetrics.vp(5))
       }
       .fontSize(this.fontSize)
       .lineHeight(this.lineHeight)
@@ -154,6 +171,10 @@ export struct InlineText {
               }
             })
         }, (segment: InlineSegment, index: number) => this.spanKey(segment, index))
+        Span(this.aiMark ? ' AI' : '')
+          .fontSize(9)
+          .fontColor($r('app.color.ai_mark'))
+          .baselineOffset(LengthMetrics.vp(5))
       }
       .fontSize(this.fontSize)
       .fontWeight(this.fontWeight)

@@ -24,4 +24,4 @@
  * 没跑过脚本（或脚本在非 git 环境里失败）时它就是空串，界面会只显示版本号 ——
  * 这比显示一个猜的哈希诚实，也比让设置页崩掉合理。
  */
-export const BUILD_COMMIT: string = '7f6a09a';
+export const BUILD_COMMIT: string = '404e03e';

@@ -80,9 +80,40 @@ export struct MarkdownView {
    * 表格单元格不经过这里 —— 理由见 `ui/InlineText.ets` 文件头。
    */
   onLink: (url: string) => void = (): void => {};
+  /**
+   * 是否在**最后一段文字**末尾追加浅红上标 `AI`（助手消息的显式标识，见 `InlineText.aiMark`）。
+   *
+   * 最后一块是代码 / 表格 / 分隔线时没有「文字段」可贴，界面改为在内容下方补一个小标识
+   * （`markRow`）—— 标识**不能因为排版形态不同就消失**，那是审核会逐条比对的东西。
+   */
+  aiMark: boolean = false;
 
   private blocks(): MdBlock[] {
     return markdownBlocks(this.body);
+  }
+
+  /** 最后一块是不是可承载行内上标的文字块（段落 / 标题 / 列表 / 引用）。 */
+  private lastIsText(): boolean {
+    const list: MdBlock[] = this.blocks();
+    if (list.length === 0) {
+      return false;
+    }
+    const kind: MdBlockKind = list[list.length - 1].kind;
+    return kind === MdBlockKind.HEADING || kind === MdBlockKind.BULLET || kind === MdBlockKind.ORDERED ||
+      kind === MdBlockKind.QUOTE || kind === MdBlockKind.PARAGRAPH;
+  }
+
+  /** 末块不是文字时的兜底标识（理由见 `aiMark`）。 */
+  @Builder
+  markRow() {
+    Row() {
+      Text('AI')
+        .fontSize(9)
+        .fontColor($r('app.color.ai_mark'))
+    }
+    .width('100%')
+    .justifyContent(FlexAlign.End)
+    .padding({ top: 2 })
   }
 
   /** 按缩放系数换算字号；`textScale == 1` 时就是源工程聊天正文的那套字号。 */
@@ -358,13 +389,14 @@ export struct MarkdownView {
   }
 
   @Builder
-  blockView(block: MdBlock, index: number) {
+  blockView(block: MdBlock, index: number, mark: boolean) {
     if (block.kind === MdBlockKind.HEADING) {
       InlineText({
         text: block.text,
         fontSize: this.headingSize(block.level),
         fontWeight: block.level <= 3 ? FontWeight.Bold : FontWeight.Medium,
         onLink: this.onLink,
+        aiMark: mark,
       })
         .width('100%')
         .margin({ top: 8, bottom: 2 })
@@ -381,6 +413,7 @@ export struct MarkdownView {
             text: block.text,
             fontSize: this.scaled(14),
             onLink: this.onLink,
+            aiMark: mark,
           })
         }
         .layoutWeight(1)
@@ -401,6 +434,7 @@ export struct MarkdownView {
             text: block.text,
             fontSize: this.scaled(14),
             onLink: this.onLink,
+            aiMark: mark,
           })
         }
         .layoutWeight(1)
@@ -423,6 +457,7 @@ export struct MarkdownView {
             fontSize: this.scaled(14),
             secondary: true,
             onLink: this.onLink,
+            aiMark: mark,
           })
         }
         .layoutWeight(1)
@@ -450,6 +485,7 @@ export struct MarkdownView {
         fontSize: this.scaled(14),
         lineHeight: this.scaled(21),
         onLink: this.onLink,
+        aiMark: mark,
       })
         .width('100%')
     }
@@ -458,8 +494,12 @@ export struct MarkdownView {
   build() {
     Column() {
       ForEach(this.blocks(), (block: MdBlock, index: number) => {
-        this.blockView(block, index)
+        this.blockView(block, index, this.aiMark && index === this.blocks().length - 1)
       }, (block: MdBlock, index: number) => this.keyOf(block, index))
+      // 末块是代码 / 表格 / 分隔线时贴不出行内上标，改为在下方补一个（理由见 `aiMark`）。
+      if (this.aiMark && this.blocks().length > 0 && !this.lastIsText()) {
+        this.markRow()
+      }
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)

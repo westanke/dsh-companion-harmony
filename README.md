@@ -6,12 +6,13 @@
 > 本仓库是 Android 版 DSH Companion 的 HarmonyOS 原生移植（ArkTS / ArkUI），
 > 不使用 WebView，聊天页为原生重写。
 
-**仓库**：[GitHub](https://github.com/westanke/dsh-companion-harmony) ·
-[Gitee](https://gitee.com/westanke/dsh-companion-harmony) ·
-[AtomGit](https://atomgit.com/westanke163/dsh-companion-harmony)（镜像，内容同源）
+**仓库**：[Gitee](https://gitee.com/westanke/dsh-companion-harmony)（主仓）·
+[AtomGit](https://atomgit.com/westanke163/dsh-companion-harmony)（备源）·
+[GitHub](https://github.com/westanke/dsh-companion-harmony)（由 CI 自动同步）
 
-> GitHub 主站国内常不可达，仓库内 `.github/workflows/sync-from-mirrors.yml` 会由 GitHub 侧的
-> Runner 定时把 Gitee / AtomGit 镜像**快进回补**到 GitHub（详见 `docs/RELEASE.md` ⑦）。
+> 与安卓版同一套主从方案：国内两源先推，GitHub 是**从站** ——
+> `.github/workflows/mirror-sync.yml` 定时从 Gitee（不可达时退 AtomGit）`push --mirror`
+> 并回填 Release 资产（详见 `docs/RELEASE.md` ⑦）。
 
 ## 功能
 

@@ -46,6 +46,20 @@
   `.github/workflows/mirror-sync.yml`（每 3 小时 + 手动 `workflow_dispatch`）
   `clone --mirror` 后 `push --mirror`，并用 `scripts/ci/sync-releases.py` 回填 Release 资产。
   需要 secret `MIRROR_PAT`（`repo` + `workflow` scope）。详见 `docs/RELEASE.md` ⑦。
+  **2026-10-21 已推送**：`gitee` / `atomgit` / `origin` 三端 `master` 均为 `2e18b67`，
+  GitHub 由 `workflow_dispatch` 手动触发同步（run `39519472466`，成功）。
+- **发布与同步（2026-10-21）**：**复用 1.0.3、tag 不动、只换资产** ——
+  Gitee Release `v1.0.3`（id 1223511）的五个附件**先删旧再传新**（附件 id 3447340–3447343 /
+  3447383 → 新 3449806–3449810），标题改为「1.0.3 —— 稳定性修复 + 四项补齐（2026-10-21 重出包）」，
+  正文取 `dist/RELEASE_NOTES/RELEASE_NOTES_1.0.3.md`；GitHub 侧同名旧资产同样先清空，
+  再由 CI `mirror-sync.yml` 回填（**为什么必须先清**：CI 的策略是「同名即跳过」，
+  不清就会留下同名旧包，见 PORT-MAP 坑 63）。
+  **核验结果**：三端 `master` = `2e18b67`；`v1.0.3` = `21a761e`（→ `f0ed48d`，**未移动**）；
+  GitHub Release 资产 = 1 560 889 / 1 560 802 / 2 646 / 707 字节（与新版一致）。
+  > **tag 与包不同源，本次刻意如此**：`v1.0.3` 的源码包是 `f0ed48d`，而包内水印是 `032ef56`
+  > —— 两者不是一个提交。不移动已发布的 tag（移动需 force，RELEASE ⑦ 禁止）；
+  > 「这个包从哪来」以**包内水印**为准，`032ef56` 就在 `master` 上，源码可得。
+  > 若要消除这个不一致，需**显式决定重新指向 tag**，属于另一件事（见 PORT-MAP 收尾十五）。
 - **兼容**：HarmonyOS 6.0 及以上（`compatibleSdkVersion` = 5.1.0(18)）
 - **设备类型**：phone / tablet / 2in1
 - **插件基线**：`dsh-remote-bridge` **≥ 2.0.4**（旧名 `dsh-workspace`）

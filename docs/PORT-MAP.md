@@ -2999,3 +2999,43 @@ export struct SessionFilesSheet {
 
 **判据**：双层 `verify-app` → `Verify success`；包内 `versionCode` 1000003 /
 `versionName` 1.0.3 / `bundleName` `com.dsh.westanke`；`BUILD SUCCESSFUL` + 826 用例全绿。
+
+**重出包的发布侧操作（2026-10-21 实跑）**：tag 不动，只换资产，顺序如下 ——
+
+1. `git push gitee master && git push atomgit master`（快进，无冲突）；
+2. **Gitee 侧先删旧附件再上传新附件**（`DELETE /releases/{id}/attach_files/{attach_file_id}`，
+   附件 id 从 `GET /releases/{id}/attach_files` 取 —— 注意 **Release 对象里的 `assets[]`
+   只有 name 与下载链接、没有 id**，照着它删不掉）；
+3. **GitHub 侧也要先删旧资产**，否则 CI 会「同名即跳过」，留一堆同名旧包在线上；
+4. 触发 `workflow_dispatch` 让 CI 回填；
+5. 核验 `ls-remote` 三个远端 + `gh api .../releases/tags/v1.0.3` 的资产字节数。
+
+**坑 63：CI 回填 Release 是「按名跳过」的 —— 复用版本号时必须先清旧资产**
+
+`scripts/ci/sync-releases.py` 的幂等策略是「资产已同名存在则跳过」（同文件 174–176 行）。
+这对「补缺」是对的，但对**同名换内容**是**危险的**：新包与旧包文件名一字不差，
+CI 会认为「已存在」而跳过，线上就留着**同名但旧**的二进制 —— 下载者拿到的字节数与
+`SHA256SUMS.txt` 对不上，且没有任何迹象。所以复用版本号发布前，**必须先把两侧旧资产删掉**。
+（这次 `.app` / `.hap` / `SHA256SUMS.txt` / `RELEASE_NOTES` 全删后重传，实测 CI 补齐正常。）
+
+**坑 64：`gh release view --json assets` 给的是 GraphQL node id，删资产要用数字 id**
+
+`gh release view ... --json assets` 返回 `id: "RA_kwDOVLqAWc4nT_qO"`，把它喂给
+`DELETE /repos/{owner}/{repo}/releases/assets/{id}` 是 **404 Not Found**（不是权限问题，
+`repo` scope 足够）—— REST 端点要的是**数字** id：
+
+```bash
+gh api "repos/$R/releases/tags/v1.0.3" -q '.assets[] | "\(.id) \(.name)"'   # 数字 id
+gh api -X DELETE "repos/$R/releases/assets/<数字id>"
+```
+
+**Gitee 侧的对应坑**：`PATCH /repos/{owner}/{repo}/releases/{id}` **必须带 `tag_name`**，
+漏传报 400「`tag_name is missing`」；但**不要**顺手传 `target_commitish` ——
+那会让服务端去动 tag 指向，本次刻意不移动 `v1.0.3`。
+
+**tag 与包不同源的说明（本次刻意如此）**：`v1.0.3` 仍指向 `f0ed48d`，而包的水印是
+`032ef56` —— 即 **tag 的源码包与发布的二进制不是同一提交**。不移动 tag 是**非破坏性**的
+默认选择（移动已发布的 tag 需 force，见 RELEASE ⑦「禁止 --force」）。对应地要记住两点：
+① 包内水印（设置页「构建 `032ef56`」）才是「这个包从哪来」的**权威凭据**，
+`032ef56` 就在 `master` 上，源码可得，AGPL 的「对应源码」义务由 `master` 满足；
+② 想消除这个不一致，只能显式决定「重新指向 tag」，那是**另一件事**，不要顺手做。

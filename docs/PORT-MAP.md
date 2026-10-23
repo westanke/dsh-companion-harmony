@@ -3103,3 +3103,17 @@ ArkUI 单个 `Scroll` 只支持一个方向，所以纵向套横向：
 顺带：这条头的格式契约是 `<platform>/<model>`，`model` 可省；`platform` 必须在桥的白名单里
 （`android` / `harmonyos` / `ios` / `ipados` / `web` / `windows` / `macos` / `linux`），
 不在白名单的值桥会**整条丢弃**——所以自造平台名等于没报，不如老实写 `harmonyos`。
+
+**坑 69：`http()` 把 `HTTPError` 包成 `RuntimeError`，害得「查不到就创建」永远走不到**
+
+发 1.0.4 时 CI 的 `releases` 作业直接红：
+`GET /repos/.../releases/tags/v1.0.4 -> HTTP 404` 被当成致命错误。而脚本里明明写的是
+「`gh_release_by_tag()` 返回 `None` 就去创建」—— 问题是它的 `except urllib.error.HTTPError`
+**永远接不到**：`scripts/ci/sync-releases.py` 的 `http()` 在内部就把 `HTTPError` 转成了
+`RuntimeError`（为了把 422 的响应体带出来）。于是「新 tag 的第一个 Release」永远建不出来，
+历史上 1.0.3 的 GitHub Release 其实是手工建的，这条自动创建路径一直没被真正走到过。
+
+修法：`http()` 加 `allow_404=False` 开关，命中 404 时返回 `None`；`gh_release_by_tag()` 用它。
+**教训**：包装异常时要想清楚「调用方还要不要按状态码分支」—— 全量转成同一种异常，
+等于把「未找到」和「真的坏了」折叠成同一件事，这种错误只在「第一次遇到新 tag」时出现，
+平时永远测不到。

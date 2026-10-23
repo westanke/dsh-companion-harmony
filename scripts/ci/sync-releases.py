@@ -45,7 +45,15 @@ if not TOKEN or not REPO:
     sys.exit("需要 GITHUB_TOKEN 与 GITHUB_REPOSITORY")
 
 
-def http(method, url, body=None, headers=None, raw=False):
+def http(method, url, body=None, headers=None, raw=False, allow_404=False):
+    """`allow_404`：把 404 当成「没有」返回 `None`。
+
+    为什么需要这个开关：`gh_release_by_tag()` 的判据是「查不到就创建」，
+    但本函数把 `HTTPError` 一律包成 `RuntimeError`，调用方**根本接不到**
+    `urllib.error.HTTPError` —— 于是「Release 不存在」被当成致命错误，
+    新 tag 的第一个 Release 永远建不出来（2026-10-23 发 1.0.4 实测：
+    `GET /releases/tags/v1.0.4 -> HTTP 404` 直接终止作业）。
+    """
     req = urllib.request.Request(url, method=method)
     req.add_header("Authorization", "token " + TOKEN)
     req.add_header("Accept", "application/vnd.github+json")
@@ -66,6 +74,8 @@ def http(method, url, body=None, headers=None, raw=False):
         with urllib.request.urlopen(req, timeout=120) as resp:
             raw_resp = resp.read()
     except urllib.error.HTTPError as e:
+        if allow_404 and e.code == 404:
+            return None
         # 422 只说「Validation Failed」，不说哪条校验 —— 把响应体带出来，
         # 否则 CI 日志里只有一行 422，等于让人猜。
         detail = e.read().decode("utf-8", "replace")[:600]
@@ -90,14 +100,10 @@ def gitee_releases():
 
 
 def gh_release_by_tag(tag):
+    """按 tag 查 GitHub Release；不存在返回 `None`（交给 main 去创建）。"""
     url = "https://api.github.com/repos/%s/releases/tags/%s" % (
         REPO, urllib.parse.quote(tag, safe=""))
-    try:
-        return http("GET", url)
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
-            return None
-        raise
+    return http("GET", url, allow_404=True)
 
 
 def wanted_assets(release):

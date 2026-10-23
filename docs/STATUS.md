@@ -67,6 +67,18 @@
   > —— 两者不是一个提交。不移动已发布的 tag（移动需 force，RELEASE ⑦ 禁止）；
   > 「这个包从哪来」以**包内水印**为准，`032ef56` 就在 `master` 上，源码可得。
   > 若要消除这个不一致，需**显式决定重新指向 tag**，属于另一件事（见 PORT-MAP 收尾十五）。
+- **发布与同步（2026-10-23，1.0.4）**：新 tag + 新 Release，不再复用 1.0.3。
+  - 推送：`gitee` / `atomgit` 两侧 `master` 推到 `32235b0`（回填提交），随后因修 CI 脚本再推到 `6cf66d7`；
+    tag `v1.0.4`（annotated，peel 到 `32235b0`）同样推到两个国内源。
+  - Gitee Release `v1.0.4`（id 1234682）：五个附件（`.app` / `.hap` / 调试 `.hap` /
+    `SHA256SUMS.txt` / `RELEASE_NOTES_1.0.4.md`），正文取 `dist/RELEASE_NOTES/RELEASE_NOTES_1.0.4.md`。
+  - GitHub 侧：CI `mirror-sync.yml`（run `39976477880`）**自动创建** Release（id 421991484）
+    并回填四个资产（`.app` 按扩展名白名单跳过）；三端 `master` 现均为 `6cf66d7`。
+  - **本次修掉的 CI 缺陷**：`scripts/ci/sync-releases.py` 的 `http()` 把 `HTTPError` 一律包成
+    `RuntimeError`，导致 `gh_release_by_tag()` 的 404 分支永远走不到、「查不到就创建」从未生效
+    （1.0.3 的 GitHub Release 其实是手工建的）。已加 `allow_404` 开关，见 PORT-MAP 坑 69。
+  - 该 CI 脚本修复需**先同步到 GitHub 再触发**才有意义：`releases` 作业与 `mirror` 作业并发，
+    第一次重跑仍读到旧脚本；等 GitHub `master` 到位后再触发一次才成功。
 - **兼容**：HarmonyOS 6.0 及以上（`compatibleSdkVersion` = 5.1.0(18)）
 - **设备类型**：phone / tablet / 2in1
 - **插件基线**：`dsh-remote-bridge` **≥ 2.0.4**（旧名 `dsh-workspace`）

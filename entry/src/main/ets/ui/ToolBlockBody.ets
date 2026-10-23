@@ -87,17 +87,33 @@ export struct ToolBlockBody {
   }
 
   /**
-   * `bash`：终端提示符 + 命令 + 输出（输出已剥 ANSI）。
+   * `bash`：命令行 + 一句话说明 + 输出（输出已剥 ANSI）。
+   *
+   * ## 命令为什么必须套 `ToolTextBlock`，不能是裸 `Text`
+   *
+   * 早先这里是 `Text(\`$ ${command}\`).width('100%')` —— 定宽 + 默认折行。真机截图实证：
+   * 一条 heredoc 脚本被**按宽度硬折行**，路径在 `-` 处断成 `dsh-` / `remote-bridge`，
+   * python 代码的缩进层级全乱，而且整块纵向铺开顶掉大半屏，读不出这是一条能不能跑的命令。
+   *
+   * 命令行是**代码**：代码只该横向滚动，不该折行（与输出块同一条判据，见 `ToolTextBlock`
+   * 文件头「两个轴都要能滚」）。同时限高 —— 一条 heredoc 不该独占整屏，超出部分在块内纵向滚。
+   *
+   * label 用 `$`：它就是 shell 提示符，原先写在正文行首的那个 `$` 挪到这里，
+   * 既保住终端观感，又不丢对「这是命令不是正文」的区分。
    *
    * 「运行中」与「跑完没输出」**分开**显示（`running` 来自 `result === null`）——
    * 把两者混成一个「无输出」会让人以为命令已经跑完了。
    */
   @Builder
   terminalBlock() {
-    Text(`$ ${this.view.command}`)
-      .fontSize(12)
-      .fontFamily('monospace')
-      .width('100%')
+    if (this.view.command.length > 0) {
+      ToolTextBlock({
+        label: '$',
+        text: this.view.command,
+        isError: false,
+        maxHeightVp: 180,
+      })
+    }
     if (this.view.description.length > 0) {
       Text(this.view.description)
         .fontSize(11)

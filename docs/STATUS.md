@@ -470,3 +470,19 @@ bridge 2.5.2）。948 用例全绿（构建 + 单测 + 架构守卫）。逐条�
 清单已交用户转桥维护方；App 侧仅做了数据库设备名修正（`HarmonyOS · ICL-AL10`，已上机确认）。
 
 **遗留**：`ModelsScreen.ets` 超预算拆分仍登记在册。
+
+## 2026-10-23 bash 命令块显示修复
+
+**反馈**：真机截图「bash 的显示需要修复」——一条 heredoc 命令被按宽度折成碎片
+（路径在 `-` 处断成 `dsh-` / `remote-bridge`），整块纵向铺开顶掉大半屏。
+
+**根因**：`ui/ToolBlockBody.ets` 的 `terminalBlock()` 用裸 `Text(...).width('100%')` 画命令，
+定宽 + 默认折行。同一个页面里的输出块（`ToolTextBlock`）早就是「纵向套横向双 `Scroll`」，
+命令块漏了这套（PORT-MAP 坑 67）。
+
+**修法**：命令块改用 `ToolTextBlock`（`label: '$'`、`maxHeightVp: 180`），代码只横向滚动不折行，
+浅底 + 细边 + 一键复制；`$` 提示符从正文行首挪到 label 位。
+
+**上机**：包 `dist/p4-bash-debugsigned.hap`，设备 `3AX0225103005398`。同一条 heredoc 首行在右边缘裁断、
+`remote-bridge` 未掉行，块高锁 180vp。950 用例全绿。证据见 `docs/TESTING.md` 2026-10-23 首行、
+截帧 `docs/screenshots/p4-bash/bash-block-fixed.jpeg`。

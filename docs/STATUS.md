@@ -93,19 +93,27 @@
   > 再翻回又同帧变回「应用字号 1.0×」—— 每步 `hdc` 直读偏好核对落盘同步；验完已复原设备偏好。
   > **措辞纪律**：**未上机的项不写成「真机通过」** —— 39 条新能力中**其余项仍为
   > 「编译 + 单测通过，未逐条上机」**。
-- **发布产物**（**1.0.3 重出包**，2026-10-21；内外层均 `verify-app` → `Verify success`）：
+- **发布产物**（**1.0.4**，2026-10-23；内外层均 `verify-app` → `Verify success`）：
+
+  | 产物 | 说明 |
+  |---|---|
+  | `dsh-companion-harmony-1.0.4-release-signed.app` | 里外双签，**上架 AGC 用** |
+  | `dsh-companion-harmony-1.0.4-release-signed.hap` | 发布证书签的内部 hap（`.app` 内层） |
+  | `dsh-companion-harmony-1.0.4-release-debugsigned.hap` | 调试签名，**装真机用** |
+  | `dsh-companion-harmony-1.0.2-demo-9x16.mp4` | 演示录屏（**沿用 1.0.2**），**AGC「自测文件」用** |
+
+  > 三产物**同源于同一次构建**，且均在**写入水印后**构建（见 RELEASE「④-补 构建水印的时序」），
+  > 只差签名来源；发布证书签的 hap 无法 `hdc install`（设备只信任调试证书）。
+  > 图标分层自检通过：包内**同时**有 `foreground.png` / `background.png` / `layered_image.json`，
+  > 两张图均 **1024×1024**（AGC 上架硬条件，PORT-MAP 坑 25）。
+
+- **上一版产物**（**1.0.3 重出包**，2026-10-21；均已对外发布，**不再改动**）：
 
   | 产物 | 说明 |
   |---|---|
   | `dsh-companion-harmony-1.0.3-release-signed.app` | 里外双签，**上架 AGC 用** |
   | `dsh-companion-harmony-1.0.3-release-signed.hap` | 发布证书签的内部 hap（`.app` 内层） |
   | `dsh-companion-harmony-1.0.3-release-debugsigned.hap` | 调试签名，**装真机用** |
-  | `dsh-companion-harmony-1.0.2-demo-9x16.mp4` | 演示录屏（**沿用 1.0.2**），**AGC「自测文件」用** |
-
-  > 三产物**同源于同一次构建**，且均在**写入水印后**构建（见 RELEASE「④-补 构建水印的时序」），
-  > 只差签名来源；发布证书签的 hap 无法 `hdc install`（设备只信任调试证书）。
-  > **10-20 那批 1.0.3 产物已被本轮同名覆盖、作废** —— 本版多含截断提示 / 连接页三态 /
-  > 未保存改动确认 / 带行号链接修复四项。
 
 - **历史产物**（**1.0.2**，2026-10-16 出，含改名去品牌 + 换 bundleName + AI 生成内容显式标识；
   内外层均 `verify-app` → `Verify success`）**均已被 1.0.3 取代**：
@@ -127,7 +135,22 @@
   > （设备只信任调试证书）。
   > **`1.0.0` / `1.0.1` 的包全部作废**：1.0.0 图标为 216×216 单层图；1.0.1 仍带旧 bundleName
   > 与 DeepSeek 品牌名，且 Profile 已随旧应用失效。
-- **产物校验**（**1.0.3 重出包**，2026-10-21 出包后 `stat` / `sha256sum` 实测回填）：
+- **产物校验**（**1.0.4**，2026-10-23 出包后 `stat` / `sha256sum` 实测回填）：
+
+  | 产物 | 字节 | SHA-256 |
+  |---|---|---|
+  | `…-1.0.4-release-signed.app` | 571 890 | `0b4fb9ef3c302f550bef1e498e666daa3e440626646556dd26cc0264fa7964ca` |
+  | `…-1.0.4-release-signed.hap` | 1 667 045 | `51c5d4c14b45401fa240edd79cbd076a85f58f1897fdbccead5c4eaf414a159c` |
+  | `…-1.0.4-release-debugsigned.hap` | 1 667 135 | `5e3667c7c7ac45eb33504e97b797d825258b7363d0b34e242711c5929d677053` |
+
+  > 与上面三行数字对不上的一律不是本版。
+  > `.app` 内层 hap 与 `…-1.0.4-release-signed.hap` 是**同一文件**（SHA 实测相等
+  > `51c5d4c1…`），双层 `verify-app` 均 `Verify success`。
+  > **包内水印 `BUILD_COMMIT = fde9a3e`**（出包所用提交，已在 `ets/modules.abc` 内实测命中；
+  > 包内 `versionCode` 1000004 / `versionName` 1.0.4 / `bundleName` `com.dsh.westanke`）。
+  > 构建走 `assembleApp -p buildMode=release`，hap 1 604 982 字节（未签名）→ 签后 1 667 045。
+
+- **上一版产物校验**（**1.0.3 重出包**，2026-10-21，已发布不再改动）：
 
   | 产物 | 字节 | SHA-256 |
   |---|---|---|
@@ -135,7 +158,7 @@
   | `…-1.0.3-release-signed.hap` | 1 560 802 | `d581848f1f6a8caa20ee55e7cb21d7169d0ea3e0851b230d1d5a4282237c0527` |
   | `…-1.0.3-release-debugsigned.hap` | 1 560 889 | `b4a8f696010b4054e8e0bf836712b1d1859c478936411965da57a63cf4cf5ace` |
 
-  > **10-17 / 10-20 两批 1.0.3 包全部作废**，字节数与上面三行对不上的一律不是本版。
+  > **10-17 / 10-20 两批 1.0.3 包全部作废**，字节数与上面三行对不上的一律不是那一版。
   > `.app` 内层 hap 与 `…-1.0.3-release-signed.hap` 是**同一文件**（SHA 实测相等
   > `d581848f…`），双层 `verify-app` 均 `Verify success`。
   > **包内水印 `BUILD_COMMIT = 032ef56`**（出包所用提交，已在 `ets/modules.abc` 内实测命中；

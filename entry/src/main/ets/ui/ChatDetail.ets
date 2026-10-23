@@ -107,7 +107,7 @@ import {
 import { visibleHistoryItems } from '../core/ChatVisibleItems';
 import { truncationItemsOf } from '../core/ChatTruncation';
 import {
-  ChatDisplayEntry, chatDisplayEntryKey, groupChatDisplay,
+  ChatDisplayEntry, ChatDisplayEntryKind, chatDisplayEntryKey, groupChatDisplay,
 } from '../core/ChatDisplayGroups';
 import {
   ChatLinkReason, ChatLinkTarget, ChatLinkTargetKind, stripLocationSuffix,
@@ -126,8 +126,9 @@ import { sessionFileList } from './SessionFilesSheet';
 import { ChatStatusBar } from './ChatStatusBar';
 import { ApprovalPanel, QuestionCard } from './ChatDetailPanels';
 import { ChatHeaderPanelHost, SHEET_FILES, SHEET_FULL_ACCESS } from './ChatHeader';
-import { TrajectoryScreen } from './TrajectoryScreen';
 import { ChatComposer } from './ChatComposer';
+import { TodoPanel } from './ChatDetailTodo';
+import { ImageViewer, TrajectoryCover } from './ChatDetailOverlays';
 import { common } from '@kit.AbilityKit';
 
 /** 待回答问题区的高度上限：对位源工程 `heightIn(max = 340.dp)`。 */
@@ -158,8 +159,6 @@ export struct ChatDetail {
   @State @Watch('onMessageChanged') message: string = '';
   /** 是否已经贴在列表底部附近：只有贴底才自动跟随，否则不打扰翻历史的人。 */
   @State atBottom: boolean = true;
-  /** 待办面板是否展开（源工程 `tasksExpanded`，默认展开）。 */
-  @State tasksExpanded: boolean = true;
   /**
    * 上一次已经落过底的会话 id —— 用来把「换了个会话」和「同一个会话里来了新消息」分开。
    * 初值 `null`：首屏进会话也算一次「切换」，会落底一次。
@@ -218,6 +217,21 @@ export struct ChatDetail {
    * ArkUI 的 `setTimeout` 没有取消机制，所以这里手动加一道代际校验。
    */
   private scrollGeneration: number = 0;
+
+  // ——— 视口锚定（加载更早消息后不让视口跳走） ———
+  /**
+   * 加载更早消息前，首条可见分组对应的消息 seq。
+   *
+   * 加载完成后 history 更新，displayEntries() 前插了更早的条目，
+   * 原来 start index 指向的那条消息现在的 index 变了 —— 但 seq 是稳定的，
+   * 所以按 seq 锚定而不是按 index。onRevision 里用它找到新位置后 scrollToIndex。
+   *
+   * null 表示当前没有待恢复的锚定（不是每次 history 变更都需要锚定 ——
+   * 只有 loadOlder 主动设置它）。
+   */
+  private pendingAnchorSeq: number | null = null;
+  /** 当前首条可见分组的 index（onScrollIndex 的 start 参数）。 */
+  private visibleStartIndex: number = 0;
 
   /**
    * 已展开的过程组 id 列表（组 id = 组内首项 id）。
@@ -588,6 +602,23 @@ export struct ChatDetail {
   private loadOlder(): void {
     const vm: HarnessViewModel | null = this.vm();
     if (vm !== null) {
+      // 视口锚定：加载前记住当前首条可见分组里第一条消息的 seq，
+      // 加载后（history 前插了更早的条目）用它找到新位置再滚回去 ——
+      // ArkUI List 头部插入后默认跳到新条目位置，不加这一下用户会看到视口突然跳走。
+      // 不是每次 history 变更都需要锚定，只有 loadOlder 主动设置。
+      const entries: ChatDisplayEntry[] = this.displayEntries();
+      const idx: number = this.visibleStartIndex;
+      // +1 是顶部「加载更早消息」ListItem，所以真实分组 index = visibleStartIndex - 1
+      const entryIndex: number = idx > 0 ? idx - 1 : 0;
+      if (entryIndex >= 0 && entryIndex < entries.length) {
+        const anchor: ChatDisplayEntry = entries[entryIndex];
+        // 过程组取组内首项的 seq，消息取 item.seq
+        this.pendingAnchorSeq = anchor.kind === ChatDisplayEntryKind.PROCESS_GROUP
+          ? (anchor.items.length > 0 ? anchor.items[0].seq : null)
+          : (anchor.item !== null ? anchor.item.seq : null);
+      } else {
+        this.pendingAnchorSeq = null;
+      }
       void vm.loadOlderHistory();
     }
   }
@@ -801,62 +832,6 @@ export struct ChatDetail {
     }
   }
 
-  /**
-   * 全屏查看器：黑底 + 居中满屏 + 右上关闭 + 底部保存。
-   *
-   * 用 `bindContentCover` 而不是自绘浮层：它是一个**盖住整页**的系统级模态，
-   * 底部系统手势区、返回键都由系统接管 —— 自绘浮层做不到这两件事，
-   * 用户按返回键会直接退出应用（源工程用 `Dialog` 拿到的正是这套系统行为）。
-   */
-  @Builder
-  imageViewer() {
-    Column() {
-      Stack({ alignContent: Alignment.TopEnd }) {
-        if (this.viewerPixelMap !== null) {
-          Image(this.viewerPixelMap)
-            .objectFit(ImageFit.Contain)
-            .width('100%')
-            .height('100%')
-        }
-
-        Text('✕')
-          .fontSize(20)
-          .width(40)
-          .height(40)
-          .textAlign(TextAlign.Center)
-          .borderRadius(20)
-          .fontColor(Color.White)
-          .backgroundColor('#66000000')
-          .margin({ top: 12, right: 12 })
-          .onClick((): void => {
-            this.closeImageViewer();
-          })
-      }
-      .width('100%')
-      .layoutWeight(1)
-      // 点图片区域关闭；与右上 ✕ 两条路都通，用户不必去找那个小按钮。
-      // 只挂在**图片区**而不是整页：整页的话，点「保存」时事件会先冒到父级把查看器关掉。
-      .onClick((): void => {
-        this.closeImageViewer();
-      })
-
-      Text($r('app.string.save'))
-        .fontSize(15)
-        .fontColor(Color.White)
-        .padding({ left: 20, right: 20, top: 10, bottom: 10 })
-        .borderRadius(20)
-        .backgroundColor('#33FFFFFF')
-        .margin({ top: 12, bottom: 20 })
-        .onClick((): void => {
-          void this.saveViewedImage();
-        })
-    }
-    .width('100%')
-    .height('100%')
-    .backgroundColor(Color.Black)
-    .justifyContent(FlexAlign.Center)
-  }
-
   private scrollToBottom(): void {
     this.atBottom = true;
     this.scroller.scrollEdge(Edge.Bottom);
@@ -894,6 +869,38 @@ export struct ChatDetail {
         }, 0);
       }
     }
+    // ——— 视口锚定：加载更早消息后不让视口跳走 ———
+    // 加载更早前 set pendingAnchorSeq，history 更新后在这里用它找到新位置滚回去。
+    // 用 setTimeout(0) 跟 scrollEdge 同一节奏：等下一帧布局完。
+    // 换会话时 pendingAnchorSeq 会在 loadOlder 被换会话清 history 后自然失效
+    // （items.length > 0 会是新会话的内容，find 找不到那条 seq），不会误锚。
+    const anchor: number | null = this.pendingAnchorSeq;
+    if (anchor !== null) {
+      setTimeout((): void => {
+        const entries: ChatDisplayEntry[] = this.displayEntries();
+        // +1 对应顶部「加载更早消息」ListItem（hasMore 时存在）
+        const offset: number = this.hasMore() ? 1 : 0;
+        for (let i = 0; i < entries.length; i++) {
+          const e: ChatDisplayEntry = entries[i];
+          let matched: boolean = false;
+          if (e.kind === ChatDisplayEntryKind.MESSAGE && e.item !== null) {
+            matched = e.item.seq === anchor;
+          } else if (e.kind === ChatDisplayEntryKind.PROCESS_GROUP) {
+            for (let j = 0; j < e.items.length; j++) {
+              if (e.items[j].seq === anchor) {
+                matched = true;
+                break;
+              }
+            }
+          }
+          if (matched) {
+            this.scroller.scrollToIndex(i + offset, false);
+            break;
+          }
+        }
+        this.pendingAnchorSeq = null;
+      }, 0);
+    }
     // 命令清单可能在这次刷新里变了（`@` 补全面板的可见性也依赖它），顺手同步一次。
     this.syncComposerOverlay();
   }
@@ -922,102 +929,6 @@ export struct ChatDetail {
     vm.setComposerOverlay(composerOverlayActive(this.message, this.st().commands));
   }
 
-  // ————————————————— 待办 —————————————————
-
-  /**
-   * 「当前任务」面板。位置是**头部之下、消息列表之上**（源工程如此，不是浮动层）。
-   *
-   * 展开区里每种状态一组：`completed` → ✓ + 已完成、`in_progress` → ✎ + 进行中、
-   * 其余 → ○ + 待处理；`completed` 的文字降到次级色（做完的事不该跟待办抢注意力）。
-   */
-  @Builder
-  todoPanel() {
-    Column() {
-      Row() {
-        Text('✓')
-          .fontSize(15)
-          .fontColor($r('sys.color.ohos_id_color_text_primary_activated'))
-        Text($r('app.string.current_tasks'))
-          .fontSize(14)
-          .fontWeight(FontWeight.Medium)
-          .layoutWeight(1)
-          .margin({ left: 9 })
-        Text($r('app.string.task_progress', this.completedCount(), this.todos().length))
-          .fontSize(12)
-          .fontColor($r('sys.color.ohos_id_color_text_secondary'))
-        Text(this.tasksExpanded ? '⌃' : '⌄')
-          .fontSize(14)
-          .fontColor($r('sys.color.ohos_id_color_text_secondary'))
-          .margin({ left: 8 })
-      }
-      .width('100%')
-      .constraintSize({ minHeight: 48 })
-      .padding({ left: 14, right: 14, top: 7, bottom: 7 })
-      .alignItems(VerticalAlign.Center)
-      .onClick((): void => {
-        this.tasksExpanded = !this.tasksExpanded;
-      })
-
-      if (this.tasksExpanded) {
-        Divider()
-          .strokeWidth(1)
-          .color($r('sys.color.ohos_id_color_list_separator'))
-        ForEach(this.todos(), (todo: TodoItem) => {
-          Row() {
-            Text(this.todoGlyph(todo))
-              .fontSize(14)
-              .fontColor(this.todoColor(todo))
-              .margin({ top: 2 })
-            Text(todo.content)
-              .fontSize(14)
-              .layoutWeight(1)
-              .margin({ left: 9 })
-              .fontColor(todo.status === 'completed'
-                ? $r('sys.color.ohos_id_color_text_secondary')
-                : $r('sys.color.ohos_id_color_text_primary'))
-          }
-          .width('100%')
-          .constraintSize({ minHeight: 42 })
-          .padding({ left: 14, right: 14, top: 7, bottom: 7 })
-          .alignItems(VerticalAlign.Top)
-        }, (todo: TodoItem, index: number) => `${index}:${todo.status}:${todo.content}`)
-      }
-    }
-    .width('100%')
-    .backgroundColor($r('sys.color.ohos_id_color_sub_background'))
-    .alignItems(HorizontalAlign.Start)
-  }
-
-  private completedCount(): number {
-    const list: TodoItem[] = this.todos();
-    let count: number = 0;
-    for (let i = 0; i < list.length; i++) {
-      if (list[i].status === 'completed') {
-        count += 1;
-      }
-    }
-    return count;
-  }
-
-  private todoGlyph(todo: TodoItem): string {
-    if (todo.status === 'completed') {
-      return '✓';
-    }
-    if (todo.status === 'in_progress') {
-      return '✎';
-    }
-    return '○';
-  }
-
-  private todoColor(todo: TodoItem): ResourceStr {
-    if (todo.status === 'completed') {
-      return $r('sys.color.ohos_id_color_text_primary_activated');
-    }
-    if (todo.status === 'in_progress') {
-      return $r('sys.color.ohos_id_color_emphasize');
-    }
-    return $r('sys.color.ohos_id_color_text_secondary');
-  }
 
   // ————————————————— 消息列表 —————————————————
 
@@ -1106,7 +1017,8 @@ export struct ChatDetail {
     .onScrollStop((): void => {
       this.onScrollStopped();
     })
-    .onScrollIndex((_start: number, end: number): void => {
+    .onScrollIndex((start: number, end: number): void => {
+      this.visibleStartIndex = start;
       const bottom: boolean = end >= this.listItemCount() - 3;
       if (bottom !== this.atBottom) {
         this.atBottom = bottom;
@@ -1310,7 +1222,7 @@ export struct ChatDetail {
         .justifyContent(FlexAlign.Center)
       } else {
         if (this.todos().length > 0) {
-          this.todoPanel()
+          TodoPanel({ todos: this.todos() })
         }
 
         Stack({ alignContent: Alignment.BottomEnd }) {
@@ -1355,9 +1267,23 @@ export struct ChatDetail {
   /** 轨迹页的内容（**不传 history**：本页自订阅 vm，理由见 `TrajectoryScreen.ets` 文件头）。 */
   @Builder
   trajectorySheet() {
-    TrajectoryScreen({
+    TrajectoryCover({
       onClose: (): void => {
         this.trajectoryOpen = false;
+      },
+    })
+  }
+
+  /** 图片查看器的薄包装：`bindContentCover` 需要 `@Builder`，内容住在 `ChatDetailOverlays.ets`。 */
+  @Builder
+  imageViewer() {
+    ImageViewer({
+      pixelMap: this.viewerPixelMap,
+      onClose: (): void => {
+        this.closeImageViewer();
+      },
+      onSave: (): void => {
+        void this.saveViewedImage();
       },
     })
   }

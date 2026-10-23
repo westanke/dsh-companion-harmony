@@ -163,6 +163,14 @@ class FakeClient {
     return Promise.resolve(null);
   }
 
+  settingsNamespaces(): Promise<object | null> {
+    return Promise.resolve(null);
+  }
+
+  patchSettingsNamespace(_namespace: string, _ops: unknown): Promise<object | null> {
+    return Promise.resolve(null);
+  }
+
   entries(rootId: string, path: string = '', cursor: string | null = null): Promise<object> {
     return Promise.resolve({ path: '', entries: [], nextCursor: null });
   }

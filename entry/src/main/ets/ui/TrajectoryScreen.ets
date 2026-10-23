@@ -46,7 +46,8 @@ import {
   TrajectoryNode, TrajectoryNodeKind, TrajectoryTurn, UNKNOWN_TURN, prettyPayload,
   shortDuration, trajectoryOf,
 } from '../core/Trajectory';
-import { harnessState } from './AppRuntime';
+import { harnessState, themedPageBgColor } from './AppRuntime';
+import { THEME_PALETTE_PAPER } from '../core/ThemePalettes';
 
 @Component
 export struct TrajectoryScreen {
@@ -54,6 +55,8 @@ export struct TrajectoryScreen {
 
   /** 自订阅 vm 的 revision（理由见文件头最后一节）。 */
   @StorageLink('dshRevision') revision: number = 0;
+  /** 配色名（方案 A）：底色表达式里直读，见 `AppRuntime.PALETTE_KEY` 的注释。 */
+  @StorageLink('dshPaletteName') paletteName: string = THEME_PALETTE_PAPER;
 
   /** vm 还没装配时的兜底状态。 */
   private fallback: HarnessState = new HarnessState();
@@ -282,7 +285,8 @@ export struct TrajectoryScreen {
     .height('100%')
     // 让开状态栏：cover 内容不吃安全区，见上面的 `topInset`。
     .padding({ top: this.topInset })
-    .backgroundColor($r('sys.color.ohos_id_color_background'))
+    .backgroundColor(themedPageBgColor(this.getUIContext().getHostContext(), this.paletteName)
+      ?? $r('sys.color.ohos_id_color_background'))
     .alignItems(HorizontalAlign.Start)
   }
 }

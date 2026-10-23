@@ -8,7 +8,7 @@
  * 拆分来龙去脉见 `ChatPresentation.ts` 文件头。
  */
 
-import { ChatHistory, PermissionCatalog, PermissionOption, PermissionSelect, SessionEvent, TodoItem,
+import { ChatHistory, HistoryEntry, PermissionCatalog, PermissionOption, PermissionSelect, SessionEvent, TodoItem,
   WorkspaceEvent } from './Models';
 import { JsonAccess, JsonMap } from './JsonAccess';
 import { isBlank, isNotBlank } from './TextPredicates';
@@ -93,14 +93,57 @@ export function displayItemsOf(history: ChatHistory): ChatDisplayItem[] {
   // 结果的 callId 藏在 `data.message.toolCallId` 里，配对要跨事件 ——
   // 单看一条 entry 是配不上的（这正是以前 tool/result 整类被丢掉的原因）。
   const results: Map<string, ToolResultInfo> = toolResultsByCallId(history.events);
+
+  // 显式交付物卡片：对齐桌面端，钉在**轮次收尾**（收尾消息之后），而不是钉在
+  // present 工具调用的位置上 —— 模型总在交付后补一句「文件在这儿」，卡片出现在
+  // 那句之后才叫「轮次收尾」。做法：按出现顺序缓冲交付物，每轮 turn/end 处冲刷；
+  // 会话尾部没有 turn/end（仍在运行、或老格式历史）时补在最后，不丢。
+  const pending: Map<string, ChatDeliverable> = new Map();
   const items: ChatDisplayItem[] = [];
   for (let i = 0; i < history.events.length; i++) {
-    const one: ChatDisplayItem[] = oneEntryItems(history.events[i], results);
+    const entry: HistoryEntry = history.events[i];
+    const type: string = entry.event.type;
+    if (type === 'deliverables/presented') {
+      // 同轮同路径只留最后说明（后写覆盖）。
+      const found: ChatDeliverable[] = extractDeliverablesFromEvent(entry.event);
+      for (let k = 0; k < found.length; k++) {
+        pending.set(found[k].path, found[k]);
+      }
+      continue;
+    }
+    // 先冲卡片、再渲染 turn/end 本身：交付发生在轮次结束**之前**（失败也一样），
+    // 时间序上卡片必须排在收尾消息/失败行前面。
+    if (type === 'turn/end') {
+      flushDeliverableCards(pending, items);
+    }
+    const one: ChatDisplayItem[] = oneEntryItems(entry, results);
     for (let k = 0; k < one.length; k++) {
       items.push(one[k]);
     }
   }
+  // 会话尾部没有 turn/end（仍在运行、或老格式历史）时补在最后，不丢。
+  flushDeliverableCards(pending, items);
   return mergeToolRuns(items);
+}
+
+/**
+ * 把缓冲的交付物换成卡片追加到 items 末尾并清空缓冲。
+ *
+ * 对位 Android 源工程 `ChatPresentation.kt` `LinkedHashMap.takeCards()`。
+ * id 规则 `"${seq}-deliverable-${index}"`：seq 是事件序号（全局唯一），index 是本轮
+ * 冲刷批内的序号 —— 两批卡片绝不撞 key（List 的 key 必须唯一）。
+ */
+function flushDeliverableCards(pending: Map<string, ChatDeliverable>, items: ChatDisplayItem[]): void {
+  const values: ChatDeliverable[] = [];
+  pending.forEach((value: ChatDeliverable): void => {
+    values.push(value);
+  });
+  pending.clear();
+  for (let k = 0; k < values.length; k++) {
+    const file: ChatDeliverable = values[k];
+    items.push(new ChatDisplayItem(`${file.seq}-deliverable-${k}`, file.seq, ChatItemKind.DELIVERABLE,
+      null, '', false, [], [], [], null, 0, file));
+  }
 }
 
 /** 对应 Kotlin 扩展函数 `ChatHistory.todoItems()`。 */
@@ -212,21 +255,9 @@ export function deliverablesOf(history: ChatHistory): ChatDeliverable[] {
     if (event.type !== 'deliverables/presented') {
       continue;
     }
-    const data: JsonMap | null = event.dataMap();
-    if (data === null) {
-      continue;
-    }
-    const files: Object[] = JsonAccess.arr(data, 'files');
+    const files: ChatDeliverable[] = extractDeliverablesFromEvent(event);
     for (let k = 0; k < files.length; k++) {
-      const file: JsonMap | null = JsonAccess.asMap(files[k]);
-      if (file === null) {
-        continue;
-      }
-      const path: string | null = ChatJson.str(file, 'path');
-      if (path === null || isBlank(path)) {
-        continue;
-      }
-      out.set(path, new ChatDeliverable(path, ChatJson.str(file, 'description'), event.seq));
+      out.set(files[k].path, files[k]);
     }
   }
   const list: ChatDeliverable[] = [];
@@ -234,6 +265,36 @@ export function deliverablesOf(history: ChatHistory): ChatDeliverable[] {
     list.push(value);
   });
   return list;
+}
+
+/**
+ * 单条 `deliverables/presented` 事件的文件清单（按出现顺序，不做跨事件去重 ——
+ * 去重语义由调用方决定：[deliverablesOf] 全局保留最后说明，[displayItemsOf] 按轮冲刷）。
+ *
+ * 对位 Android 源工程 `ChatPresentation.kt` `deliverablesOf(entry)`。
+ */
+export function extractDeliverablesFromEvent(event: SessionEvent): ChatDeliverable[] {
+  if (event.type !== 'deliverables/presented') {
+    return [];
+  }
+  const data: JsonMap | null = event.dataMap();
+  if (data === null) {
+    return [];
+  }
+  const files: Object[] = JsonAccess.arr(data, 'files');
+  const out: ChatDeliverable[] = [];
+  for (let k = 0; k < files.length; k++) {
+    const file: JsonMap | null = JsonAccess.asMap(files[k]);
+    if (file === null) {
+      continue;
+    }
+    const path: string | null = ChatJson.str(file, 'path');
+    if (path === null || isBlank(path)) {
+      continue;
+    }
+    out.push(new ChatDeliverable(path, ChatJson.str(file, 'description'), event.seq));
+  }
+  return out;
 }
 
 /**

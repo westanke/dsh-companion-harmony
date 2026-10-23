@@ -27,6 +27,7 @@ import { KeyValueStore } from './HostStore';
 import { SEND_MODE_QUEUE, SEND_MODE_STEER, oppositeSendMode } from './ComposerSendPolicy';
 import { FONT_SCALE_DEFAULT, normalizeFontScale } from './FontScale';
 import { THEME_MODE_SYSTEM, normalizeThemeMode } from './ThemeMode';
+import { THEME_PALETTE_PAPER, normalizePaletteName } from './ThemePalettes';
 
 /** 偏好文件名。刻意与凭据库（`dsh_connection`）分开。 */
 export const SETTINGS_PREFERENCES_NAME: string = 'dsh_settings';
@@ -38,6 +39,7 @@ const KEY_SHOW_CONTEXT: string = 'show_context';
 const KEY_FONT_SCALE: string = 'font_scale';
 const KEY_FONT_FOLLOWS_SYSTEM: string = 'font_follows_system';
 const KEY_THEME_MODE: string = 'theme_mode';
+const KEY_PALETTE: string = 'theme_palette';
 
 export class AppPreferences {
   private store: KeyValueStore;
@@ -154,6 +156,15 @@ export class AppPreferences {
 
   set themeMode(value: string) {
     this.store.putString(KEY_THEME_MODE, normalizeThemeMode(value));
+  }
+
+  /** 配色主题（`paper` / `warm` / `mist` / `ink`），默认 PAPER。 */
+  get paletteName(): string {
+    return normalizePaletteName(this.store.getString(KEY_PALETTE));
+  }
+
+  set paletteName(value: string) {
+    this.store.putString(KEY_PALETTE, normalizePaletteName(value));
   }
 
   /** 布尔读取：键缺失用 `fallback`，其余只认字面量 `'true'`。 */

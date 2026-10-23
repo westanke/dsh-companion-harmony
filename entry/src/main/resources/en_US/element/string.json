@@ -949,6 +949,14 @@
       "value": "Plugin inventory"
     },
     {
+      "name": "plugins_search",
+      "value": "Search plugins"
+    },
+    {
+      "name": "plugins_no_results",
+      "value": "No matching plugins"
+    },
+    {
       "name": "plugins_loaded_stat",
       "value": "Loaded"
     },
@@ -1197,6 +1205,26 @@
       "value": "Save"
     },
     {
+      "name": "saving",
+      "value": "Saving…"
+    },
+    {
+      "name": "server_settings",
+      "value": "Server settings"
+    },
+    {
+      "name": "reset_models",
+      "value": "Reset model list"
+    },
+    {
+      "name": "reset_models_hint",
+      "value": "Restore this provider's default model set"
+    },
+    {
+      "name": "delete_provider",
+      "value": "Delete this provider"
+    },
+    {
       "name": "save_provider",
       "value": "Save provider"
     },
@@ -1255,6 +1283,14 @@
     {
       "name": "server_default",
       "value": "Server default"
+    },
+    {
+      "name": "permission_preset",
+      "value": "Permission level"
+    },
+    {
+      "name": "permission_unspecified",
+      "value": "Unspecified"
     },
     {
       "name": "session_actions",
@@ -1627,6 +1663,30 @@
     {
       "name": "theme_title",
       "value": "Theme"
+    },
+    {
+      "name": "palette_title",
+      "value": "Palette"
+    },
+    {
+      "name": "palette_desc",
+      "value": "Four tone options, orthogonal to light/dark"
+    },
+    {
+      "name": "palette_paper",
+      "value": "Paper"
+    },
+    {
+      "name": "palette_warm",
+      "value": "Warm"
+    },
+    {
+      "name": "palette_mist",
+      "value": "Mist"
+    },
+    {
+      "name": "palette_ink",
+      "value": "Ink"
     },
     {
       "name": "theme_desc",

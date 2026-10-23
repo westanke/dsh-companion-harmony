@@ -1,6 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { HarnessState, OpenDocument } from '../core/HarnessViewModel';
-import { currentMainSection, initHarness, harnessState, harnessVm, requestUnsavedPrompt } from '../ui/AppRuntime';
+import { THEME_PALETTE_PAPER } from '../core/ThemePalettes';
+import { currentMainSection, initHarness, harnessState, harnessVm, requestUnsavedPrompt, themedPageBgColor } from '../ui/AppRuntime';
 import { ConnectScreen } from '../ui/ConnectScreen';
 import { AppShell, MainSection } from '../ui/AppShell';
 
@@ -32,6 +33,11 @@ import { AppShell, MainSection } from '../ui/AppShell';
 @Component
 struct Index {
   @StorageLink('dshRevision') revision: number = 0;
+  /**
+   * 配色名（方案 A 的响应式入口）：根容器底色表达式里直读它，配色切换 →
+   * `AppStorage` 写入 → 本页重绘。见 `AppRuntime.PALETTE_KEY` 的注释。
+   */
+  @StorageLink('dshPaletteName') paletteName: string = THEME_PALETTE_PAPER;
   @State ready: boolean = false;
 
   aboutToAppear(): void {
@@ -82,7 +88,10 @@ struct Index {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor($r('sys.color.ohos_id_color_background'))
+    // 配色页面底色（方案 A）：PAPER 回落系统默认背景，见 AppRuntime.themedPageBgColor。
+    // 依赖入口是上面的 `@StorageLink('dshPaletteName')` —— 属性表达式里直读它。
+    .backgroundColor(themedPageBgColor(this.getUIContext().getHostContext(), this.paletteName)
+      ?? $r('sys.color.ohos_id_color_background'))
   }
 
   /**

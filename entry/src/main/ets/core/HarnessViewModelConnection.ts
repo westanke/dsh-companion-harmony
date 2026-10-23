@@ -87,6 +87,7 @@ import {
   SEND_MODE_QUEUE,
 } from './ComposerSendPolicy';
 import { applyTurnBoundary } from './ChatTruncation';
+import { SettingsSchema } from './SettingsSchema';
 import {
   HarnessState,
   CONFIG_INVALID,
@@ -714,6 +715,10 @@ export class HarnessViewModelConnection extends HarnessViewModelConnect {
     const permissionP: Promise<PermissionCatalog | null> = canReadChat
       ? api.permissionPresets().catch((): PermissionCatalog | null => null)
       : Promise.resolve<PermissionCatalog | null>(null);
+    // 设置命名空间 schema（bridge ≥ 2.6.0）。老 bridge 404/403 吞掉 → null，不画入口。
+    const settingsSchemaP: Promise<SettingsSchema | null> = canReadSettings
+      ? api.settingsNamespaces().catch((): SettingsSchema | null => null)
+      : Promise.resolve<SettingsSchema | null>(null);
 
     const roots: RootView[] = await rootsP;
     const selectedRoot: string | null = roots.length > 0 ? roots[0].id : null;
@@ -727,6 +732,7 @@ export class HarnessViewModelConnection extends HarnessViewModelConnect {
     const pluginInventory: PluginInventory | null = await pluginsP;
     const trash: TrashEntry[] = await trashP;
     const catalog: PermissionCatalog | null = await permissionP;
+    const settingsSchema: SettingsSchema | null = await settingsSchemaP;
     const directory: DirectoryPage | null = await directoryP;
     const st: HarnessState = new HarnessState();
     st.restoring = false;
@@ -741,6 +747,7 @@ export class HarnessViewModelConnection extends HarnessViewModelConnect {
     st.agentPresets = agentPresets;
     st.providerSettings = providerSettings;
     st.pluginInventory = pluginInventory;
+    st.settingsSchema = settingsSchema;
     // `catalog ?? 上一份`：这一次拉取失败（或老 bridge 404）时**保留已有的目录**，
     // 别把上一次连接拿到的好数据擦成空 —— 那样「重连一次权限入口就没了」。
     st.permissionCatalog = catalog !== null ? catalog : this.state.permissionCatalog;

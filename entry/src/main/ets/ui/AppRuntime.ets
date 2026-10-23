@@ -20,12 +20,25 @@
  *   REST 会话仍在；回到前台 `resumeEvents()` 会重新订阅并按需补齐状态。
  */
 
-import { common } from '@kit.AbilityKit';
+import { common, ConfigurationConstant } from '@kit.AbilityKit';
 import { HarnessState, HarnessViewModel } from '../core/HarnessViewModel';
 import { applyAppFontScale, applyAppThemeMode, createHarnessDeps } from '../platform/Platform';
+import { getPalette, normalizePaletteName } from '../core/ThemePalettes';
 
 /** AppStorage 里放 revision 的键名。 */
 export const REVISION_KEY: string = 'dshRevision';
+
+/**
+ * 当前配色名在 `AppStorage` 里的键（`paper` / `warm` / `mist` / `ink`）。
+ *
+ * 为什么不复用 `dshRevision`：配色页面底色（方案 A）的接线点是各容器属性表达式里的
+ * `themedPageBgColor(...)` 调用，而 revision 的读取往往隔在 `st()` / `@Builder` 的
+ * 另一层作用域里，根容器的属性表达式登记不到这条依赖。配色名单独占一个键，
+ * 让组件用 `@StorageLink('dshPaletteName')` 并在属性表达式里**直读**它 ——
+ * 依赖一定登记在「刷底色」的那个组件自己身上。附带好处是只有配色变化才触发这几处
+ * 重绘，比 revision 那个「什么都广播」的键窄得多。
+ */
+export const PALETTE_KEY: string = 'dshPaletteName';
 
 /**
  * 跨分节导航的请求序号（当前只有「打开目录 → 切到文件分节」一例）。
@@ -119,10 +132,12 @@ export function initHarness(context: common.Context): void {
   const vm: HarnessViewModel = new HarnessViewModel(createHarnessDeps(context));
   unsubscribe = vm.subscribe((): void => {
     AppStorage.setOrCreate(REVISION_KEY, vm.revision);
+    AppStorage.setOrCreate(PALETTE_KEY, vm.state.paletteName);
     syncAppearance();
   });
   instance = vm;
   AppStorage.setOrCreate(REVISION_KEY, vm.revision);
+  AppStorage.setOrCreate(PALETTE_KEY, vm.state.paletteName);
   // 冷启动时把「字号倍数 / 主题档位」落到平台上。**必须在 vm 建好之后**：
   // 偏好是在 vm 构造里读进 state 的（`applyPreferences`），在那之前读 state 只会拿到默认值。
   syncAppearance();
@@ -177,6 +192,39 @@ export function harnessVm(): HarnessViewModel | null {
 export function harnessState(): HarnessState | null {
   const vm: HarnessViewModel | null = instance;
   return vm === null ? null : vm.state;
+}
+
+/**
+ * 当前配色下的页面背景色；PAPER（默认）返回 `null` —— 调用方回落系统背景资源。
+ *
+ * ## 为什么配色要管到页面背景
+ *
+ * 手势导航模式下系统**不渲染**导航条底色（真机实测像素恒白，见 PORT-MAP），
+ * 配色只写 `navigationBarColor` 等于什么都没干 —— 用户反馈「配色点了没变化」。
+ * 所以非默认配色把整页底色刷成与导航栏同色（`ThemePalette.pageBg`），让选择真正可见。
+ *
+ * ## 为什么 PAPER 返回 null 而不是一个白 hex
+ *
+ * 默认外观必须与接入前**像素级一致**（ThemePalettes 文件头的纪律）：
+ * 系统背景资源（`ohos_id_color_background`）随深浅色自动走，硬编码一份 hex 反而漂移。
+ *
+ * ## 响应式前提
+ *
+ * 调用组件必须自己持有 `@StorageLink('dshPaletteName')` 并在**本组件 build 作用域的
+ * 属性表达式里直读它**、作为 `paletteName` 参数传进来（不复用 `dshRevision`，
+ * 理由见 `PALETTE_KEY` 的注释）。本函数体内不读任何响应式状态。
+ * 深浅色切换靠页面上其它 `sys.color.*` 资源引用触发重绘，届时本函数重读 colorMode。
+ */
+export function themedPageBgColor(hostContext: common.Context | undefined,
+  paletteName: string): string | null {
+  const name: string = normalizePaletteName(paletteName);
+  let dark: boolean = false;
+  if (hostContext !== undefined) {
+    // COLOR_MODE_DARK = 0，别按直觉记反（PORT-MAP 坑 20）。
+    dark = (hostContext as common.UIAbilityContext).config.colorMode
+      === ConfigurationConstant.ColorMode.COLOR_MODE_DARK;
+  }
+  return getPalette(name, dark).pageBg;
 }
 
 /** 退到后台：只关事件流（连接与已加载数据都保留，回来时是即时的）。 */

@@ -16,6 +16,7 @@ import {
   ChatSession,
   ChatWorkspace,
   CommandDescriptor,
+  CommandExecution,
   CreatedSession,
   DirectoryPage,
   DshApiException,
@@ -25,6 +26,8 @@ import {
   ResolvedPath,
   SessionModels,
 } from './Models';
+import { mergeRefreshedHistory } from './ChatHistoryMerge';
+import { shouldApplyPermission, normalizePermissionId } from './PermissionApply';
 import {
   supportsArchiveListing,
 } from './BridgeCapabilities';
@@ -46,6 +49,7 @@ import {
   OpenDocument,
   SessionFileOpen,
   ApprovalUiState,
+  COMMAND_FAILED,
   MAX_EDIT_BYTES,
   PREVIEW_CHARS,
   PLUGIN_TOO_OLD,
@@ -102,9 +106,10 @@ export class HarnessViewModelSessions extends HarnessViewModelFiles {
       if (id === null) {
         return;
       }
-      const history: ChatHistory = await api.history(id);
+      const fresh: ChatHistory = await api.history(id);
+      const previous: ChatHistory | null = this.state.history;
       this.update((s: HarnessState): void => {
-        s.history = history;
+        s.history = mergeRefreshedHistory(previous, fresh);
       });
       // 顺手把待答问题也拉一次：顶栏刷新正是用户遇到「卡片该出现却没出现」时唯一的自救入口。
       await this.refreshPendingQuestions();
@@ -312,7 +317,8 @@ export class HarnessViewModelSessions extends HarnessViewModelFiles {
     return entry;
   }
 
-  async createSession(workspaceId: string, preset: string | null): Promise<void> {
+  async createSession(workspaceId: string, preset: string | null,
+    permission: string | null = null): Promise<void> {
     await this.withClient(async (api: DshClient): Promise<void> => {
       const created: CreatedSession = await api.createSession(workspaceId,
         preset !== null && isNotBlank(preset) ? preset : null);
@@ -328,6 +334,22 @@ export class HarnessViewModelSessions extends HarnessViewModelFiles {
         s.commands = commands;
         s.approvalState = ApprovalUiState.none();
       });
+      // 建完再切权限档（对位 Android：createSession 接口不带权限参数，
+      // 成功后复用会话内切档通路发一次 /permission）。空/空白不发。
+      if (shouldApplyPermission(permission)) {
+        const presetId: string = normalizePermissionId(permission);
+        const execution: CommandExecution = await api.executeCommand(created.id, `/permission ${presetId}`);
+        if (execution.result.kind === 'error') {
+          throw new DshApiException(409, COMMAND_FAILED,
+            execution.result.text !== null ? execution.result.text : 'Permission change failed.');
+        }
+        const refreshedHistory: ChatHistory = await api.history(created.id);
+        const refreshedCommands: CommandDescriptor[] = await api.sessionCommands(created.id);
+        this.update((s: HarnessState): void => {
+          s.history = refreshedHistory;
+          s.commands = refreshedCommands;
+        });
+      }
     });
   }
 
@@ -386,7 +408,8 @@ export class HarnessViewModelSessions extends HarnessViewModelFiles {
     });
   }
 
-  async createWorkspaceAndSession(rootId: string, path: string, preset: string | null): Promise<void> {
+  async createWorkspaceAndSession(rootId: string, path: string, preset: string | null,
+    permission: string | null = null): Promise<void> {
     await this.withClient(async (api: DshClient): Promise<void> => {
       const workspace: ChatWorkspace = await api.createChatWorkspace(rootId, trimChar(path, '/'));
       const created: CreatedSession = await api.createSession(workspace.id,
@@ -405,6 +428,21 @@ export class HarnessViewModelSessions extends HarnessViewModelFiles {
         s.commands = commands;
         s.approvalState = ApprovalUiState.none();
       });
+      // 建完再切权限档（同 createSession）。
+      if (shouldApplyPermission(permission)) {
+        const presetId: string = normalizePermissionId(permission);
+        const execution: CommandExecution = await api.executeCommand(created.id, `/permission ${presetId}`);
+        if (execution.result.kind === 'error') {
+          throw new DshApiException(409, COMMAND_FAILED,
+            execution.result.text !== null ? execution.result.text : 'Permission change failed.');
+        }
+        const refreshedHistory: ChatHistory = await api.history(created.id);
+        const refreshedCommands: CommandDescriptor[] = await api.sessionCommands(created.id);
+        this.update((s: HarnessState): void => {
+          s.history = refreshedHistory;
+          s.commands = refreshedCommands;
+        });
+      }
     });
   }
 
@@ -508,3 +546,6 @@ export class HarnessViewModelSessions extends HarnessViewModelFiles {
     });
   }
 }
+
+// mergeRefreshedHistory 已搬到独立文件 core/ChatHistoryMerge.ts，
+// 这样 HarnessViewModelBase（继承链更底层）也能引用它而不形成循环依赖。

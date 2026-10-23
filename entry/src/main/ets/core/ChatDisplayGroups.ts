@@ -208,14 +208,43 @@ export function groupChatDisplay(items: ChatDisplayItem[],
  * 任何带 `failure` 的项一律当消息。当前只有 FAILURE 会带这个字段，
  * 但只要谁把它带上了，它就不能被折进过程组 —— 用户找的就是那句「为什么失败了」。
  * `TRUNCATED` 不带 `failure`，但它不在下面的过程白名单里，天生独立（别把它加进去）。
+ *
+ * 2026-10-22 补的一条：ASSISTANT 不再一律当消息 —— **空正文**（trim 后为空白）
+ * 且没有附件的 ASSISTANT 算过程项。真实会话里绝大多数 `assistant/message` 只装
+ * reasoning + tool-call，一个字都没有（某会话实测 46 条里 45 条），把它们当消息
+ * 会把连续的工具调用劈成几十个单条过程组 —— 屏幕上就只剩一排「耗时 … · N 次工具调用」。
  */
 export function isProcessItem(item: ChatDisplayItem): boolean {
   if (item.failure !== null) {
     return false;
   }
-  return item.kind === ChatItemKind.CONTEXT
+  if (item.kind === ChatItemKind.CONTEXT
     || item.kind === ChatItemKind.REASONING
-    || item.kind === ChatItemKind.TOOL;
+    || item.kind === ChatItemKind.TOOL) {
+    return true;
+  }
+  // 空助手消息算**过程**，不是消息 —— 真机实测补的，理由见文件头。
+  if (item.kind === ChatItemKind.ASSISTANT) {
+    return !hasVisibleBody(item);
+  }
+  // USER / FAILURE，以及将来新增的任何 kind：默认消息。
+  return false;
+}
+
+/**
+ * 这一项是否**有可读的东西**：有正文（trim 后非空白），或带了附件。
+ *
+ * 判据只认「读得出来」：空白串、纯换行也算没有 —— 渲染出来就是一条零高度的行，
+ * 却会把过程组劈成两段。
+ *
+ * 对位 Android 源工程 `ChatDisplayGroups.kt` `hasVisibleBody()`。
+ */
+export function hasVisibleBody(item: ChatDisplayItem): boolean {
+  const trimmed: string = item.body.trim();
+  if (trimmed.length > 0) {
+    return true;
+  }
+  return item.attachments.length > 0;
 }
 
 /** 数一遍组内有什么，并把时间夹到最早/最晚。 */

@@ -29,7 +29,7 @@
  */
 
 import {
-  ChatAttachment, ChatDisplayItem, ChatTurnFailure, formatToolDuration, prettyToolArguments,
+  ChatAttachment, ChatDeliverable, ChatDisplayItem, ChatTurnFailure, formatToolDuration, prettyToolArguments,
   ToolCallDetail,
 } from '../core/ChatPresentation';
 import { GenUiDiagnosis, diagnoseGenUi, GenUiSpec, parseGenUi } from '../core/GenUiBlocks';
@@ -603,5 +603,89 @@ export struct ToolCallDetailBlock {
     .width('100%')
     .margin({ top: 6 })
     .alignItems(HorizontalAlign.Start)
+  }
+}
+
+/**
+ * 显式交付物卡片（agent 用 `present` 工具交付的文件）。
+ *
+ * 对齐桌面端：文件图标 + 文件名（取路径最后一段） + agent 写的说明（如果有），
+ * 整卡可点击 → 走 `onLink(path)` → 服务端绝对路径 → `openSessionFileFromLink` →
+ * 打开「本会话的文件」面板（与正文里的文件链接完全同一条通道）。
+ *
+ * 数据来源：`ChatItemBuilders.oneEntryItems` 把 `deliverables/presented` 事件转成
+ * `ChatDisplayItem(kind=DELIVERABLE, deliverable=...)`，这里消费它。
+ *
+ * 样式：半透明边框 + 左边竖线（颜色与活动行区分，但不抢正文风头）。
+ */
+@Component
+export struct DeliverableCard {
+  deliverable: ChatDeliverable = new ChatDeliverable('');
+  onLink: (url: string) => void = (): void => {};
+
+  /** 取路径最后一段作为文件名 —— 完整绝对路径太冗长。 */
+  private fileName(): string {
+    const p: string = this.deliverable.path;
+    const idx: number = p.lastIndexOf('/');
+    return idx >= 0 ? p.substring(idx + 1) : p;
+  }
+
+  build() {
+    Row() {
+      // 左边竖线 —— 让卡片在消息流里能一眼辨认，又不像用户气泡/助手正文那么重。
+      // **禁止 height('100%')**：父 Row 是 wrap-content 高度，百分比高度会按可用约束
+      // （列表视口）解析，把整张卡撑满一屏（真机实测踩过）。竖条高度用
+      // `alignSelf(ItemAlign.Stretch)` 拉伸到 Row 的实际内容高度（ArkUI 的
+      // VerticalAlign 没有 Stretch，只有子项自对齐有）。
+      Column()
+        .width(3)
+        .alignSelf(ItemAlign.Stretch)
+        .backgroundColor($r('sys.color.ohos_id_color_text_secondary'))
+        .opacity(0.4)
+        .margin({ right: 10 })
+
+      Column() {
+        // 文件图标 emoji + 文件名（加粗，一眼可辨）。
+        Row() {
+          Text('📎')
+            .fontSize(14)
+          Text(this.fileName())
+            .fontSize(13)
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('sys.color.ohos_id_color_text_primary'))
+            .layoutWeight(1)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+
+        // agent 写的说明（如果有）。
+        if (this.deliverable.description !== null && this.deliverable.description!.trim().length > 0) {
+          Text(this.deliverable.description!.trim())
+            .fontSize(12)
+            .fontColor($r('sys.color.ohos_id_color_text_secondary'))
+            .width('100%')
+            .maxLines(3)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .margin({ top: 3 })
+        }
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+    }
+    .width('100%')
+    .padding({ left: 10, right: 10, top: 8, bottom: 8 })
+    .backgroundColor($r('sys.color.ohos_id_color_component_normal'))
+    .borderRadius(8)
+    .border({ width: 0.5, color: $r('sys.color.ohos_id_color_text_secondary') })
+    .opacity(0.9)
+    .margin({ top: 6 })
+    .alignItems(VerticalAlign.Center)
+    .onClick((): void => {
+      // 直接把绝对路径当 URL 传给 onLink ——
+      // ChatLinkTarget.classify 会认出来是 SERVER_PATH → openSessionFileFromLink。
+      this.onLink(this.deliverable.path);
+    })
   }
 }

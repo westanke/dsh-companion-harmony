@@ -41,12 +41,12 @@
  */
 
 import {
-  ChatDisplayItem, ChatItemKind, ChatTurnFailure, ToolCallDetail,
+  ChatDeliverable, ChatDisplayItem, ChatItemKind, ChatTurnFailure, ToolCallDetail,
 } from '../core/ChatPresentation';
 import {
   GenUiDiagnosis, diagnoseGenUi, MessageSegment, MessageSegmentKind, splitMessageBody,
 } from '../core/GenUiBlocks';
-import { GenUiDebugLine, GenUiSegment, MessageAttachments, ToolCallDetailBlock,
+import { DeliverableCard, GenUiDebugLine, GenUiSegment, MessageAttachments, ToolCallDetailBlock,
   TruncatedNoticeRow, TurnFailureRow } from './MessageParts';
 import { InlineText } from './InlineText';
 import { MarkdownView } from './MarkdownView';
@@ -499,6 +499,10 @@ export struct ChatMessageView {
       } else if (this.item.kind === ChatItemKind.TRUNCATED) {
         // 黄色警示，不是失败行：已有输出是有效内容，不需要「重试上一轮」。
         TruncatedNoticeRow()
+      } else if (this.item.kind === ChatItemKind.DELIVERABLE) {
+        // agent 用 present 工具显式交付的文件 —— DeliverableCard 走 onLink(path) →
+        // openSessionFileFromLink，与正文里的文件链接同一条通道。
+        DeliverableCard({ deliverable: this.item.deliverable as ChatDeliverable, onLink: this.onLink })
       } else {
         ActivityRow({ item: this.item, onAnswer: this.onAnswer })
       }

@@ -62,6 +62,9 @@ import {
 import {
   normalizeThemeMode,
 } from './ThemeMode';
+import {
+  normalizePaletteName,
+} from './ThemePalettes';
 import { HarnessViewModelSessions } from './HarnessViewModelSessions';
 
 export class HarnessViewModelComposer extends HarnessViewModelSessions {
@@ -395,6 +398,19 @@ export class HarnessViewModelComposer extends HarnessViewModelSessions {
     this.deps.preferences.themeMode = normalized;
     this.update((s: HarnessState): void => {
       s.themeMode = normalized;
+    });
+  }
+
+  /**
+   * 配色主题：`paper` / `warm` / `mist` / `ink`。
+   *
+   * 与深浅模式正交。落盘后 EntryAbility 下次 applyNavBarTheme 就能读到新值。
+   */
+  setPaletteName(name: string): void {
+    const normalized: string = normalizePaletteName(name);
+    this.deps.preferences.paletteName = normalized;
+    this.update((s: HarnessState): void => {
+      s.paletteName = normalized;
     });
   }
 

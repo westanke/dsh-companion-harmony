@@ -50,6 +50,7 @@ import {
 } from './HarnessHelpers';
 import { RequestGate } from './RequestGate';
 import { EventDebouncer, TimerPort } from './EventDebouncer';
+import { mergeRefreshedHistory } from './ChatHistoryMerge';
 
 /** 目录刷新去抖窗口（毫秒）。 */
 export const DIRECTORY_REFRESH_DEBOUNCE_MS: number = 500;
@@ -217,6 +218,9 @@ export class HarnessViewModelBase {
     s.fontScale = this.deps.preferences.fontScale;
     s.fontFollowsSystem = this.deps.preferences.fontFollowsSystem;
     s.themeMode = this.deps.preferences.themeMode;
+    // 漏过这一行：重启后 state.paletteName 停在默认 PAPER，而导航条（EntryAbility 直读
+    // 偏好）已是用户选的配色 —— 设置页选中药丸谎报 PAPER，页面底色也与导航条脱节。
+    s.paletteName = this.deps.preferences.paletteName;
   }
 
   /** 放行连接页，进入 App（幂等）。只由用户的主动动作调用。 */
@@ -343,7 +347,10 @@ export class HarnessViewModelBase {
                   && s.liveChat.turn === finalizeTarget.turn
                   && s.liveChat.step === finalizeTarget.step;
               }
-              s.history = got;
+              // 用 mergeRefreshedHistory 而不是直接替换 —— chatRefreshLoop 被十余处
+              // 实时事件触发（committed / deliverables.presented / snapshot 落后等），
+              // 用户加载过两页更早消息后，下一条 committed 不能把它们抹掉。
+              s.history = mergeRefreshedHistory(s.history, got);
               if (clearLive) {
                 s.liveChat = null;
               }

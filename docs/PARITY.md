@@ -42,6 +42,7 @@
 | **正文已知文件名链接化（已接入渲染路径）** | 会话文件清单 | `core/PathLinks.ts` + `core/InlineSegments.ts` + `ui/InlineText.ets` | ✅ | 源 `a344e3f`（v2.2.44）。`linkifyKnownFiles()`：唯一文件名才替换、不碰已有 Markdown 链接、只替换第一次；`inlineSegments()` 把 `[文字](目标)` 切成「普通文字 / 链接」分段，`InlineText`（`Text` + 逐段 `Span`）渲染；点击分流在 `ui/ChatDetail.ets`（服务端路径开文件面板并定位 / `http(s)` 外部浏览器 / 相对路径拼 cwd 再当绝对路径 / 其余提示不支持）。候选取自 `sessionFileList`（与「本会话的文件」面板**同一出处**）并跟随投影缓存。14 + 13 + 6 用例。链接目标末尾的位置后缀（`:12` / `:12-34` / `:12:5` / `#L12` / `#L12-L34`）在分类与拼 cwd 前剥掉（`stripLocationSuffix()`，2026-10-20 真机反馈修复）。见坑 46 / 坑 59 |
 | **Markdown autolink 尖括号剥壳** | 无 | `core/ChatLinkTarget.ts` | ✅ | 源 `a344e3f`。`classify()` 先剥 `</abs/path>` 再分类，避免「翻倍路径」。4 用例 |
 | **访问权限档位 Pill（顶栏胶囊）** | `GET /chat/permission-presets` + `POST` 命令 | `core/ModelsConfig.ts` + `core/DshClient.ts` + `ui/ChatHeader.ets` | ✅ | 源 `a96f5e7` / `a344e3f`（v2.2.43–44）。投影 `permissions` **只给 `currentValue`**，候选必须走独立目录接口（bridge ≥ 2.4.2；**老 bridge 404 须容忍**，见坑 47）；胶囊贴在顶栏「已连接 / 已断开」之后、**宽度自适应不独占一行**（源 `ChatHeader.kt` 同款位置），与 ⋯ 菜单权限段**同源**（`selectPermissionPreset` → `executeCommand(id, "/permission <preset>")`），`danger-full-access` 走二次确认；候选取不到时仍渲染**不可点**的档位标签。档位名走 `currentValue` → `preset` → `sandbox` 降级 |
+| **新建会话即选权限档位** | 复用 `/permission` 命令通路 | `core/PermissionApply.ts` + `core/HarnessViewModelSessions.ts` + `ui/SessionSheets.ets` | 🟡 | 2026-10-23 新增（横向互鉴 H2）。照安卓「建完再切」纪律：`createSession`/`createWorkspaceAndSession` 加 `permission` 参数，**不改创建请求**，成功后若选了非空档复用 `selectPermissionPreset` 通路发一次 `/permission <id>`；空/空白不发（`shouldApplyPermission` 纯函数判定）。新建面板在 Agent 预设外加选择器，候选项来自 `state.permissionCatalog`；**目录为 null（老桥无能力）时不渲染**。待上机确认建完档已生效 + 老桥无选择器 |
 | 审批（含 `full-access` 二次确认） | `POST /approvals` | `ui/ChatDetail.ets` | ✅ | 由 `AlertDialog` 改为底部面板 + 勾选闸门 |
 | AI 追问（ask） | 消息体 | `ui/ChatDetail.ets` | ✅ | 两道闸 |
 | 上下文注入来源显示 | 消息体 | `ChatPresentation` | ✅ | 受设置 `showContext` 控制 |
@@ -96,6 +97,7 @@
 | **应用内字号缩放（0.8–1.5）** | 无（源：`AppPreferences.kt`） | `core/FontScale.ts` + `platform/Platform.ets` | ✅ | 2026-10-17 新增并**真机确认**（步进并落盘，`hdc` 直读偏好核对 `font_scale`）。**默认跟随系统**——擅自把用户调大的字号缩回去是更坏的行为 |
 | **构建水印** | 无（源：`BuildConfig.BUILD_COMMIT`） | `core/BuildStamp.ets` | ✅ | 2026-10-17 新增并**真机确认**（设置页版本行副标题渲染提交号）。便于对着截图定位代码 |
 | **主题三档（跟随系统 / 浅色 / 深色）** | 无（源：`data/InterfaceStyle`） | `core/ThemeMode.ts` + `ui/SettingsScreen.ets` + `platform/Platform.ets` | ✅ | 2026-10-17 新增（收口）并**真机确认**（点「深色」即时整页转深、重启仍 `dark`）。**存的是线上取值而不是枚举序数**（升级安全：源工程曾按 ordinal 存，升级后深浅色互换才改成存名字）；认不出的取值一律回落「跟随系统」；取值在 `ThemeMode` / 偏好 / 平台**三处都归一化** —— 原样传给 `setColorMode` 会在**点击回调**里抛参数错误（表现为「点一下就闪退」） |
+| **多配色主题四套（PAPER / WARM / MIST / INK）** | 无（源：`ui/theme/ThemePalettes.kt`） | `core/ThemePalettes.ts` + `entryability/EntryAbility.ets` + `ui/SettingsScreen.ets` | 🟡 | 2026-10-23 新增（横向互鉴 H1）。四套命名配色 × 明暗两份，与明暗模式正交；默认 PAPER 浅色导航栏与旧配色像素级一致（零漂移）；未知 id 回落 PAPER。设置页「外观」区四档选择，偏好持久化 `theme_palette`。**WCAG 2.1 对比度**：`contrastRatio` 纯函数 + 四套 × 明暗导航栏色对断言 ≥ 4.5:1，随 `npm test` 跑。当前色板只覆盖导航栏，其余系统色由鸿蒙深浅模式自动控制。待上机确认切换即时生效 + 重启保持 |
 | `useWebChat` | 无 | 设置页 | 🔵 | **保留开关 + 页面显式说明**：本工程聊天页是 ArkUI 原生，无内置网页版，拨它看不出变化。刻意不隐藏 |
 
 ## 5. 平台与安全

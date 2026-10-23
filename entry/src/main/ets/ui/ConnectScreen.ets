@@ -22,7 +22,8 @@ import { i18n } from '@kit.LocalizationKit';
 import { deviceInfo } from '@kit.BasicServicesKit';
 import { Endpoint, EndpointProbe, Host } from '../core/ConnectionModels';
 import { HarnessState, HarnessViewModel } from '../core/HarnessViewModel';
-import { harnessState, harnessVm } from './AppRuntime';
+import { harnessState, harnessVm, themedPageBgColor } from './AppRuntime';
+import { THEME_PALETTE_PAPER } from '../core/ThemePalettes';
 import { BrandMark, WarningBanner, StatusLabel, endpointKindLabel } from './Components';
 import { HostCardState, hostCardState, shouldReconnectOnTap } from '../core/ConnectionLiveness';
 import { localErrorText } from './ErrorText';
@@ -35,6 +36,8 @@ export struct ConnectScreen {
 
   /** 订阅 vm 的 revision：任何 `update()` 都会让本页重新 build。 */
   @StorageLink('dshRevision') @Watch('onVmChanged') revision: number = 0;
+  /** 配色名（方案 A）：底色表达式里直读，见 `AppRuntime.PALETTE_KEY` 的注释。 */
+  @StorageLink('dshPaletteName') paletteName: string = THEME_PALETTE_PAPER;
 
   @State endpoint: string = '';
   @State code: string = '';
@@ -223,7 +226,8 @@ export struct ConnectScreen {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor($r('sys.color.ohos_id_color_background'))
+    .backgroundColor(themedPageBgColor(this.getUIContext().getHostContext(), this.paletteName)
+      ?? $r('sys.color.ohos_id_color_background'))
   }
 
   // ————————————————— 已保存的电脑 —————————————————
@@ -390,7 +394,8 @@ export struct ConnectScreen {
     .borderColor(this.cardState(host) === HostCardState.CONNECTED
       ? $r('sys.color.ohos_id_color_text_primary_activated')
       : $r('sys.color.ohos_id_color_text_secondary'))
-    .backgroundColor($r('sys.color.ohos_id_color_background'))
+    .backgroundColor(themedPageBgColor(this.getUIContext().getHostContext(), this.paletteName)
+      ?? $r('sys.color.ohos_id_color_background'))
     .alignItems(HorizontalAlign.Start)
   }
 
@@ -633,7 +638,8 @@ export struct ConnectScreen {
     .borderRadius(10)
     .borderWidth(1)
     .borderColor($r('sys.color.ohos_id_color_text_secondary'))
-    .backgroundColor($r('sys.color.ohos_id_color_background'))
+    .backgroundColor(themedPageBgColor(this.getUIContext().getHostContext(), this.paletteName)
+      ?? $r('sys.color.ohos_id_color_background'))
     .alignItems(VerticalAlign.Center)
     .onClick((): void => {
       onToggle();
@@ -720,7 +726,8 @@ export struct ConnectScreen {
         .borderRadius(10)
         .borderWidth(1)
         .borderColor($r('sys.color.ohos_id_color_text_secondary'))
-        .backgroundColor($r('sys.color.ohos_id_color_background'))
+        .backgroundColor(themedPageBgColor(this.getUIContext().getHostContext(), this.paletteName)
+      ?? $r('sys.color.ohos_id_color_background'))
       }
     }
     .width('100%')
@@ -862,7 +869,8 @@ export struct ConnectScreen {
         .borderRadius(10)
         .borderWidth(1)
         .borderColor($r('sys.color.ohos_id_color_text_secondary'))
-        .backgroundColor($r('sys.color.ohos_id_color_background'))
+        .backgroundColor(themedPageBgColor(this.getUIContext().getHostContext(), this.paletteName)
+      ?? $r('sys.color.ohos_id_color_background'))
       }
     }
     .width('100%')

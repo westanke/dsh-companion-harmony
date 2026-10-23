@@ -348,6 +348,8 @@ export struct PluginsScreen {
   private emptyInventory: PluginInventory = new PluginInventory();
   /** 「进来且清单为空」只自动补拉一次（对位源工程 `LaunchedEffect(canRead, inventory)` 的语义）。 */
   private requestedOnce: boolean = false;
+  /** 搜索关键字（P2-A：插件页搜索）。空串表示不过滤。 */
+  @State query: string = '';
 
   aboutToAppear(): void {
     this.refreshIfNeeded();
@@ -386,6 +388,29 @@ export struct PluginsScreen {
   /** 清单的非空取值：`hasInventory()` 为假时给空对象（见字段注释）。 */
   private inv(): PluginInventory {
     return this.st().pluginInventory ?? this.emptyInventory;
+  }
+
+  /**
+   * 搜索过滤（P2-A）。
+   *
+   * 匹配名称 / 描述（大小写不敏感）。空串返回全量 —— 与源工程 `filter` 行为一致。
+   * 这里每次 build 都重算（items 数量级是几十，开销可忽略），不引入额外 @State 缓存。
+   */
+  private filteredItems(): PluginEntry[] {
+    const q: string = this.query.trim().toLowerCase();
+    if (q.length === 0) {
+      return this.inv().items;
+    }
+    const result: PluginEntry[] = [];
+    for (let i: number = 0; i < this.inv().items.length; i++) {
+      const entry: PluginEntry = this.inv().items[i];
+      const name: string = entry.name.toLowerCase();
+      const desc: string = (entry.description ?? '').toLowerCase();
+      if (name.includes(q) || desc.includes(q)) {
+        result.push(entry);
+      }
+    }
+    return result;
   }
 
   /**
@@ -705,6 +730,19 @@ export struct PluginsScreen {
 
       Column().height(22)
 
+      // P2-A：搜索框。输入即过滤名称/描述，无结果时给一句人话。
+      TextInput({ placeholder: $r('app.string.plugins_search'), text: this.query })
+        .width('100%')
+        .height(44)
+        .borderRadius(22)
+        .backgroundColor($r('sys.color.ohos_id_color_sub_background'))
+        .padding({ left: 16, right: 16 })
+        .onChange((value: string): void => {
+          this.query = value;
+        })
+
+      Column().height(14)
+
       Text($r('app.string.plugins_list_title'))
         .fontSize(13)
         .fontWeight(FontWeight.Medium)
@@ -714,14 +752,16 @@ export struct PluginsScreen {
         .width('100%')
 
       Column() {
-        if (this.inv().items.length === 0) {
-          Text($r('app.string.plugins_empty'))
+        if (this.filteredItems().length === 0) {
+          Text(this.query.trim().length > 0
+            ? $r('app.string.plugins_no_results')
+            : $r('app.string.plugins_empty'))
             .fontSize(13)
             .fontColor($r('sys.color.ohos_id_color_text_secondary'))
             .padding(16)
             .width('100%')
         } else {
-          ForEach(this.inv().items, (entry: PluginEntry, index: number) => {
+          ForEach(this.filteredItems(), (entry: PluginEntry, index: number) => {
             if (index > 0) {
               Divider().color($r('sys.color.ohos_id_color_component_normal'))
             }

@@ -51,12 +51,14 @@ import {
 import {
   SEND_MODE_QUEUE,
 } from './ComposerSendPolicy';
+import { SettingsSchema } from './SettingsSchema';
 import {
   FONT_SCALE_DEFAULT,
 } from './FontScale';
 import {
   THEME_MODE_SYSTEM,
 } from './ThemeMode';
+import { THEME_PALETTE_PAPER } from './ThemePalettes';
 
 /** 文本编辑的内存闸：与 Kotlin `MAX_EDIT_BYTES` 一致（2 MiB）。 */
 export const MAX_EDIT_BYTES: number = 2 * 1024 * 1024;
@@ -368,6 +370,12 @@ export class HarnessState {
    */
   permissionCatalog: PermissionCatalog | null = null;
   providerSettings: ProviderSettings | null = null;
+  /**
+   * 设置命名空间 schema（bridge ≥ 2.6.0 的 `GET /settings/namespaces`）。
+   * null = 还没拉、或服务端没有这条路由（老 bridge 404）、或解析失败。
+   * 三层降级：数据层静默、状态层 null 不画入口、手动刷新 404/403 静默但 503 照报。
+   */
+  settingsSchema: SettingsSchema | null = null;
   /** 插件清单；null 表示尚未读取（未连接、无 settings.read 权限或读取失败）。 */
   pluginInventory: PluginInventory | null = null;
   discoveredModels: ProviderModel[] = [];
@@ -445,6 +453,12 @@ export class HarnessState {
   /** 主题档位：`system` / `light` / `dark`，默认跟随系统。 */
   themeMode: string = THEME_MODE_SYSTEM;
   /**
+   * 配色主题：`paper` / `warm` / `mist` / `ink`，默认 PAPER（与旧配色像素级一致）。
+   *
+   * 与 themeMode（深浅）正交，两维独立。存 name 不存 ordinal（升级安全，与 ThemeMode 同一纪律）。
+   */
+  paletteName: string = THEME_PALETTE_PAPER;
+  /**
    * 发送中的输入框原文；发送成功后清空，失败时保留以便还回输入框。
    *
    * 为什么需要它：输入框是本地 UI 状态，发请求在异步里，两者对不上时
@@ -493,6 +507,7 @@ export class HarnessState {
     this.commands = other.commands;
     this.permissionCatalog = other.permissionCatalog;
     this.providerSettings = other.providerSettings;
+    this.settingsSchema = other.settingsSchema;
     this.pluginInventory = other.pluginInventory;
     this.discoveredModels = other.discoveredModels;
     this.selectedSessionId = other.selectedSessionId;
@@ -522,6 +537,7 @@ export class HarnessState {
     this.fontScale = other.fontScale;
     this.fontFollowsSystem = other.fontFollowsSystem;
     this.themeMode = other.themeMode;
+    this.paletteName = other.paletteName;
     this.pendingText = other.pendingText;
     this.attachmentImages = other.attachmentImages;
     this.attachmentFailures = other.attachmentFailures;

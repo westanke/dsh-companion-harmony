@@ -63,7 +63,7 @@
 - **兼容**：HarmonyOS 6.0 及以上（`compatibleSdkVersion` = 5.1.0(18)）
 - **设备类型**：phone / tablet / 2in1
 - **插件基线**：`dsh-remote-bridge` **≥ 2.0.4**（旧名 `dsh-workspace`）
-- **最近验证**：`826 用例全绿`（`cd test && npm test`，52 个用例文件）+ `BUILD SUCCESSFUL`
+- **最近验证**：`856 用例全绿`（`cd test && npm test`，55 个用例文件）+ `BUILD SUCCESSFUL`
 - **真机**：ICL-AL10（HarmonyOS 7.0.0.109）已装 **1.0.3 调试签名包**（同调试签名
   **覆盖安装**，`wangke-PC` 配对数据**保住**——局域网 / 虚拟网两地址俱在）。
   **2026-10-20 又装 `13dbdea` 调试签名包复验本轮改动**：剪贴板闪退修复**有效**、
@@ -248,10 +248,32 @@
   2. ~~测试机设备侧验证~~ **已完成**（2026-10-20，`13dbdea` 调试签名包）：粘贴按钮**不闪退**已验、
      正文文件名**点得开**已验、顶栏权限胶囊**渲染与候选**已验、**切换链路**服务端双证已验
      （胶囊弹窗行点击受注入工具限制未单独触发，见 TESTING）；
-  3. 出上架包（先签 hap → 组装 `.app` → 里外双签 → `verify-app` 双层验）与真机调试包；
-  4. 回填体积与 SHA-256 → 上传 `.app` 到 AGC，并按上「AGC 侧待办」补材料；
-  5. **真机逐项复验本轮四项**（截断提示 / 连接页三态 / 未保存改动确认 / 带行号链接）——
-     设备接入后装 `…-1.0.3-release-debugsigned.hap` 上机；**未验前不写成「真机通过」**。
+  3. ~~出上架包~~ **已完成**：`assembleApp -p buildMode=release` → 里外双签 → 双层
+     `verify-app` 均 `Verify success`（三产物校验值见上「产物校验」）；
+  4. ~~回填体积与 SHA-256~~ **已完成**（`2e18b67`）；**待你**：上传 `.app` 到 AGC 并按
+     「AGC 侧待办」补材料（清单见 `../1.0.3-AGC上架操作清单.md`）；
+  5. **真机逐项复验本轮四项** —— **状态：阻塞在工具侧，改由用户手动验证**。
+     设备已确认连上并装好：目标 `3AX0225103005398`，
+     `bm dump -n com.dsh.westanke` 报 `versionCode 1000003` / `versionName 1.0.3` /
+     `appProvisionType debug`，应用进程在跑（`pid 50695`）、`aa start` 与
+     `snapshot_display` 均可用（已抓到 1080×2440 截图）。**但随后命令执行通道失效** ——
+     连 `echo` 都返回 `transport exception: entity not found (os error 2)`，
+     重启 hdc、换 `code_mode` 通道同样失败，属**执行器的 IPC 通道故障**，
+     不是设备或 hdc 的问题。因此**无法用 `uitest uiInput` 注入点击做逐项取证**。
+     四项的手动验证步骤见下；**在拿到用户回执前，本文档不写「真机通过」**。
+     > 补充：本次截图中已顺带看到 **AI 标识逐条上标**与**会话级「内容由 AI 生成」底部状态条**
+     > 同时存在（文档查看页底部），与 1.0.3 的设计一致 —— 但这是**旁证**，不替代逐项验证。
+
+**本轮四项的手动验证清单**（装的是 `…-1.0.3-release-debugsigned.hap`）：
+
+| # | 项 | 操作 | 通过判据 |
+|---|---|---|---|
+| 1 | 截断提示 | 发一句要求长输出的指令（如「写一篇 3000 字的文章」），或把模型 max-tokens 调小 | 输出结束后出现**黄色**提示「已达到输出 token 上限 / 回答被截断…」，**红色失败框不出现**，已有输出保留；发「继续」后提示消失 |
+| 2 | 连接页三态 | 断开网络（或关掉服务端）→ 切后台再回前台 | 主机卡片变**红色「已断开」**、按钮文案变「重新连接」；恢复网络后点它可连上 |
+| 3 | 未保存改动确认 | 打开任一文本文件 → 改一个字 → 点顶栏 `←`（再用系统返回键试一次） | 两种返回都弹确认，三个出口「保存 / 关闭 / 丢弃改动」齐备；选保存后回目录，再打开内容已更新；**保存键在脏状态时变强调色** |
+| 4 | 带行号链接 | 让模型引用一个文档并带位置（如「把 `docs/STATUS.md:101` 打开」），点蓝色链接 | 文件正常打开（此前报「不在授权根内，或不是普通文件」）；`http://host:8080/a` 这类带端口的网址不受影响 |
+
+> 任一项不符合，把现象（最好带截图）发我，我按坑 58–61 的落点去查。
 
 ---
 
@@ -373,3 +395,78 @@
 理由见 `docs/TECH-DEBT.md`；②`@Prop` 审计中**拿不到真机时序证据**的几处分支内动态成员
 （`DEBT-004`，待逐处造时序取证）。
 > 源工程里的「上下文用量环」**有意不做**（见 CHANGELOG 里的说明）。
+
+---
+
+## 2026-10-23 横向互鉴（H1 多配色 / H2 新建选权限档）+ v2.2.47–v2.2.52 增量
+
+**阶段**：v2.2.47–v2.2.52 七项开发项 + 横向互鉴两项均已落盘，**948 用例全绿**（含架构守卫 / strings-parity / ui-wiring-guard），待真机验证与发版。
+
+**已完成（编译 + 单测通过，未上机）**：
+
+- **P0-B 刷新抹旧 + 加载更早跳位**：`core/ChatHistoryMerge.ts` 按 seq 窗口合并；`ChatDetail.ets` 视口锚定（`pendingAnchorSeq` + `scrollToIndex` 恢复）。
+- **P1-A 会话内联交付物卡片**：`deliverables/presented` → `ChatDisplayItem(kind=DELIVERABLE)`；`MessageParts.ets` `DeliverableCard`。
+- **P1-B 配色主题四套**：`core/ThemePalettes.ts`（PAPER/WARM/MIST/INK × 明暗，默认 PAPER 零漂移）+ EntryAbility 导航栏消费 + 设置页四档 + 持久化。
+- **P2-B schema 驱动设置命名空间（纯逻辑层）**：`core/SettingsSchema.ts` 五种控件解析 + `buildSettingsOps`（密钥位永不进 ops）+ 404/403 静默。
+- **P3 应用内检查更新（平台受限版）**：`core/AppUpdate.ts`（zh*→Gitee / 其他→GitHub + 语义化版本比较）。
+- **H1 多配色补齐**：WCAG 2.1 对比度纯函数（`parseHexColor`/`relativeLuminance`/`contrastRatio`）+ 四套 × 明暗导航栏色对 ≥ 4.5:1 断言；散落内联 hex 收口到 `ThemePalettes.OVERLAY_MASK_*`，全工程无硬编码 `Color('#...')`。
+- **H2 新建会话即选权限档**：`core/PermissionApply.ts` 纯函数判定 + `createSession`/`createWorkspaceAndSession` 加 permission 参数（建完再切，不改创建请求）+ 新建面板权限档选择器（老桥无目录时不渲染）。
+
+**待上机**：P0-B 视口锚定、P1-A 卡片点击、P1-B 主题切换导航栏、H1 配色切换即时生效 + 重启保持、H2 建完档已生效 + 老桥无选择器。
+
+**待办**：①P2-A 模型/插件设置页重做（体量大，依赖 bridge ≥ 2.5.0 新端点）；②P2-B UI 层接 DshClient 新端点；③拆超预算文件（`ChatDetail.ets` 1430 / `SettingsScreen.ets` 979）。
+
+---
+
+## 2026-10-23 P2-A / P2-B / 拆分清账 + 真机验证
+
+**阶段**：三项全部落盘并**上真机验证**（包 `dist/p2-verify2-debugsigned.hap`，设备 `3AX0225103005398`，
+bridge 2.5.2）。948 用例全绿（构建 + 单测 + 架构守卫）。逐条证据见 `docs/TESTING.md`
+「设备侧验证（P2-A / P2-B / 拆分回归，2026-10-23）」与 `docs/screenshots/p2-verify/p2b-*.jpeg`。
+
+**已完成并上机通过**：
+
+- **P2-A 模型/插件设置页重做**：插件搜索（14 → 1，无结果文案）✅；模型编辑器「发现模型」（请求真实到达
+  bridge 并回显服务端错误）✅；「重置模型列表」入口 ✅；「删除此供应商」（仅 removable 自定义供应商）
+  ✅，服务端审计 `settings.provider.remove` 闭合。
+- **P2-B schema 设置 UI 层**：`SettingsSchemaGroup` 接入设置页；bridge 2.5.2 无
+  `settings-namespaces-v1`，真机上该区**静默不画**（设计内降级）✅。
+- **拆超预算文件**：`SettingsScreen` 979 → 763（`SettingsGroups.ets`）、`ChatDetail` 1430 → 1290
+  （`ChatDetailTodo.ets` / `ChatDetailOverlays.ets`）；真机上外观组动态字号、步进器、聊天详情渲染均正常 ✅。
+  `ModelsScreen` 939 行（超预算 39 行）**已按台账登记**，待拆 `ModelsProviderEditors.ets`。
+
+**本轮修正（重要）**：上一稿把能力位写成不存在的 `settings-metadata-v1`，导致三个按钮在真机上被
+**误判隐藏**；已改为 bridge 2.5.2 `BRIDGE_CAPABILITIES` 中真实存在的 `provider-settings-v1`
+（重置/删除）与 `model-catalog-v1`（发现）。同时确认 bridge 2.5.2 **没有** `reset-models` 路由，
+「重置模型列表」改走 `PATCH {"models": null}`（服务端翻成 `unset models` 回落继承）。
+
+**遗留 / 观察项**：
+
+1. `ModelsScreen.ets` 939 行仍超预算（已登记，待拆）。
+2. 「删除失败时界面无错误提示」——真机删除遇服务端瞬时断连时只表现为列表未刷新；本轮未修。
+3. 验证期间一次注入点击误删了自定义供应商 `arkcli-coding-plan`，配置块已从旧 profile 备份补回
+   `profiles/web/cordis.patch.yml`；**需重启 DSH / bridge 重新加载**，凭据未受影响。
+4. `TodoPanel` / `ImageViewer` / `TrajectoryCover` 三个浮层本轮未造出现场（原样搬运，逻辑未改）。
+
+## 2026-10-23 方案 A 落地：配色免重启即时生效 + 两个同场 bug 清账
+
+**阶段**：真机三反馈的最后一条「配色点了没变化」闭环。包 `dist/p3-themeA3-debugsigned.hap`，
+设备 `3AX0225103005398`。950 用例全绿。逐条证据见 `docs/TESTING.md` 真机验收记录 2026-10-23 三行。
+
+**根因与修法**（详见 CHANGELOG 未发布段与 PORT-MAP 坑 65/66）：
+
+1. 手势导航模式下系统不渲染导航条底色 → 非默认配色把页面底色刷成同色（`ThemePalette.pageBg`），
+   PAPER 保持 `null` 回落系统背景（默认外观零漂移）。
+2. 大容器底色首漆后不重漆（「重算发生了、值对了、漆没变」）→ 配色名单独占
+   `AppStorage` 键 `dshPaletteName`，各容器 `@StorageLink` 直读并传入
+   `themedPageBgColor(hostContext, paletteName)`。
+3. 顺带修复：`applyPreferences` 漏 `s.paletteName`（重启后设置页选中药丸谎报）；
+   `AppShell.lastScopesKey` 未在 `aboutToAppear` 初始化（首次无关 update 把用户弹回会话页）。
+
+**真机四色逐项通过**：暖米 `(245,232,241)` / 青灰 `(233,243,245)` / 墨黑白 / 纸白回落，
+设置页与会话页均命中，免重启。
+
+**设备类型显示**：bridge 侧问题（鸿蒙设备被标 Android），按用户指示**只报告不改桥** ——
+清单已交用户转桥维护方；App 侧仅做了数据库设备名修正（`HarmonyOS · ICL-AL10`，已上机确认）。
+
+**遗留**：`ModelsScreen.ets` 超预算拆分仍登记在册。

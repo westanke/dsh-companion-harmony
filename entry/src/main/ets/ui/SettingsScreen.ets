@@ -61,11 +61,19 @@ import {
   effectiveFontScale, formatFontScale, normalizeFontScale,
 } from '../core/FontScale';
 import { THEME_MODE_DARK, THEME_MODE_LIGHT, THEME_MODE_SYSTEM } from '../core/ThemeMode';
+import { THEME_PALETTE_INK, THEME_PALETTE_MIST, THEME_PALETTE_PAPER, THEME_PALETTE_WARM } from '../core/ThemePalettes';
+import { UpdateChannel, channelForLanguage, releasePageUrl } from '../core/AppUpdate';
+import { systemLanguageTag } from '../platform/Platform';
+import { openExternalUrl } from '../platform/ExternalOpen';
+import { applyNavBarPalette } from '../platform/NavBar';
 import { BUILD_COMMIT } from '../core/BuildStamp';
 import { missingRequiredCapabilities } from '../core/BridgeCapabilities';
 import { harnessState, harnessVm } from './AppRuntime';
 import { endpointKindLabel, StatusLabel, WarningBanner } from './Components';
 import { platformSelfCheckText } from '../platform/Platform';
+import {
+  SettingRow, SwitchRow, ChoicePill, SettingsHeading, AppearanceGroup, SettingsSchemaGroup,
+} from './SettingsGroups';
 
 /** 内容最大宽度（对位源工程 `widthIn(max = 720.dp)`）。 */
 const CONTENT_MAX_WIDTH: number = 720;
@@ -98,180 +106,6 @@ function scopeLabel(scope: string): ResourceStr {
     return $r('app.string.scope_settings_write');
   }
   return scope;
-}
-
-/** 小节标题（源工程 `SettingsHeading`）。 */
-@Builder
-function SettingsHeading(title: ResourceStr) {
-  Text(title)
-    .fontSize(13)
-    .fontColor($r('sys.color.ohos_id_color_text_secondary'))
-    .width('100%')
-    .margin({ bottom: 8 })
-}
-
-/**
- * 一行「图标 + 标题 + 副标题 +（可选）尾部内容」（源工程 `SettingRow`）。
- *
- * `trailing` 是 `@BuilderParam`：调用方用**尾随 lambda** 决定尾部画什么
- * （状态标签 / 什么都没有）。刻意写成 `@Component` 而不是全局 `@Builder` ——
- * 全局 `@Builder` 不接受尾随 lambda 形式的子内容（会报
- * `'trailing()' does not meet UI component syntax`），`@BuilderParam` 才吃这一套。
- */
-@Component
-struct SettingRow {
-  glyph: string = '';
-
-  /** 标题 / 副标题里有**动态值**（主机显示名、当前地址、设备名与 ID、版本号），故用 `@Prop`。 */
-  @Prop title: ResourceStr = '';
-  @Prop subtitle: string = '';
-  /** 默认什么都不画：多数行没有尾部内容（作者、版本那两行就是）。 */
-  @BuilderParam trailing: () => void = this.noTrailing;
-
-  @Builder
-  noTrailing() {
-  }
-
-  build() {
-    Row() {
-      Text(this.glyph)
-        .fontSize(19)
-        .width(26)
-        .textAlign(TextAlign.Center)
-        .margin({ right: 10 })
-      Column() {
-        Text(this.title)
-          .fontSize(15)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .width('100%')
-        if (this.subtitle.length > 0) {
-          Text(this.subtitle)
-            .fontSize(12)
-            .fontColor($r('sys.color.ohos_id_color_text_secondary'))
-            .maxLines(2)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .width('100%')
-        }
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
-
-      this.trailing()
-    }
-    .width('100%')
-    .padding({ top: 12, bottom: 12 })
-    .alignItems(VerticalAlign.Center)
-  }
-}
-
-/**
- * 一行「标题 + 说明 + 开关」。
- *
- * 抽成组件是为了**间距统一**（源工程注释里记过：此前三个开关各写各的 Row，
- * 一个 `padding(bottom=4)` 一个 `padding(vertical=8)`，页面上就是「中间那个开关上下各多出一截」，
- * 看着像没对齐的残次品）。现在三处共用这一个，间距只有一处定义。
- */
-@Component
-struct SwitchRow {
-  /**
-   * 标题 / 说明**必须**是 `@Prop`。
-   *
-   * `checked` 当年改对了，标题与说明却漏了 —— 于是真机出现「步进器已是 `1.3×`、
-   * 同一行说明文字仍写『应用字号 1.2×』」：同一帧里两个控件互相打脸。
-   * `title` / `description` 都是下行数据，`description` 更是**动态值**
-   * （`fontScaleDesc()` 随字号档变化），因此同 `SettingRow.title` 的处理一律 `@Prop`。
-   *
-   * 机制与坑 21 / 24 / 27 同源：父组件重绘时 ArkUI 只回写**带装饰器**的成员
-   * （编译器生成的 `updateStateVars(params)` 参数只由 `@Prop` 收集），
-   * 普通成员会一直停在首帧值。见 PORT-MAP 坑 40。
-   */
-  @Prop title: ResourceStr = '';
-  @Prop description: ResourceStr = '';
-
-  /**
-   * 开关的亮灭必须由 `@Prop` 送进来。
-   *
-   * 判据 2 说的是「读 `state` 才能随 `revision` 重绘」——但那保证的是**父组件**取到新值；
-   * 父组件重绘时 ArkUI 只回写带装饰器的成员（`updateStateVars`），普通成员会一直停在首帧值。
-   * 与坑 24 同一机制，见 PORT-MAP 坑 27。
-   */
-  @Prop checked: boolean = false;
-
-  /** 函数成员**不能**加 `@Prop`（会连闭包一起深拷贝坏掉），保持普通成员。 */
-  onCheckedChange: (value: boolean) => void = (): void => {};
-
-  build() {
-    Row() {
-      Column() {
-        Text(this.title)
-          .fontSize(15)
-          .width('100%')
-        Text(this.description)
-          .fontSize(12)
-          .fontColor($r('sys.color.ohos_id_color_text_secondary'))
-          .width('100%')
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
-
-      Toggle({ type: ToggleType.Switch, isOn: this.checked })
-        .onChange((isOn: boolean): void => {
-          this.onCheckedChange(isOn);
-        })
-    }
-    .width('100%')
-    .padding({ top: 6, bottom: 6 })
-    .alignItems(VerticalAlign.Center)
-  }
-}
-
-/**
- * 一个药丸选项（对应源工程 `SingleChoiceSegmentedButtonRow` 里选中段与未选中段）：
- * 选中项用强调色填充 + 白字，未选中项透明底 + 描边。
- *
- * ## 为什么是 `@Component` 而不是 `@Builder`（真实缺陷的修法）
- *
- * 原先这里是 `@Builder choicePill(label, selected, onTap)`。而 ArkUI 的 `@Builder`
- * **按值传参时不会因参数变化刷新其内部 UI** —— `selected` 永远停在首帧值。
- * 表现就是用户报的这一处：「点『English』/『插话发送』，选中高亮不动，但功能已经生效」
- * （`busySendMode` 与系统语言确实都改了，只是画不出来）。
- * 改成组件 + `@Prop selected` 才走得通：父组件 `SettingsScreen` 重绘时会经
- * `updateStateVars` 把新值回写到 `@Prop` 成员。机制与坑 24 同源，见 PORT-MAP 坑 27。
- *
- * 注：文件头「平台差异 1」原先只写了「不共用一个带数组参数的 `@Builder`」，
- * 没说清**同样不能传布尔/字符串这类按值参数** —— 这处漏读的规则正是本缺陷的根因。
- *
- * `onTap` 保持普通成员：函数成员若被 `@Prop` 会连闭包一起深拷贝坏掉（坑 24）。
- */
-@Component
-struct ChoicePill {
-  label: ResourceStr = '';
-  @Prop selected: boolean = false;
-  onTap: () => void = (): void => {};
-
-  build() {
-    Text(this.label)
-      .fontSize(13)
-      .fontColor(this.selected
-        ? $r('sys.color.ohos_id_color_foreground_contrary')
-        : $r('sys.color.ohos_id_color_text_primary'))
-      .textAlign(TextAlign.Center)
-      .layoutWeight(1)
-      .padding({ top: 9, bottom: 9 })
-      .backgroundColor(this.selected
-        ? $r('sys.color.ohos_id_color_emphasize')
-        : Color.Transparent)
-      .borderRadius(20)
-      .border({
-        width: 1,
-        color: this.selected ? $r('sys.color.ohos_id_color_emphasize') : $r('sys.color.ohos_id_color_component_normal'),
-      })
-      .margin({ right: 8 })
-      .onClick((): void => {
-        this.onTap();
-      })
-  }
 }
 
 /** 设置分节的宿主。 */
@@ -562,6 +396,23 @@ export struct SettingsScreen {
     return this.st().themeMode === mode;
   }
 
+  private setPaletteName(name: string): void {
+    const vm: HarnessViewModel | null = this.vm();
+    if (vm !== null) {
+      vm.setPaletteName(name);
+    }
+    // 立刻把导航条刷成新配色：EntryAbility 只在 onForeground/深浅色切换时补刷，
+    // 不在这里设一次，用户点完要切一次后台才能看到变化（真机反馈「点了没变化」）。
+    const context: common.Context | undefined = this.getUIContext().getHostContext();
+    if (context !== undefined) {
+      applyNavBarPalette(context, name);
+    }
+  }
+
+  private isPaletteName(name: string): boolean {
+    return this.st().paletteName === name;
+  }
+
   /**
    * 取带占位符的资源串并填参。
    *
@@ -667,28 +518,24 @@ export struct SettingsScreen {
 
           // 外观：字号与主题。放在这里是因为它与「语言 / 发送方式」同属
           // 「一次设定、长期生效」的那一类，而不是聊天页里的临时开关。
-          SettingsHeading($r('app.string.appearance'))
-          SwitchRow({
-            title: $r('app.string.font_scale_follows_title'),
-            description: this.fontScaleDesc(),
-            checked: this.st().fontFollowsSystem,
-            onCheckedChange: (value: boolean): void => {
+          AppearanceGroup({
+            fontFollowsSystem: this.st().fontFollowsSystem,
+            fontScale: this.st().fontScale,
+            themeMode: this.st().themeMode,
+            paletteName: this.st().paletteName,
+            onFontFollowsSystemChange: (value: boolean): void => {
               this.setFontFollowsSystem(value);
             },
+            onStepFontScale: (delta: number): void => {
+              this.stepFontScale(delta);
+            },
+            onSetThemeMode: (mode: string): void => {
+              this.setThemeMode(mode);
+            },
+            onSetPaletteName: (name: string): void => {
+              this.setPaletteName(name);
+            },
           })
-          this.fontScaleStepper()
-          Text($r('app.string.font_scale_footnote'))
-            .fontSize(12)
-            .fontColor($r('sys.color.ohos_id_color_text_secondary'))
-            .margin({ top: 4, bottom: 20 })
-            .width('100%')
-
-          SettingRow({
-            glyph: '🌓',
-            title: $r('app.string.theme_title'),
-            subtitle: this.resText($r('app.string.theme_desc')),
-          })
-          this.themeSelector()
           Column().height(28)
 
           // 聊天页实现与上下文注入。开关默认关 —— 上下文块是噪音，
@@ -740,9 +587,37 @@ export struct SettingsScreen {
             .margin({ top: 4, bottom: 28 })
             .width('100%')
 
+          // schema 驱动的服务端设置（bridge ≥ 2.6.0）。
+          // null（老 bridge 无此端点）时 SettingsSchemaGroup 内部不渲染。
+          SettingsSchemaGroup({
+            schema: this.st().settingsSchema,
+            onSave: (draft: Map<string, Object>): void => {
+              const vm: HarnessViewModel | null = this.vm();
+              if (vm !== null) {
+                void vm.saveSettingsNamespace(draft);
+              }
+            },
+          })
+
           SettingsHeading($r('app.string.about'))
           SettingRow({ glyph: '⌨', title: $r('app.string.author'), subtitle: this.resText($r('app.string.author_value')) })
           SettingRow({ glyph: '✓', title: $r('app.string.version'), subtitle: this.versionText() })
+          // 检查更新（鸿蒙平台受限：不能自安装，只能跳浏览器 Release 页）。
+          // 渠道分流：按系统语言 zh* → Gitee，其他 → GitHub。
+          SettingRow({
+            glyph: '🔄',
+            title: '检查更新',
+            subtitle: '跳浏览器查看最新版本',
+            onTap: (): void => {
+              const channel: UpdateChannel = channelForLanguage(systemLanguageTag());
+              const url: string = releasePageUrl(channel);
+              const context: common.Context | undefined = this.getUIContext().getHostContext();
+              const opened: boolean = context !== undefined && openExternalUrl(context, url);
+              if (!opened) {
+                this.getUIContext().getPromptAction().showToast({ message: url });
+              }
+            },
+          })
 
           // 平台层自检（本工程特有的补充）。放在「关于」下面：它服务的正是
           // 「这个设备上到底哪一层不对」那一类问题，与版本号是同一类信息。
@@ -893,87 +768,4 @@ export struct SettingsScreen {
     .width('100%')
   }
 
-  /**
-   * 字号步进器：`−  1.2×  ＋`。
-   *
-   * 三个都是 `Text` + `onClick`（页面里到处都是的写法），**没有引入任何新的控件** ——
-   * 这一版改动量大且无法在本地编译验证，凡是能用已验证写法表达的地方就不用新 API。
-   *
-   * 到头的那个按钮只改颜色、**不移除**：位置一变，用户的拇指就得重新找。
-   */
-  @Builder
-  fontScaleStepper() {
-    Row() {
-      Text('−')
-        .fontSize(18)
-        .textAlign(TextAlign.Center)
-        .width(38)
-        .height(34)
-        .borderRadius(8)
-        .backgroundColor($r('sys.color.ohos_id_color_component_normal'))
-        .fontColor(this.atScaleBound(-1)
-          ? $r('sys.color.ohos_id_color_text_secondary')
-          : $r('sys.color.ohos_id_color_text_primary'))
-        .enabled(!this.atScaleBound(-1))
-        .onClick((): void => {
-          this.stepFontScale(-1);
-        })
-      Text(this.scaleText())
-        .fontSize(15)
-        .fontWeight(FontWeight.Medium)
-        .textAlign(TextAlign.Center)
-        .layoutWeight(1)
-      Text('＋')
-        .fontSize(18)
-        .textAlign(TextAlign.Center)
-        .width(38)
-        .height(34)
-        .borderRadius(8)
-        .backgroundColor($r('sys.color.ohos_id_color_component_normal'))
-        .fontColor(this.atScaleBound(1)
-          ? $r('sys.color.ohos_id_color_text_secondary')
-          : $r('sys.color.ohos_id_color_text_primary'))
-        .enabled(!this.atScaleBound(1))
-        .onClick((): void => {
-          this.stepFontScale(1);
-        })
-    }
-    .width('100%')
-    .padding({ top: 2, bottom: 8 })
-    .alignItems(VerticalAlign.Center)
-  }
-
-  /**
-   * 主题三选一（跟随系统 / 浅色 / 深色）。
-   *
-   * 药丸三枚并排，复用语言那个 `ChoicePill`（`@Prop selected` 才有得更新，见其注释）——
-   * 三枚正好占满一行，「跟随系统」这一枚的文字也最短不了多少，不需要换行。
-   */
-  @Builder
-  themeSelector() {
-    Row() {
-      ChoicePill({
-        label: $r('app.string.theme_system'),
-        selected: this.isThemeMode(THEME_MODE_SYSTEM),
-        onTap: (): void => {
-          this.setThemeMode(THEME_MODE_SYSTEM);
-        },
-      })
-      ChoicePill({
-        label: $r('app.string.theme_light'),
-        selected: this.isThemeMode(THEME_MODE_LIGHT),
-        onTap: (): void => {
-          this.setThemeMode(THEME_MODE_LIGHT);
-        },
-      })
-      ChoicePill({
-        label: $r('app.string.theme_dark'),
-        selected: this.isThemeMode(THEME_MODE_DARK),
-        onTap: (): void => {
-          this.setThemeMode(THEME_MODE_DARK);
-        },
-      })
-    }
-    .width('100%')
-  }
 }

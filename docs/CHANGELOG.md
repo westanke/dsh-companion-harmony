@@ -22,6 +22,94 @@
 
 > 下一版尚未定内容的改动写在这里。
 
+### 修复（fix）
+
+- **配色切换即时生效，不用重启**（2026-10-23）：真机反馈「配色里的点了都没变化」。
+  根因有两层，缺一不修：
+  1. **手势导航模式下系统不渲染 `navigationBarColor`**，配色只写导航条等于什么都没干 —— 所以把非默认配色的
+     页面底色刷成与导航条同色（`ThemePalette.pageBg`，PAPER 保持 `null` 回落系统背景、默认外观零漂移）；
+  2. 刷底色接进各容器后仍不即时生效 —— 真机插桩（`DSH_THEME` 变化版日志 + PIL 像素采样）实证：
+     配色切换后 revision 正常广播、`themedPageBgColor` 也重算出正确值，但**大容器底色首漆后不重漆**。
+     病根是响应式依赖隔层：底色表达式读的是「函数内部再读 `harnessState()`」，而 revision 的读取
+     登记在 `st()` / `@Builder` 的另一层作用域里，刷底色的那个组件自己没登记到依赖。
+     修法：配色名单独占一个 `AppStorage` 键 `dshPaletteName`（`AppRuntime.PALETTE_KEY`），
+     各容器挂 `@StorageLink('dshPaletteName')` 并在 `backgroundColor` 表达式里**直读**、作为参数传给
+     `themedPageBgColor(hostContext, paletteName)` —— 依赖一定落在刷底色的组件自己身上。
+  顺带修掉同病灶的一颗雷：`HarnessViewModelBase.applyPreferences()` 漏了 `s.paletteName`，
+  重启后 state 停在默认 PAPER，设置页选中药丸与实际底色脱节。
+  真机验证（`p3-themeA3`）：暖米/青灰/墨黑/纸白四色**免重启即时切换**，设置页与会话页像素逐一比对命中色板值。
+  改动文件：`core/ThemePalettes.ts`（`pageBg` 字段 + 8 份色板）、`core/HarnessViewModelBase.ts`（水合补 paletteName）、
+  `ui/AppRuntime.ets`（`PALETTE_KEY` + `themedPageBgColor` 参数化）、`pages/Index.ets`、`ui/AppShell.ets`、
+  `ui/ConnectScreen.ets`、`ui/TrajectoryScreen.ets`、`ui/FileBrowser.ets`、`test/cases/theme-palettes.test.ts`（+2 例）。
+
+- **点配色药丸不再被弹回会话页**（2026-10-23）：真机复现两次「进设置点一下配色 → 被弹回会话列表」。
+  根因是 `AppShell.lastScopesKey` 初值 `''` 且只在 `syncSectionIfScopesChanged` 里赋值 ——
+  进 App 后若没赶上任何 vm 更新就直奔设置，第一次无关 update（比如点配色）会因快照不一致
+  误判成「scopes 变了」而触发 `syncSectionFromScopes()` 弹回默认分节。
+  修法：`aboutToAppear` 里 `syncSectionFromScopes()` 之后补 `this.lastScopesKey = this.scopes().join(',')`。
+  改动文件：`ui/AppShell.ets`。
+
+- **刷新历史不再抹掉「加载更早消息」的成果**（2026-10-23）：真机实测点「加载更早消息 → 内容出现 → 一秒后整屏变空白」。
+  根因是 `refreshHistory()` 拿回的是最后一页，直接替换 `state.history` 会把之前加载出来的 older 事件全部丢掉，列表条数缩回后视口还停在原来的像素偏移上，落在空白区。
+  新增 `mergeRefreshedHistory(previous, fresh)` 纯函数（对位 Android 源 `HistoryMerge.kt`），只替换/追加 `fresh` 覆盖的区间，保留更早的未覆盖事件、`hasMore` 标志。
+  改动文件：`core/HarnessViewModelSessions.ts`（refreshHistory 改 + mergeRefreshedHistory 新增）、`test/cases/history-merge.test.ts`（4 例）。
+
+- **空助手消息归入过程组**（2026-10-23）：真机反馈「对话窗口一整屏只剩『耗时 xxx · N 次工具调用』」。
+  根因是旧版一律把 `assistant/message` 当消息类——但真实会话里绝大多数这类事件只装 reasoning + tool-call，一个字都没有（某会话实测 46 条里 45 条），于是它们会把连续工具调用劈成几十个单条过程组。
+  新增 `hasVisibleBody(item)` 纯函数（判正文非空白 或 有附件），`isProcessItem()` 里加一条：**空正文且无附件的 ASSISTANT 算过程项**。
+  改动文件：`core/ChatDisplayGroups.ts`（新增 hasVisibleBody + isProcessItem 改造）、`test/cases/chat-display-groups.test.ts`（夹具默认给非空正文避免静默翻转 + 3 条 P0-C 回归）。
+
+### 新增（feat）
+
+- **正文里的 Markdown 图片能在 App 里显示**（2026-10-23）：真机反馈「图片这个不能让 APP 显示出来吗」。
+  根因是模型在正文里贴图用的是标准 Markdown 图片语法 `![alt](/path/img.png)`，鸿蒙端 `ChatItemBuilders.assistantItems()/userItems()` 没有识别它——整段 Markdown 语法被原样渲染，图片变成一块莫名的留白。
+  新增 `MARKDOWN_IMAGE_PATTERN`、`markdownImageTarget()`、`markdownImagePathsIn()`、`stripMarkdownImages()` 四个纯函数（对位 Android 源 `ChatHandoff.kt`），接入 `assistantItems()` 和 `userItems()`：
+  本地绝对路径的图片转成 `ChatAttachment` 挂到 `ChatDisplayItem.attachments`，正文里整段摘掉；http(s) 图降级成普通链接（App 不做远程加载）；相对路径/未知扩展名降级成 alt 文字。
+  UI 层 `ChatMessage.ets` 的 ASSISTANT 分支补上 `MessageAttachments`（之前只有 USER 分支渲染附件）。
+  改动文件：`core/ChatItemBuilders.ts`（4 函数新增 + userItems/assistantItems 接入）、`ui/ChatMessage.ets`（ASSISTANT 分支 MessageAttachments）、`test/cases/chat-item-builders.test.ts`（15 例）。
+
+- **会话内联交付物卡片**（2026-10-23）：用户对照两端截图——桌面端会话里 agent 用 present 工具交付的文件有内联卡片，手机端只有「本会话的文件」弹层。
+  根因是 `displayItemsOf()` 把 `deliverables/presented` 事件整类丢掉（落到兜底 `return []`）。数据一直在历史里，就是没人读。
+  新增 `ChatItemKind.DELIVERABLE` 枚举 + `ChatDisplayItem.deliverable: ChatDeliverable | null` 字段（与 failure 同纪律：给类型，不让渲染器反向嗅探）；`displayItemsOf()` 改成两段式：按 `deliverables/presented` 事件缓冲，每轮 `turn/end` 处冲刷成卡片钉在轮次收尾（对齐桌面端 turnTail 钉法），会话尾部没有 turn/end 时补尾不丢。
+  UI 层 `ChatMessage.ets` 加 DELIVERABLE 分支渲染紧凑卡片（文件 emoji + 文件名 + agent 写的说明）。
+  改动文件：`core/ChatPresentationTypes.ts`（枚举 + 字段）、`core/ChatEventParsers.ts`（displayItemsOf 两段式 + extractDeliverablesFromEvent 抽单条）、`ui/ChatMessage.ets`（卡片渲染）、`test/cases/chat-deliverable-cards.test.ts`（8 例）。
+
+- **多配色主题四套（PAPER / WARM / MIST / INK）**（2026-10-23，横向互鉴 H1）：桌面 5 套 / 安卓 4 套，鸿蒙只有明暗 3 档、颜色一套。
+  新增 `core/ThemePalettes.ts`：四套命名配色 × 明暗两份色板（默认 PAPER 浅色导航栏 `#FFFFFFFF` 与旧配色像素级一致，零漂移）；`normalizePaletteName`/`getPalette`/`allPaletteNames` 纯函数，未知 id 回落 PAPER（升级安全）。
+  `EntryAbility.ets` 导航栏消费色板，`AppPreferences` 持久化 `theme_palette`，设置页「外观」区加四档选择。
+  **WCAG 2.1 对比度**：`parseHexColor`/`relativeLuminance`/`contrastRatio` 纯函数 + `allPalettesPassAa()`，四套 × 明暗导航栏图标 vs 背景断言 ≥ 4.5:1（正文 AA 阈值），随 `npm test` 跑。
+  **颜色收口**：散落的内联 hex 收敛到 `ThemePalettes`（`OVERLAY_MASK_DARK`/`OVERLAY_MASK_LIGHT` 供图片查看器遮罩使用），全工程无硬编码 `Color('#...')`。
+  改动文件：`core/ThemePalettes.ts`（新增）、`entryability/EntryAbility.ets`、`core/AppPreferences.ts`、`core/HarnessTypes.ts`、`core/HarnessViewModelComposer.ts`、`ui/SettingsScreen.ets`、`ui/ChatDetail.ets`、`test/cases/theme-palettes.test.ts`（含 12 条对比度用例）。
+
+- **新建会话即选权限档位**（2026-10-23，横向互鉴 H2）：桌面/安卓新建会话时可直接选权限档，鸿蒙得建完再手动 `/permission`。
+  照安卓「建完再切」纪律：`createSession`/`createWorkspaceAndSession` 加 `permission` 参数，**不改创建请求**（内核不收权限参数），成功拿到 id 后若选了非空档，复用会话内切档通路发一次 `/permission <id>` 并刷新 history/commands；空/空白不发。
+  新建面板在 Agent 预设之外加权限档选择器，候选项来自 `state.permissionCatalog`；**目录为 null（老桥 < 2.4.2 / 无能力）时不渲染该选择器**，不报错。
+  纯函数 `core/PermissionApply.ts`：`shouldApplyPermission`/`isBlankPermission`/`normalizePermissionId`，空值判定集中一处，UI 与 ViewModel 共用。
+  改动文件：`core/PermissionApply.ts`（新增）、`core/HarnessViewModelSessions.ts`（createSession/createWorkspaceAndSession 加 permission + 建完再切）、`ui/ChatScreen.ets`（@State permissionPresetId）、`ui/SessionSheets.ets`（选择器 + 传参）、`test/cases/permission-apply.test.ts`（20 例）。
+
+- **服务端设置 schema 驱动渲染**（P2-B，依赖 bridge 尚未发布的能力位 `settings-namespaces-v1`）：设置页新增「服务端设置」区，按 `GET /settings/namespaces` 返回的 schema 动态渲染表单（boolean→开关、enum→选择、number/string→输入、json→只读），密钥位永不进 PATCH ops。
+  三层降级：404/403 静默不画入口（老 bridge 无此端点），503 照报；schema 解析失败返回 null 不画。**bridge 2.5.2 无该能力位、也无该路由**，真机上该区静默不显示（符合设计，非缺陷）。
+  纯函数 `core/SettingsSchema.ts`：`SettingsSchema.parse` / `buildSettingsOps` / `settingsSchemaIsDirty` / `isSilentSettingsNamespaceError`。
+  改动文件：`core/DshClient.ts`（settingsNamespaces / patchSettingsNamespace）、`core/HarnessViewModelCatalog.ts`（loadSettingsSchema / saveSettingsNamespace）、`ui/SettingsGroups.ets`（新增 SettingsSchemaGroup）、`ui/SettingsScreen.ets`（接入）。
+
+- **模型/插件设置页重做**（P2-A，bridge 2.5.2 已具备所需能力位）：
+  ① 插件页加搜索框（按名称/描述过滤，大小写不敏感），无结果给一句人话；
+  ② 模型供应商编辑器加「重置模型列表」（走 `PATCH {"models": null}`，服务端翻成 `unset models` 回落继承；bridge 2.5.2 **没有** `reset-models` 路由）和「删除此供应商」（`DELETE settings/providers/{id}`，仅 removable 的自定义供应商显示）；
+  ③ 能力位降级：按真实声明的 `provider-settings-v1` 守卫重置/删除，按 `model-catalog-v1` 守卫「发现模型」；缺失时对应入口隐藏（老 bridge 会 404）。
+  > 修正记录：上一稿用了不存在的 `settings-metadata-v1`，导致真机上三个按钮全被误判隐藏；现已改为 bridge 2.5.2 `BRIDGE_CAPABILITIES` 中真实存在的两个位。
+  改动文件：`core/DshClient.ts`（deleteProvider / resetProviderModels）、`core/BridgeCapabilities.ts`（supportsProviderSettings / supportsModelCatalog）、`ui/ModelsScreen.ets`（ProviderEditor 加按钮 + providerWritable/modelCatalog 守卫）、`ui/PluginsScreen.ets`（搜索框 + filteredItems）。
+
+### 变更（refactor）
+
+- **拆超预算文件**（TECH-DEBT 清账）：
+  ① `SettingsScreen.ets` 979 → 763：抽出 `SettingsGroups.ets`（SettingRow / SwitchRow / ChoicePill / SettingsHeading / AppearanceGroup / SettingsSchemaGroup），设置页对外行为不变；
+  ② `ChatDetail.ets` 1430 → 1290：抽出 `ChatDetailTodo.ets`（TodoPanel，展开态与完成数内聚）和 `ChatDetailOverlays.ets`（ImageViewer / TrajectoryCover），`bindContentCover` 的 `isShow` 仍只有一个来源（住在 ChatDetail）；
+  ③ `ModelsScreen.ets` 因 P2-A 增量至 932，已在 `docs/TECH-DEBT.md` 登记拆分为 `ModelsProviderEditors.ets`。
+
+### 测试
+
+- 单测 826 → 948（+122）：新增 `history-merge.test.ts`（4）、`chat-item-builders.test.ts`（15）、`chat-deliverable-cards.test.ts`（8）、`theme-palettes.test.ts`（含 12 条 WCAG 对比度）、`permission-apply.test.ts`（20）、`appearance-preferences.test.ts`、`settings-schema.test.ts`、`app-update.test.ts` 等；`chat-display-groups.test.ts` 加 3 条 P0-C 回归。
+
 ---
 
 ## [1.0.3] - 2026-10-21

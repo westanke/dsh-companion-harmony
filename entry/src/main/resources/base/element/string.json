@@ -1009,6 +1009,14 @@
       "value": "插件清单"
     },
     {
+      "name": "plugins_search",
+      "value": "搜索插件"
+    },
+    {
+      "name": "plugins_no_results",
+      "value": "没有匹配的插件"
+    },
+    {
       "name": "plugins_loaded_stat",
       "value": "已加载"
     },
@@ -1261,6 +1269,26 @@
       "value": "保存"
     },
     {
+      "name": "saving",
+      "value": "保存中…"
+    },
+    {
+      "name": "server_settings",
+      "value": "服务端设置"
+    },
+    {
+      "name": "reset_models",
+      "value": "重置模型列表"
+    },
+    {
+      "name": "reset_models_hint",
+      "value": "恢复为该供应商的默认模型集"
+    },
+    {
+      "name": "delete_provider",
+      "value": "删除此供应商"
+    },
+    {
       "name": "save_provider",
       "value": "保存供应商"
     },
@@ -1319,6 +1347,14 @@
     {
       "name": "server_default",
       "value": "服务端默认"
+    },
+    {
+      "name": "permission_preset",
+      "value": "权限档位"
+    },
+    {
+      "name": "permission_unspecified",
+      "value": "不指定"
     },
     {
       "name": "session_actions",
@@ -1523,6 +1559,30 @@
     {
       "name": "theme_title",
       "value": "主题"
+    },
+    {
+      "name": "palette_title",
+      "value": "配色"
+    },
+    {
+      "name": "palette_desc",
+      "value": "四种色调，与深浅模式正交"
+    },
+    {
+      "name": "palette_paper",
+      "value": "纸白"
+    },
+    {
+      "name": "palette_warm",
+      "value": "暖米"
+    },
+    {
+      "name": "palette_mist",
+      "value": "青灰"
+    },
+    {
+      "name": "palette_ink",
+      "value": "墨黑"
     },
     {
       "name": "think",

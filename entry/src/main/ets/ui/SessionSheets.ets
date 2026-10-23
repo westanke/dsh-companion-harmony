@@ -27,7 +27,7 @@
  */
 
 import { common } from '@kit.AbilityKit';
-import { AgentPreset, ChatWorkspace, FileEntry } from '../core/Models';
+import { AgentPreset, ChatWorkspace, FileEntry, PermissionOption } from '../core/Models';
 import { HarnessState, HarnessViewModel } from '../core/HarnessViewModel';
 import { harnessState, harnessVm } from './AppRuntime';
 
@@ -45,6 +45,7 @@ export struct SessionSheetBodies {
   @Link newWorkspace: boolean;
   @Link workspaceId: string;
   @Link presetId: string;
+  @Link permissionPresetId: string;
   @Link renameDraft: string;
 
   // ——— 面板只读、宿主写的数据：单向 @Prop 即可 ———
@@ -217,6 +218,45 @@ export struct SessionSheetBodies {
     return $r('app.string.server_default');
   }
 
+  /** 权限档菜单项：首项「不指定」，其余来自 `state.permissionCatalog`。 */
+  private permissionMenuItems(): MenuElement[] {
+    const out: MenuElement[] = [];
+    out.push({
+      value: this.resText($r('app.string.permission_unspecified')),
+      action: (): void => {
+        this.permissionPresetId = '';
+      },
+    });
+    const catalog = this.st().permissionCatalog;
+    if (catalog !== null) {
+      const options: PermissionOption[] = catalog.options;
+      for (let i = 0; i < options.length; i++) {
+        const opt: PermissionOption = options[i];
+        const desc: string = opt.description ?? '';
+        out.push({
+          value: desc.length > 0 ? `${opt.name} — ${desc}` : opt.name,
+          action: (): void => {
+            this.permissionPresetId = opt.value;
+          },
+        });
+      }
+    }
+    return out;
+  }
+
+  /** 当前选中的权限档显示名（空串 →「不指定」）。 */
+  private selectedPermissionLabel(): ResourceStr {
+    const catalog = this.st().permissionCatalog;
+    if (catalog !== null) {
+      for (let i = 0; i < catalog.options.length; i++) {
+        if (catalog.options[i].value === this.permissionPresetId) {
+          return catalog.options[i].name;
+        }
+      }
+    }
+    return $r('app.string.permission_unspecified');
+  }
+
   private selectRoot(rootId: string): void {
     const vm: HarnessViewModel | null = this.vm();
     if (vm !== null) {
@@ -286,13 +326,14 @@ export struct SessionSheetBodies {
       return;
     }
     const preset: string | null = this.presetId.length > 0 ? this.presetId : null;
+    const permission: string | null = this.permissionPresetId.length > 0 ? this.permissionPresetId : null;
     if (this.newWorkspace) {
       const rootId: string | null = this.st().workspacePickerRootId;
       if (rootId !== null) {
-        void vm.createWorkspaceAndSession(rootId, this.st().workspacePickerPath, preset);
+        void vm.createWorkspaceAndSession(rootId, this.st().workspacePickerPath, preset, permission);
       }
     } else {
-      void vm.createSession(this.workspaceId, preset);
+      void vm.createSession(this.workspaceId, preset, permission);
     }
     this.onClose();
   }
@@ -492,6 +533,31 @@ export struct SessionSheetBodies {
             .borderRadius(8)
             .backgroundColor($r('sys.color.ohos_id_color_component_normal'))
             .bindMenu(this.presetMenuItems())
+          }
+
+          // 权限档选择器：仅当桥返回了 permission-presets 目录时才显示。
+          // 老桥（< 2.4.2 / 无能力）目录为 null，不渲染、不报错。
+          if (this.st().permissionCatalog !== null) {
+            this.pickerHeading($r('app.string.permission_preset'))
+            Button() {
+              Row() {
+                Text('🔐').fontSize(14)
+                Text(this.selectedPermissionLabel())
+                  .fontSize(14)
+                  .layoutWeight(1)
+                  .textAlign(TextAlign.Start)
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .margin({ left: 8 })
+                Text('⌄').fontSize(13)
+              }
+              .width('100%')
+            }
+            .type(ButtonType.Normal)
+            .width('100%')
+            .borderRadius(8)
+            .backgroundColor($r('sys.color.ohos_id_color_component_normal'))
+            .bindMenu(this.permissionMenuItems())
           }
         }
         .width('100%')

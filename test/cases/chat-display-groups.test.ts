@@ -31,11 +31,18 @@ import {
  * 也从 `null` 变成 `0`。语义不变。
  */
 
-/** 造一条展示项：id 形如 `"3-user"`，序号从 id 里取，方便回看顺序有没有乱。 */
-function item(kind: ChatItemKind, id: string, tools: ToolCallDetail[] = []): ChatDisplayItem {
+/**
+ * 造一条展示项：id 形如 `"3-user"`，序号从 id 里取，方便回看顺序有没有乱。
+ *
+ * body 默认给一句正文：**空正文的 ASSISTANT 现在算过程项**（见
+ * ChatDisplayGroups.ts `hasVisibleBody()`），若默认空串，本文件里所有"消息类"
+ * 夹具都会悄悄变成过程项，断言就测不到原本想测的东西了。
+ * 要测"空助手消息"的用例显式传空 body。
+ */
+function item(kind: ChatItemKind, id: string, tools: ToolCallDetail[] = [], body: string = '正文'): ChatDisplayItem {
   const head: string = id.includes('-') ? id.substring(0, id.indexOf('-')) : id;
   const seq: number = Number.parseInt(head, 10);
-  return new ChatDisplayItem(id, Number.isNaN(seq) ? 0 : seq, kind, null, '', false, [], [], tools);
+  return new ChatDisplayItem(id, Number.isNaN(seq) ? 0 : seq, kind, null, body, false, [], [], tools);
 }
 
 function tool(callId: string): ToolCallDetail {
@@ -368,6 +375,53 @@ test('穷举所有 kind 序列，摊平后与输入逐条相同', () => {
   // 所以再钉一次两类都真的出现过（上面那两条 if 是精确断言，这里是总量兜底）。
   assert.ok(processGroups > 0, '一条过程组都没产出，说明分区根本没生效');
   assert.ok(messageEntries > 0, '一条消息都没留下，说明正文被折进去了');
+});
+
+// ── P0-C 回归：空助手消息归入过程组（真机实测，对位 Android 1bdb274） ──
+
+test('空正文助手消息折进过程组，不再把连续工具调用劈成几十个单条组', () => {
+  // 真机实测的常态：assistant/message 只装 reasoning + tool-call，一个字都没有。
+  // 以前它算"消息"，会把连续工具调用劈成几十个单条组 —— 屏幕上只剩一排组头。
+  const entries: ChatDisplayEntry[] = groupChatDisplay([
+    item(ChatItemKind.TOOL, '1-tool', [tool('a')]),
+    item(ChatItemKind.ASSISTANT, '2-assistant', [], ''),
+    item(ChatItemKind.TOOL, '3-tool', [tool('b')]),
+  ]);
+
+  // 三条全部收成一组（空 ASSISTANT 现在算过程项）。
+  assert.equal(entries.length, 1);
+  const group: ChatDisplayEntry = entries[0];
+  assert.equal(group.kind, ChatDisplayEntryKind.PROCESS_GROUP);
+  assert.equal(group.items.length, 3);
+  assert.equal(group.summary?.toolCalls, 2);
+});
+
+test('纯空白助手消息同样折进过程组', () => {
+  // 纯换行渲染出来同样是零高度：算消息就等于凭空插一条看不见的分隔。
+  const entries: ChatDisplayEntry[] = groupChatDisplay([
+    item(ChatItemKind.TOOL, '1-tool'),
+    item(ChatItemKind.ASSISTANT, '2-assistant', [], ' \n\n '),
+    item(ChatItemKind.TOOL, '3-tool'),
+  ]);
+
+  assert.equal(entries.length, 1);
+});
+
+test('只有图片没有文字的助手消息仍是消息（靠 attachments 才不被丢掉）', () => {
+  // 只贴图不发字的消息正是靠 attachments 才不会被丢掉 —— ChatDisplayItem 注释里的原话。
+  const withImage: ChatDisplayItem = new ChatDisplayItem('2-assistant', 2, ChatItemKind.ASSISTANT,
+    null, '', false,
+    // 一个附件就够了（模拟图片），isProcessItem 靠它认出"有可读的东西"。
+    [{ attachmentId: 'img-1', mediaType: 'image/png' } as unknown as ChatDisplayItem['attachments'][number]] as ChatDisplayItem['attachments'],
+    [], []);
+
+  const entries: ChatDisplayEntry[] = groupChatDisplay([
+    item(ChatItemKind.TOOL, '1-tool'),
+    withImage,
+  ]);
+
+  assert.equal(entries.length, 2);
+  assert.equal(entries[1].kind, ChatDisplayEntryKind.MESSAGE);
 });
 
 /**

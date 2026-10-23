@@ -3,27 +3,14 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import { pauseHarnessEvents, resumeHarnessEvents } from '../ui/AppRuntime';
+import { getPalette, normalizePaletteName, ThemePalette } from '../core/ThemePalettes';
+import { preferences } from '@kit.ArkData';
 
 const DOMAIN: number = 0x0000;
 const TAG: string = 'DSH';
 
-/**
- * 系统导航条（底部那条手势条）的配色，**跟随系统深浅色**。
- *
- * 为什么要在应用里显式设：不设的时候这条由系统按它自己的规则着色 —— 实测浅色页面下
- * 它在深色系统主题里依然是白的，于是"一条白条浮在内容之上"（用户原话）。这里让它跟
- * 应用当前生效的主题走（应用主题随系统，见 PORT-MAP「主题随系统」条目）。
- *
- * 取值与页面背景 `sys.color.ohos_id_color_background` 一致，内容色取其对比色：
- * 浅色 = 白底黑图标，深色 = 黑底白图标。
- *
- * 只设导航条、**不动状态栏**：状态栏现在没有不匹配问题（应用内容未延伸到状态栏区域，
- * dump 里 WindowScene 的 bounds 自 y=122 起），顺手改它只会引入新的避让风险。
- */
-const NAV_BAR_COLOR_LIGHT: string = '#FFFFFFFF';
-const NAV_BAR_COLOR_DARK: string = '#FF000000';
-const NAV_BAR_CONTENT_LIGHT: string = '#FF000000';
-const NAV_BAR_CONTENT_DARK: string = '#FFFFFFFF';
+const PREFS_NAME: string = 'dsh_settings';
+const KEY_PALETTE: string = 'theme_palette';
 
 export default class EntryAbility extends UIAbility {
   /**
@@ -93,8 +80,13 @@ export default class EntryAbility extends UIAbility {
   /**
    * 按当前主题设导航条配色。
    *
-   * `colorMode` 还有第三种取值 `COLOR_MODE_NOT_SET`（系统未指定偏好）—— 这时按浅色
-   * 兜底：系统未给偏好时按浅色渲染本来就是鸿蒙的默认行为，与页面背景的默认取值一致。
+   * 配色主题（paper/warm/mist/ink）从 Preferences 读 —— 设置页切换时写同一份存储，
+   * 这里只负责读。深浅阶由系统 colorMode 决定（应用跟系统走）。
+   *
+   * **每次都重读 Preferences，不做进程内缓存**：设置页切换配色时虽然会走
+   * `platform/NavBar.applyNavBarPalette` 立刻设一次，但随后任何一次 onForeground /
+   * onConfigurationUpdate 都会再调本方法 —— 若此处用了启动时缓存的旧值，
+   * 会把用户刚选的配色**改回去**（真机实测的退化路径）。
    */
   private applyNavBarTheme(): void {
     const win: window.Window | null = this.mainWindow;
@@ -108,12 +100,25 @@ export default class EntryAbility extends UIAbility {
     // 别按「0 就是没设置 / 浅色」的直觉去读（见 PORT-MAP 坑 20）。
     hilog.info(DOMAIN, TAG, 'navBar dark=%{public}s colorMode=%{public}d',
       `${dark}`, this.context.config.colorMode);
-    const props: window.SystemBarProperties = {
-      navigationBarColor: dark ? NAV_BAR_COLOR_DARK : NAV_BAR_COLOR_LIGHT,
-      navigationBarContentColor: dark ? NAV_BAR_CONTENT_DARK : NAV_BAR_CONTENT_LIGHT,
-    };
-    win.setWindowSystemBarProperties(props).catch((err: BusinessError): void => {
-      hilog.warn(DOMAIN, TAG, 'setWindowSystemBarProperties failed: %{public}s', JSON.stringify(err));
+    preferences.getPreferences(this.context, PREFS_NAME).then((prefs: preferences.Preferences): void => {
+      const raw: string = prefs.getSync(KEY_PALETTE, '') as string;
+      const paletteName: string = normalizePaletteName(raw.length > 0 ? raw : null);
+      const palette: ThemePalette = getPalette(paletteName, dark);
+      const props: window.SystemBarProperties = {
+        navigationBarColor: palette.navBarBg,
+        navigationBarContentColor: palette.navBarContent,
+      };
+      win.setWindowSystemBarProperties(props).catch((err: BusinessError): void => {
+        hilog.warn(DOMAIN, TAG, 'setWindowSystemBarProperties failed: %{public}s', JSON.stringify(err));
+      });
+    }).catch((err: BusinessError): void => {
+      // Preferences 读失败回落默认 PAPER（normalizePaletteName(null)）。
+      hilog.warn(DOMAIN, TAG, 'navBar prefs failed: %{public}s', JSON.stringify(err));
+      const palette: ThemePalette = getPalette(normalizePaletteName(null), dark);
+      win.setWindowSystemBarProperties({
+        navigationBarColor: palette.navBarBg,
+        navigationBarContentColor: palette.navBarContent,
+      }).catch((): void => {});
     });
   }
 

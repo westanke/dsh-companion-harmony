@@ -13,12 +13,13 @@
 import { HistoryEntry, SessionEvent } from './Models';
 import { JsonAccess, JsonMap } from './JsonAccess';
 import { isBlank, isNotBlank, trimText } from './TextPredicates';
-import { ChatAttachment, ChatDisplayItem, ChatItemKind, ChatTurnFailure, HANDOFF_ATTACHMENT_PREFIX,
+import { ChatAttachment, ChatDeliverable, ChatDisplayItem, ChatItemKind, ChatTurnFailure, HANDOFF_ATTACHMENT_PREFIX,
   HANDOFF_PREAMBLE_MARKER, HANDOFF_SOURCE_MARKER, HANDOFF_SOURCE_PATTERN } from './ChatPresentationTypes';
 import { ChatJson } from './ChatJson';
 import { ToolResultInfo, toolResultsByCallId } from './ChatToolFormat';
 import { afterLast, afterLastOrEmpty, firstLine, kotlinLines, trimStartWs } from './ChatJson';
 import { contentText, contentTextParts, contextLabel, toolItem } from './ChatToolItems';
+import { extractDeliverablesFromEvent } from './ChatEventParsers';
 
 export function oneEntryItems(entry: HistoryEntry, toolResults: Map<string, ToolResultInfo>): ChatDisplayItem[] {
   const type: string = entry.event.type;
@@ -30,6 +31,19 @@ export function oneEntryItems(entry: HistoryEntry, toolResults: Map<string, Tool
   }
   if (type === 'tool/call') {
     return [toolItem(entry, toolResults)];
+  }
+  // 内核显式交付物卡片（present 工具触发）：结构化事实，不是 prose，
+  // 点开走文件预览面板，与 Markdown 正文完全两回事。
+  if (type === 'deliverables/presented') {
+    const deliverables: ChatDeliverable[] = extractDeliverablesFromEvent(entry.event);
+    const out: ChatDisplayItem[] = [];
+    for (let i = 0; i < deliverables.length; i++) {
+      const d: ChatDeliverable = deliverables[i];
+      out.push(new ChatDisplayItem(`${entry.event.seq}-deliverable-${i}`, entry.event.seq,
+        ChatItemKind.DELIVERABLE, null, d.description !== null ? d.description : '',
+        false, [], [], [], null, entry.event.time, d));
+    }
+    return out;
   }
   // 历史里的 `turn/end` 失败帧。
   //
@@ -125,12 +139,21 @@ export function userItems(event: SessionEvent): ChatDisplayItem[] {
   const parts: string[] = contentTextParts(JsonAccess.raw(data, 'content'));
 
   const handoffPaths: string[] = [];
+  const markdownImagePaths: string[] = [];
   if (isUser) {
     for (let i = 0; i < parts.length; i++) {
       const found: string[] = handoffPathsIn(parts[i]);
       for (let k = 0; k < found.length; k++) {
         if (handoffPaths.indexOf(found[k]) < 0) {
           handoffPaths.push(found[k]);
+        }
+      }
+      // 用户手打的 Markdown 图片同理：绝对路径的变成附件，正文里摘掉（否则是一块空白）。
+      // 只对**用户原话**生效 —— 上下文注入里全是路径示例，真去解析会切碎它们。
+      const images: string[] = markdownImagePathsIn(parts[i]);
+      for (let k = 0; k < images.length; k++) {
+        if (markdownImagePaths.indexOf(images[k]) < 0) {
+          markdownImagePaths.push(images[k]);
         }
       }
     }
@@ -142,7 +165,8 @@ export function userItems(event: SessionEvent): ChatDisplayItem[] {
   if (isUser) {
     const kept: string[] = [];
     for (let i = 0; i < parts.length; i++) {
-      const stripped: string = stripHandoffLines(parts[i]);
+      let stripped: string = stripHandoffLines(parts[i]);
+      stripped = stripMarkdownImages(stripped);
       if (isNotBlank(stripped)) {
         kept.push(stripped);
       }
@@ -155,6 +179,9 @@ export function userItems(event: SessionEvent): ChatDisplayItem[] {
   const attachments: ChatAttachment[] = contentAttachments(JsonAccess.raw(data, 'content'));
   for (let i = 0; i < handoffPaths.length; i++) {
     attachments.push(handoffAttachment(handoffPaths[i]));
+  }
+  for (let i = 0; i < markdownImagePaths.length; i++) {
+    attachments.push(handoffAttachment(markdownImagePaths[i]));
   }
 
   if (isUser) {
@@ -279,6 +306,97 @@ export function handoffMediaType(name: string): string {
   return '';
 }
 
+// ——————————————— Markdown 图片识别（对位 Android 1bdb274 / 5c4e1f0 / 9446c28） ———————————————
+
+/**
+ * Markdown 图片：`![alt](target)`，允许 `![alt](target "title")` 这种带 title 的写法。
+ *
+ * 为什么需要这条：模型在正文里贴图时用的是标准 Markdown 图片语法，
+ * 目标往往是**服务器上的绝对路径**（如 `/media/…/c1.png`）。渲染层不认这种图，
+ * 又不像交接说明那样有专用标记 —— 于是整段图被丢掉，正文里留一块**莫名空白**。
+ *
+ * 每次调用都新建 RegExp 实例：全局正则带 lastIndex 状态，复用会漏匹配。
+ */
+export const MARKDOWN_IMAGE_PATTERN: RegExp = /!\[([^\]]*)]\(\s*([^)]+?)\s*\)/g;
+
+/**
+ * 三个及以上的连续换行 —— 摘完图片留下的空行由它压平。
+ */
+const MULTI_BLANK_LINE_PATTERN: RegExp = /\n{3,}/g;
+
+/**
+ * 从括号内容里取真正的目标：去掉可选的 `"title"` 与 `<…>` 包裹。
+ *
+ * 目标里**允许有空格** —— 本项目的截图路径就长这样（`…/报告/截图 c1.png`）。
+ * 因此正则只能取到「右括号为止」，title 与尖括号在这里剥。
+ */
+export function markdownImageTarget(raw: string): string {
+  let trimmed: string = raw.trim();
+  if (trimmed.startsWith('<') && trimmed.endsWith('>') && trimmed.length >= 2) {
+    trimmed = trimmed.substring(1, trimmed.length - 1).trim();
+  }
+  if (!trimmed.endsWith('"')) {
+    return trimmed;
+  }
+  const cut: number = trimmed.lastIndexOf('"', trimmed.length - 2);
+  if (cut > 0) {
+    return trimmed.substring(0, cut).trim();
+  }
+  return trimmed;
+}
+
+/**
+ * 正文里**能显示**的 Markdown 图片路径：绝对路径，且扩展名是已知图片格式。
+ *
+ * 只认绝对路径是刻意的 —— 相对路径在会话里没有可信基座（工作区根、插件目录、当前文件所在目录
+ * 三种解释都说得通），猜错了等于去读一个不存在的文件。
+ */
+export function markdownImagePathsIn(part: string): string[] {
+  const out: string[] = [];
+  // 每次新建实例（全局正则带 lastIndex 状态）。
+  const pattern: RegExp = new RegExp(MARKDOWN_IMAGE_PATTERN.source, 'g');
+  let match: RegExpExecArray | null = pattern.exec(part);
+  while (match !== null) {
+    const target: string = markdownImageTarget(match[2]);
+    if (target.startsWith('/')) {
+      const name: string = afterLastOrEmpty(target, '/');
+      if (handoffMediaType(name).length > 0) {
+        out.push(target);
+      }
+    }
+    match = pattern.exec(part);
+  }
+  return out;
+}
+
+/**
+ * 把 Markdown 图片从正文里改写成「能在 App 里看到的东西」：
+ *
+ * - **本地绝对路径的图片** → 整段摘掉（它已经变成附件，由附件区渲染缩略图 + 点开大图）；
+ * - **http(s) 图片** → 降级成普通链接（App 不做远程图片加载，别留一块白洞）；
+ * - 其它（相对路径、非图片扩展名）→ 有 alt 就留 alt 文字，没有就摘掉。
+ *
+ * 摘完后连续空行压平成最多 2 个换行，正文别出现莫名的大段留白。
+ */
+export function stripMarkdownImages(part: string): string {
+  let result: string = part.replace(MARKDOWN_IMAGE_PATTERN, (match: string, alt: string, targetRaw: string): string => {
+    const target: string = markdownImageTarget(targetRaw);
+    if (target.startsWith('/')) {
+      const name: string = afterLastOrEmpty(target, '/');
+      if (handoffMediaType(name).length > 0) {
+        return '';
+      }
+    }
+    if (target.startsWith('http://') || target.startsWith('https://')) {
+      return '[' + (alt.trim().length > 0 ? alt.trim() : target) + '](' + target + ')';
+    }
+    return alt.trim();
+  });
+  // 摘完图片留下的空行压平。
+  result = result.replace(MULTI_BLANK_LINE_PATTERN, '\n\n');
+  return result;
+}
+
 export function assistantItems(event: SessionEvent): ChatDisplayItem[] {
   const outer: JsonMap | null = event.dataMap();
   if (outer === null) {
@@ -300,6 +418,28 @@ export function assistantItems(event: SessionEvent): ChatDisplayItem[] {
   const blocks: Object[] = content as Object[];
   const result: ChatDisplayItem[] = [];
   const prose: string[] = [];
+  // 与正文同批出现的 Markdown 图片：flush 时一起挂到那条 ASSISTANT 上。
+  // 只有图、没有字的正文很常见（助手贴完图就结束），判空要算上它。
+  const proseImages: string[] = [];
+
+  const flushProse = (): void => {
+    if (prose.length === 0 && proseImages.length === 0) {
+      return;
+    }
+    const attachments: ChatAttachment[] = [];
+    const seen: Set<string> = new Set<string>();
+    for (let i = 0; i < proseImages.length; i++) {
+      const img: string = proseImages[i];
+      if (!seen.has(img)) {
+        seen.add(img);
+        attachments.push(handoffAttachment(img));
+      }
+    }
+    result.push(new ChatDisplayItem(`${event.seq}-assistant-${result.length}`, event.seq,
+      ChatItemKind.ASSISTANT, null, prose.join('\n\n'), false, attachments, [], [], null, event.time));
+    prose.length = 0;
+    proseImages.length = 0;
+  };
 
   // 散文段连续累积、遇到非文本块就整段 flush —— 这样「思考-正文-思考」不会被拼成一条。
   for (let i = 0; i < blocks.length; i++) {
@@ -309,16 +449,20 @@ export function assistantItems(event: SessionEvent): ChatDisplayItem[] {
     }
     const type: string | null = ChatJson.str(value, 'type');
     if (type === 'text') {
-      const text: string | null = ChatJson.str(value, 'text');
-      if (text !== null && isNotBlank(text)) {
-        prose.push(text);
+      const raw: string | null = ChatJson.str(value, 'text');
+      if (raw !== null && isNotBlank(raw)) {
+        // 先认图再清正文：本地绝对路径的图变成附件，正文里不留空括号。
+        const found: string[] = markdownImagePathsIn(raw);
+        for (let k = 0; k < found.length; k++) {
+          proseImages.push(found[k]);
+        }
+        const stripped: string = stripMarkdownImages(raw).trim();
+        if (isNotBlank(stripped)) {
+          prose.push(stripped);
+        }
       }
     } else if (type === 'reasoning') {
-      if (prose.length > 0) {
-        result.push(new ChatDisplayItem(`${event.seq}-assistant-${result.length}`, event.seq,
-          ChatItemKind.ASSISTANT, null, prose.join('\n\n'), false, [], [], [], null, event.time));
-        prose.length = 0;
-      }
+      flushProse();
       const reasoning: string | null = ChatJson.str(value, 'text');
       if (reasoning !== null && isNotBlank(reasoning)) {
         result.push(new ChatDisplayItem(`${event.seq}-reasoning-${result.length}`, event.seq,
@@ -326,9 +470,6 @@ export function assistantItems(event: SessionEvent): ChatDisplayItem[] {
       }
     }
   }
-  if (prose.length > 0) {
-    result.push(new ChatDisplayItem(`${event.seq}-assistant-${result.length}`, event.seq,
-      ChatItemKind.ASSISTANT, null, prose.join('\n\n'), false, [], [], [], null, event.time));
-  }
+  flushProse();
   return result;
 }

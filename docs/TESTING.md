@@ -24,6 +24,8 @@ cd test && npm test
 | 1.0.3（10-21 重出包 ⑨） | 810 | **全绿**（修「文档后带 `:行号` 打不开」，+6 例：位置后缀剥壳与「相对路径不被误判成未知协议」；仍 51 个用例文件） |
 | 1.0.3（10-21 重出包 ⑩） | 820 | **全绿**（连接页三态：复核 / 点按重连 / 卡片三态，+10 例：`connection-liveness.test.ts`；52 个用例文件） |
 | 1.0.3（10-21 重出包 ⑪） | 826 | **全绿**（未保存改动确认：`unsaved-changes.test.ts` 6 例；仍 52 个用例文件） |
+| 未发布（10-23 首批对账 ⑫） | 848 | **全绿**（P0-B 刷新历史不抹旧页 4 + P0-C 空助手消息归过程组 3 + P0-A Markdown 图片 15，+22；54 个用例文件） |
+| 未发布（10-23 P1-A ⑬） | 856 | **全绿**（P1-A 会话内联交付物卡片 8 例：钉轮次收尾 / 同路径只留最后说明 / 多文件 present / 无 turn/end 补尾 / 跨轮次冲刷 / extractDeliverablesFromEvent / deliverablesOf 全局去重；55 个用例文件） |
 
 > **2026-10-21 口径**：`①`–`⑦` 两批（原「未发布」）与 `⑧`–`⑪` 三批，**全部并入这一次
 > 1.0.3 重出包** —— 10-20 那批产物已作废，只认 10-21 出的包（见 [STATUS.md](./STATUS.md)
@@ -185,6 +187,13 @@ cd test && npm test
 | 2026-10-20 | **轨迹页看不懂**（坑 57） | ✅ **已上机**：`dumpLayout` 首屏为 `#1739 助手消息`、轮次头 `第 1 轮` + `47 个工具调用` + 耗时，`step/start`、`session-log-*`、`agent/inbox/*` 等噪音帧已不出现、未知轮次排在末尾；点 `#1739` 行展开缩进 JSON（右侧不裁切、可长按复制），再点收回；无载荷节点显示「（这条事件没有载荷）」（截帧 `v13-traj-final.jpeg`） |
 | 2026-10-20 | **每条助手正文的 AI 上标**（过审用） | ✅ **已上机**（1.0.3 发布候选包 `22:11` 构建 / 调试证书签名）：浅色下正文末尾出现 `AI` 小字（`#E05C5C`）、深色下同位置为 `#FF9E9E`，均抬基线 5vp 且与正文同段（不另起一行）；两条不同会话、三种排版（纯段落、列表收尾、工具行夹正文）都命中；末块为列表时标识贴在最后一条列表项之后（截帧 `docs/screenshots/ai-mark-light.png` / `ai-mark-dark.png`）。切浅色再切回「跟随系统」后设置落盘正常 |
 
+| 2026-10-21 | **本轮四项（截断提示 / 连接页三态 / 未保存改动确认 / 带行号链接）** | ⛔ **未上机 —— 工具通道故障**。设备 `3AX0225103005398` 已连、装好 `1.0.3` 调试签名包（`bm dump` 报 `versionCode 1000003` / `versionName 1.0.3` / `appProvisionType debug`），`aa start` 与 `snapshot_display`（1080×2440）均成功；随后命令执行通道失效（连 `echo` 都报 `transport exception: entity not found`），重启 hdc 与换通道均无效，**无法再用 `uitest uiInput` 注入点击**。四项改为**用户手动验证**，步骤见 [STATUS.md](./STATUS.md)「本轮四项的手动验证清单」。**在拿到回执前不记为「真机通过」** |
+| 2026-10-20 | **AI 标识（两级同时存在，旁证）** | ⚠️ **旁证，不替代逐项验收**：2026-10-21 抓取的设备截图中，文档查看页底部同时出现会话级「内容由 AI 生成」状态条与正文末尾 `AI` 上标，与 1.0.3 设计一致 |
+
+| 2026-10-23 | **配色切换免重启即时生效**（方案 A，坑 65/66） | ✅ **已上机**（包 `p3-themeA3-debugsigned.hap`，设备 `3AX0225103005398`）：`DSH_THEME` 变化版日志 + PIL 像素采样双取证。冷启动（持久化 warm）连接页底色 `(245,232,241)`≈`#F5E8F0` ✅；进设置点「墨黑」→ 日志 `ink\|false\|#FFFFFFFF`、底色 `(255,255,255)` ✅；点「青灰」→ `mist\|#FFEAF2F4`、底色 `(233,243,245)` ✅；点「暖米」→ `warm\|#FFF5E8F0` ✅；点「纸白」→ `paper\|null`（回落系统背景）、底色 `(255,255,255)` ✅；暖米态回会话页底色 `(245,232,241)` ✅。全程**无重启、无弹回**（`lastScopesKey` 修复同帧验证） |
+| 2026-10-23 | **点配色药丸弹回会话页**（`lastScopesKey` 未初始化） | ✅ **已上机**：同一验证动线里连点四个药丸 + 多次抽屉往返，分节始终停在设置页；修复前同操作两次复现弹回会话列表 |
+| 2026-10-23 | **重启后配色水合**（`applyPreferences` 漏 `paletteName`） | ✅ **已上机**：偏好落盘 `warm` 后 `aa force-stop` 冷启动，首条日志即 `warm\|false\|#FFF5E8F0`，连接页直接漆粉（不再先白后粉） |
+
 > 装机形态：release 构建 + 调试证书签名（`appProvisionType=debug` / `debug=false`）。
 > **最终包复核的坐标取证**：`uitest dumpLayout` 取节点 bounds 后按中心点 `uiInput click`；
 > 字号档三向都验（`＋` `1.0×`→`1.1×`、`−` `1.1×`→`1.0×`、跟随开关翻文案），
@@ -254,3 +263,58 @@ cd test && npm test
 4. **老 bridge 分支**：若服务端 bridge < 2.4.2（`GET /chat/permission-presets` 返 404），
    胶囊应**仍显示当前档位但点不开**，且**连接本身不能失败** —— 这是本轮坑 47 的现场判据。
    ⚠️ **未验**：本机服务端 bridge ≥ 2.4.2，无老 bridge 环境可造。
+
+### 设备侧验证（P2-A / P2-B / 拆分回归，2026-10-23 **已做，逐条见标注**）
+
+**装机**：包 `dist/p2-verify2-debugsigned.hap`（调试证书 + 调试 Profile），设备 `3AX0225103005398`，
+服务端 `wanke-PC`（局域网 `http://192.168.1.126:3090/api/v1`，bridge 2.5.2 在线）。
+截图存 `docs/screenshots/p2-verify/p2b-*.jpeg`。
+
+**A. P2-A 模型供应商编辑器（能力位守卫）**
+
+1. 打开「DeepSeek」编辑器：应出现「发现模型」与「重置模型列表」，**不应**出现「删除此供应商」
+   （内置供应商不可删）。✅ **已验**：`p2b-08-editor.jpeg`。
+2. 点「发现模型」：请求应真的到达服务端，并有可见反馈或错误提示（不得静默）。
+   ✅ **已验**：`p2b-10-busy.jpeg` 显示服务端错误文案
+   `no model discovery is registered for "llm-deepseek"` —— 说明请求已到 bridge、
+   错误已回显；该提示是**服务端未注册该供应商的发现器**，不是客户端缺陷。
+3. 新建一个临时自定义供应商（`tmpcheck`）→ 打开其编辑器：应出现「删除此供应商」。
+   ✅ **已验**：`p2b-19-delete.jpeg`（红色危险按钮）。
+4. 点「删除此供应商」→ 列表应不再包含该供应商。
+   ✅ **已验**：服务端审计库出现 `settings.provider.remove {"providerId":"tmpcheck"}`，
+   `settings` 表中无 `tmpcheck` 残留；界面刷新后该行消失（`p2b-23` / `p2b-24`）。
+   ⚠️ 首次两次点击时服务端刚好在重启（客户端日志 `NETSTACK err 111`），删除未生效但无错误横幅；
+   第三次成功。**「删除失败时用户看不到错误」这一条未修**（本轮未纳入范围，登记为观察项）。
+5. **误删事故与恢复**：第 4 步的注入点击一次落到了列表里相邻的自定义供应商
+   `arkcli-coding-plan`（Volcano Engine Coding Plan），把它删掉了；已从
+   `profiles/web.old-20261013/cordis.patch.yml` 把该 provider 配置块**原样补回**
+   `profiles/web/cordis.patch.yml`（模型清单见文件）。凭据 `ARKCLI_CODING_PLAN_API_KEY`
+   未被删除（`.credentials.yaml` 仍在）。⚠️ **需要重启 DSH / bridge 才会重新加载该配置**；
+   本轮未替用户重启服务端。**教训**：真机注入点击在滚动列表里必须先用截图确认落点行，
+   删除类不可逆操作不该用临时注入坐标试第二次。
+
+**B. P2-A 插件搜索**
+
+✅ **已验**（本轮前面的装机轮）：搜索框提示「搜索插件」；输入 `experimental` 从 14 个过滤到 1 个；
+输入不匹配串显示「没有匹配的插件」。
+
+**C. P2-B 服务端设置 schema 区（降级路径）**
+
+✅ **已验**：设置页「调试」与「关于」之间**没有**「服务端设置」区。
+原因：bridge 2.5.2 的 `BRIDGE_CAPABILITIES` 无 `settings-namespaces-v1`，且无
+`/api/v1/settings/namespaces` 路由 —— 按设计静默不画入口，**不是缺陷**。
+
+**D. 拆分回归（`ChatDetail` / `SettingsScreen` 拆分产物）**
+
+1. `AppearanceGroup`（从 `SettingsScreen` 拆出）：设置页应显示「完全跟随系统字号 / 应用字号 1.0×」。
+   ✅ **已验**：`p2b-35-font.jpeg`。
+2. 步进器 `＋`：1.0× → 1.1×，上方描述同帧同步；点 `－` 复原。
+   ✅ **已验**：`p2b-36-font-plus.jpeg` / `p2b-37-font-restore.jpeg`。
+3. 聊天详情页整体渲染（`TodoPanel` / `ImageViewer` / `TrajectoryCover` 迁出后）：无崩溃、消息与 AI 标识正常。
+   ✅ **已验**：`p2b-31-chat.jpeg`。
+   ⚠️ **未单独触发** `TodoPanel` / `ImageViewer` / `TrajectoryCover` 三个浮层 —— 本轮会话没有待办
+   或图片现场；拆出前后是**原样搬运**，`ChatDetail.ets` 只保留薄壳 `@Builder`，逻辑未改。
+4. 模型页滚动、列表、编辑器开关闭合正常，无 `JsCrash`。
+   ✅ **已验**：`hdc shell pidof com.dsh.westanke` 全程同一 pid，`faultlogger` 无新增
+   `jscrash-com.dsh.westanke-*.log.txt`。
+

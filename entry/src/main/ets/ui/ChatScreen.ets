@@ -61,6 +61,8 @@ export struct ChatScreen {
   @State workspaceId: string = '';
   /** 空串表示「服务端默认」，与源工程一致（提交时转成 null）。 */
   @State presetId: string = '';
+  /** 权限档 id，空串表示「不指定」（建完不切档）。 */
+  @State permissionPresetId: string = '';
 
   // ——— 重命名面板（会话与工作区共用） ———
   @State renameIsWorkspace: boolean = false;
@@ -357,6 +359,7 @@ export struct ChatScreen {
       newWorkspace: $newWorkspace,
       workspaceId: $workspaceId,
       presetId: $presetId,
+      permissionPresetId: $permissionPresetId,
       renameIsWorkspace: this.renameIsWorkspace,
       renameTargetId: this.renameTargetId,
       renameDraft: $renameDraft,

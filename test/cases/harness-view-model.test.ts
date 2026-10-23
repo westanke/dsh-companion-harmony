@@ -23,6 +23,7 @@ import {
   isHostCommandLine, removeQuestion, isToolResultFrame, markSessionStopped,
   JobsPanelState, JobView, JobOutput, JobKillResult,
 } from '../../entry/src/main/ets/core/HarnessViewModel.ts';
+import { SettingsSchema } from '../../entry/src/main/ets/core/SettingsSchema';
 import {
   ChatSession, CommandDescriptor, DeviceView, DirectoryPage, FileContent, FileEntry, HistoryEntry,
   ChatHistory, HealthView, PairingResult, PendingApproval, PendingQuestionSet, PermissionCatalog,
@@ -253,6 +254,18 @@ class FakeClient {
       return Promise.reject(this.permissionError);
     }
     return Promise.resolve(this.permissionCatalog);
+  }
+
+  // ——— 设置命名空间 schema（bridge ≥ 2.6.0）———
+  /** 默认 null = 老 bridge 无此路由，连接流程吞掉不画入口。 */
+  settingsSchemaResult: SettingsSchema | null = null;
+
+  settingsNamespaces(): Promise<SettingsSchema | null> {
+    return Promise.resolve(this.settingsSchemaResult);
+  }
+
+  patchSettingsNamespace(_namespace: string, _ops: unknown): Promise<SettingsSchema | null> {
+    return Promise.resolve(this.settingsSchemaResult);
   }
 
   // ——— 后台任务（bridge ≥ 2.4.3）———

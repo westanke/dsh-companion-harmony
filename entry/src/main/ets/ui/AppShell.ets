@@ -25,7 +25,8 @@
 
 import { promptAction } from '@kit.ArkUI';
 import { HarnessState } from '../core/HarnessViewModel';
-import { MAIN_SECTION_KEY, harnessVm } from './AppRuntime';
+import { THEME_PALETTE_PAPER } from '../core/ThemePalettes';
+import { MAIN_SECTION_KEY, harnessVm, themedPageBgColor } from './AppRuntime';
 import { BrandMark, StatusLabel } from './Components';
 import { localErrorText } from './ErrorText';
 import { ChatScreen } from './ChatScreen';
@@ -82,6 +83,12 @@ export struct AppShell {
    */
   @StorageLink('dshRevision') @Watch('onVmChanged') revision: number = 0;
   /**
+   * 配色名（方案 A）：三处容器底色表达式里直读它。注意它**必须挂在结构体上直读** ——
+   * 之前靠 `st()` 隔着 `@Builder` 间接读 revision，根容器属性登记不到依赖，
+   * 配色切换后底色不重漆（真机插桩实证）。见 `AppRuntime.PALETTE_KEY` 的注释。
+   */
+  @StorageLink('dshPaletteName') paletteName: string = THEME_PALETTE_PAPER;
+  /**
    * 跨分节导航请求（见 `AppRuntime.requestFilesSection` 的注释）。
    * `@Watch` 让它在**收到新请求时**切分节 —— 这是"子页请求父页改状态"在本工程里的走法：
    * 子页拿不到 `section`，所以走 `AppStorage` 邮箱 + 这里订阅。
@@ -106,6 +113,10 @@ export struct AppShell {
 
   aboutToAppear(): void {
     this.syncSectionFromScopes();
+    // `lastScopesKey` 必须在这里就位：它初值 '' 且原先只在 `syncSectionIfScopesChanged`
+    // 里赋值 —— 进 App 后若没赶上任何 vm 更新就直奔设置，第一次无关 update（比如点配色）
+    // 会因快照不一致误判成「scopes 变了」而把用户弹回会话页（真机复现两次）。
+    this.lastScopesKey = this.scopes().join(',');
     // 初次装配也要发布一次：`@Watch` 只在**变化**时触发，而初值不会触发。
     this.publishSection();
     const vm = harnessVm();
@@ -287,7 +298,8 @@ export struct AppShell {
     .onChange((value: boolean): void => {
       this.drawerOpen = value;
     })
-    .backgroundColor($r('sys.color.ohos_id_color_background'))
+    .backgroundColor(themedPageBgColor(this.getUIContext().getHostContext(), this.paletteName)
+      ?? $r('sys.color.ohos_id_color_background'))
     .onAreaChange((oldArea: Area, newArea: Area): void => {
       const w: number = Number(newArea.width);
       if (!Number.isNaN(w)) {
@@ -374,7 +386,10 @@ export struct AppShell {
     .width('100%')
     .height('100%')
     .padding({ left: 14, right: 14, top: 18, bottom: 18 })
-    .backgroundColor($r('sys.color.ohos_id_color_sub_background'))
+    // 抽屉底色跟随配色（PAPER 回落 sub_background 保持零漂移）；底部状态卡仍用
+    // sub_background —— 它无边框，靠与抽屉的色差才看得见。
+    .backgroundColor(themedPageBgColor(this.getUIContext().getHostContext(), this.paletteName)
+      ?? $r('sys.color.ohos_id_color_sub_background'))
   }
 
   @Builder
@@ -495,6 +510,7 @@ export struct AppShell {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor($r('sys.color.ohos_id_color_background'))
+    .backgroundColor(themedPageBgColor(this.getUIContext().getHostContext(), this.paletteName)
+      ?? $r('sys.color.ohos_id_color_background'))
   }
 }

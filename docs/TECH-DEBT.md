@@ -38,9 +38,18 @@
 
 | 文件 | 现测行数 | 计划拆为 | 判据（拆完必须满足） |
 |---|---|---|---|
-| `ui/SettingsScreen.ets` | 979 | `SettingsScreen.ets` / `SettingsGroups.ets` | 「外观」与「服务端信息」两组各自成 `@Component`，回调以 `(value) => void` 显式传入；设置页对外行为不变 |
-| `ui/ChatDetail.ets` | 1364 | `ChatDetail.ets` / `ChatDetailTodo.ets` / `ChatDetailOverlays.ets` | 待办面板、图片查看器、轨迹覆盖层各自成 `@Component`；`bindContentCover` 的 `isShow` 仍只有一个来源（住在 `ChatDetail`） |
+| `ui/ChatDetail.ets` | 1290 | `ChatDetail.ets` / `ChatDetailTodo.ets` / `ChatDetailOverlays.ets` | 待办面板、图片查看器、轨迹覆盖层各自成 `@Component`；`bindContentCover` 的 `isShow` 仍只有一个来源（住在 `ChatDetail`） |
+| `ui/ModelsScreen.ets` | 942 | `ModelsScreen.ets` / `ModelsProviderEditors.ets` | `ProviderEditor` / `CustomProviderEditor` 两个表单各自成 `@Component` 拆出；`parseModelIds` / `sameModelIds` / `modelIdsText` 随表单迁出，`ModelsScreen` 只保留列表 + sheet 装配 |
 
+> **本次上调理由（2026-10-23，1429 → 1430）**：图片查看器遮罩色收口到 `ThemePalettes.OVERLAY_MASK_*`（+1 import 行）。
+>
+> **本次上调理由（2026-10-23，1364 → 1429）**：加载更早消息后的视口锚定接线（+65）。
+>
+> 行 222-235 加 `pendingAnchorSeq` / `visibleStartIndex` 字段；
+> `onScrollIndex` 从忽略 `start` 改为记录；`loadOlder()` 加 10 行锚定设置逻辑；
+> `onRevision()` 加 20 行锚定恢复（遍历 entries 按 seq 定位 + scrollToIndex）。
+> 全是装配层的接线代码，清账方式不变。
+>
 > **本次上调理由（2026-10-20，1207 → 1352 → 1360 → 1364）**：三批接线都落在装配层。
 >
 > ① **正文文件链接化**（+145）：已知文件清单与投影缓存同步（`knownFilePaths` / `projKnownPaths` +
@@ -85,6 +94,7 @@
 | `ui/FilesScreen.ets` | 1 440 | `FilesScreen.ets` / `FilesLayout.ts` / `FileBrowser.ets` / `EditorPane.ets` | 511（`FileBrowser`） | 目录浏览 / 行号编辑器 / 预览各自成文件 |
 | `ui/ChatScreen.ets` | 1 125 | `ChatScreen.ets` / `SessionRow.ets` / `SessionSheets.ets` | 657（`SessionSheets`） | 列表 / 会话行 / 新建与工作区面板各自成文件 |
 | `ui/ChatMessage.ets` | 1 099 | `ChatMessage.ets` / `MarkdownView.ets` / `MessageParts.ets` | 491（`MessageParts`） | Markdown 与消息零件各自成文件 |
+| `ui/SettingsScreen.ets` | 979 | `SettingsScreen.ets` / `SettingsGroups.ets` | 763（`SettingsScreen`） | 「外观」与「服务端信息」两组各自成 `@Component`，回调以 `(value) => void` 显式传入 |
 
 **为什么 `HarnessViewModel` 拆成「继承链」而不是「组合」**：ArkTS 里跨文件共享**私有状态**
 只有「继承」一条路，且继承是单向的；同时 `export { X } from './Y'` 转发导出可让 barrel 保住

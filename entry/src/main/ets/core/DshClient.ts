@@ -41,6 +41,7 @@ import { JobKillResult, JobOutput, JobView } from './JobViews';
 import { JsonAccess, JsonMap } from './JsonAccess';
 import { normalizeEndpoint } from './EndpointUrl';
 import { utf8Encode } from './Codec';
+import { SettingsSchema } from './SettingsSchema';
 import { messageBody, uploadPayload } from './ChatContentParts';
 
 // 传输注入点整体在 `core/DshTransport.ts`；这里原样转发，保住全部既有 import 路径。
@@ -562,6 +563,32 @@ export class DshClient {
       .then((map: JsonMap | null): ProviderSettings => ProviderSettings.fromJson(map));
   }
 
+  /**
+   * `DELETE settings/providers/{id}` —— 删除自定义供应商。
+   *
+   * 仅 `ProviderView.removable === true` 的供应商可删（内置供应商不可删）。
+   * 返回更新后的 ProviderSettings。
+   */
+  deleteProvider(providerId: string): Promise<ProviderSettings> {
+    return this.deleteJson(this.pathUrl(['settings', 'providers', providerId]))
+      .then((): Promise<ProviderSettings> => this.providerSettings());
+  }
+
+  /**
+   * 重置供应商的模型列表为「继承服务端默认」。
+   *
+   * **不是** `POST .../reset-models` —— bridge 2.5.2 根本没有这条路由（只有
+   * PATCH / DELETE / discover 三条）。等效做法是 `PATCH {"models": null}`：
+   * 服务端把 `models === null` 翻成 `unset models` 操作，删掉覆盖值后自然回落到继承。
+   *
+   * 请求体必须手写，不能走 `ProviderPatch` —— 那里 `models: null` 的语义是
+   * 「字段不出现」（保持原状），恰好与这里要的「显式置空」相反。
+   */
+  resetProviderModels(providerId: string): Promise<ProviderSettings> {
+    return this.patchJson(this.pathUrl(['settings', 'providers', providerId]), '{"models":null}')
+      .then((map: JsonMap | null): ProviderSettings => ProviderSettings.fromJson(map));
+  }
+
   discoverModels(providerId: string, baseURL: string | null, api: string | null,
                  apiKey: string | null): Promise<ProviderModel[]> {
     const pairs: string[] = [];
@@ -638,6 +665,49 @@ export class DshClient {
   setPluginLoaded(name: string, loaded: boolean): Promise<PluginToggleResult> {
     return this.patchJson(this.pathUrl(['settings', 'plugins']), new PluginToggleRequest(name, loaded).toJsonString())
       .then((map: JsonMap | null): PluginToggleResult => PluginToggleResult.fromJson(map));
+  }
+
+  // --- 设置：命名空间 schema（bridge ≥ 2.6.0） -------------------------------
+
+  /**
+   * `GET /settings/namespaces` —— 拉取设置命名空间的 schema 定义 + 当前值。
+   *
+   * 老 bridge 没有这条路由会回 404 `ROUTE_NOT_FOUND`；**调用方必须容忍**
+   * （见 `SettingsSchema.isSilentSettingsNamespaceError`）。返回 null 表示解析失败
+   * 或空响应，状态层据此不画入口（三层降级第一层）。
+   */
+  settingsNamespaces(): Promise<SettingsSchema | null> {
+    return this.getJson('settings/namespaces', true)
+      .then((map: JsonMap | null): SettingsSchema | null => {
+        if (map === null) {
+          return null;
+        }
+        const namespace: string = JsonAccess.str(map, 'namespace') ?? 'default';
+        const revision: number = JsonAccess.num(map, 'revision') ?? 0;
+        const fields: JsonMap[] = JsonAccess.objArr(map, 'fields');
+        const values: JsonMap | null = JsonAccess.obj(map, 'values');
+        return SettingsSchema.parse(namespace, revision, fields, values);
+      });
+  }
+
+  /**
+   * `PATCH /settings/namespaces/{ns}` —— 提交设置改动。
+   *
+   * `ops` 由 `buildSettingsOps(schema, draft)` 生成，密钥位永不进 ops。
+   * 返回更新后的 schema（含新 revision）。
+   */
+  patchSettingsNamespace(namespace: string, ops: JsonMap): Promise<SettingsSchema | null> {
+    return this.patchJson(this.pathUrl(['settings', 'namespaces', namespace]), JSON.stringify(ops))
+      .then((map: JsonMap | null): SettingsSchema | null => {
+        if (map === null) {
+          return null;
+        }
+        const ns: string = JsonAccess.str(map, 'namespace') ?? namespace;
+        const revision: number = JsonAccess.num(map, 'revision') ?? 0;
+        const fields: JsonMap[] = JsonAccess.objArr(map, 'fields');
+        const values: JsonMap | null = JsonAccess.obj(map, 'values');
+        return SettingsSchema.parse(ns, revision, fields, values);
+      });
   }
 
   // --- 事件流 ----------------------------------------------------------------
@@ -738,6 +808,11 @@ export class DshClient {
     const res: HttpResponse = await this.send('PUT', url, utf8Encode(body), this.jsonBodyHeaders(true));
     this.ensureSuccess(res);
     return JsonAccess.asMap(JsonAccess.parse(res.text()));
+  }
+
+  private async deleteJson(url: string): Promise<void> {
+    const res: HttpResponse = await this.send('DELETE', url, null, this.authHeaders());
+    this.ensureSuccess(res);
   }
 
   private async postUnit(url: string, body: string): Promise<void> {

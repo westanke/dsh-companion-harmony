@@ -40,6 +40,28 @@ export const REQUIRED_CAPABILITIES: string[] = ['approvals-v1', 'questions-v1'];
 export const ARCHIVE_LIST_CAPABILITY: string = 'session-archive-list-v1';
 
 /**
+ * 「schema 驱动的通用设置命名空间表单」能力位名。
+ *
+ * **bridge 2.5.2 尚未声明它**（`BRIDGE_CAPABILITIES` 里没有该项，也没有
+ * `/api/v1/settings/namespaces` 路由）—— 这是留给下一版 bridge 的契约位。
+ * 现状是：真机上设置页的「服务端设置」区**静默不画**，符合「探测不到就不显示」的设计。
+ */
+export const SETTINGS_NAMESPACES_CAPABILITY: string = 'settings-namespaces-v1';
+
+/**
+ * 「供应商设置写操作」能力位名 —— bridge 2.5.2 **真实声明**（`BRIDGE_CAPABILITIES` 第 15 项）。
+ *
+ * 覆盖 `PATCH / DELETE /api/v1/settings/providers/{id}` 与
+ * `POST /api/v1/settings/providers/{id}/discover` 这组路由。
+ * 注意：bridge 2.5.2 **没有** `reset-models` 路由，「重置模型列表」改走
+ * `PATCH {"models": null}`（服务端把它翻成 `unset models`，等效恢复继承）。
+ */
+export const PROVIDER_SETTINGS_CAPABILITY: string = 'provider-settings-v1';
+
+/** 「模型目录」能力位名 —— bridge 2.5.2 真实声明，决定发现结果里的模型结构可用。 */
+export const MODEL_CATALOG_CAPABILITY: string = 'model-catalog-v1';
+
+/**
  * 从 `connection.ready` 的 `data` 里读出能力清单。
  *
  * 读不到就返回 **null（未知）**，而不是「空清单」。两种情况一律算未知：
@@ -104,6 +126,25 @@ export const JOB_LIST_CAPABILITY: string = 'job-list-v1';
  */
 export function supportsJobListing(capabilities: Set<string> | null): boolean {
   return capabilities !== null && capabilities.has(JOB_LIST_CAPABILITY);
+}
+
+/**
+ * 服务端是否支持「供应商设置的写操作」（能力位 `provider-settings-v1`）。
+ *
+ * 读不到能力清单时返回 **false**（降级：隐藏「重置模型列表 / 删除此供应商」入口）。
+ * 这两个动作分别走 `PATCH {"models": null}` 与 `DELETE`，老 bridge 上会 404。
+ */
+export function supportsProviderSettings(capabilities: Set<string> | null): boolean {
+  return capabilities !== null && capabilities.has(PROVIDER_SETTINGS_CAPABILITY);
+}
+
+/**
+ * 服务端是否支持「模型目录」（能力位 `model-catalog-v1`）。
+ *
+ * 读不到能力清单时返回 **false**（降级：隐藏「发现模型」入口）。
+ */
+export function supportsModelCatalog(capabilities: Set<string> | null): boolean {
+  return capabilities !== null && capabilities.has(MODEL_CATALOG_CAPABILITY);
 }
 
 /**

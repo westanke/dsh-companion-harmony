@@ -42,6 +42,10 @@ import {
   COMMAND_FAILED,
 } from './HarnessTypes';
 import { HarnessViewModelBase } from './HarnessViewModelBase';
+import {
+  buildSettingsOps, isSilentSettingsNamespaceError, SettingsSchema,
+} from './SettingsSchema';
+import { JsonMap } from './JsonAccess';
 
 export class HarnessViewModelCatalog extends HarnessViewModelBase {
   // ————————————————— 命令 / 模型 / 供应商 / 插件 —————————————————
@@ -203,6 +207,28 @@ export class HarnessViewModelCatalog extends HarnessViewModelBase {
   async createCustomProvider(provider: CustomProviderCreate): Promise<void> {
     await this.withClient(async (api: DshClient): Promise<void> => {
       const settings: ProviderSettings = await api.createCustomProvider(provider);
+      this.update((s: HarnessState): void => {
+        s.providerSettings = settings;
+        s.discoveredModels = [];
+      });
+    });
+  }
+
+  /** 删除自定义供应商（仅 removable 的可删）。 */
+  async deleteProvider(providerId: string): Promise<void> {
+    await this.withClient(async (api: DshClient): Promise<void> => {
+      const settings: ProviderSettings = await api.deleteProvider(providerId);
+      this.update((s: HarnessState): void => {
+        s.providerSettings = settings;
+        s.discoveredModels = [];
+      });
+    });
+  }
+
+  /** 重置供应商模型列表为服务端默认。 */
+  async resetProviderModels(providerId: string): Promise<void> {
+    await this.withClient(async (api: DshClient): Promise<void> => {
+      const settings: ProviderSettings = await api.resetProviderModels(providerId);
       this.update((s: HarnessState): void => {
         s.providerSettings = settings;
         s.discoveredModels = [];
@@ -445,5 +471,60 @@ export class HarnessViewModelCatalog extends HarnessViewModelBase {
         });
       }
     }
+  }
+
+  // ————————————————— 设置命名空间 schema（bridge ≥ 2.6.0） —————————————————
+
+  /**
+   * 拉取设置命名空间 schema。
+   *
+   * 三层降级：老 bridge 404/403 静默（不画入口），解析失败也静默，只有 503 等真错误才报。
+   * 无 settings.read 权限时直接跳过。
+   */
+  async loadSettingsSchema(): Promise<void> {
+    await this.withClient(async (api: DshClient): Promise<void> => {
+      if (!this.hasScope('settings.read')) {
+        return;
+      }
+      try {
+        const schema: SettingsSchema | null = await api.settingsNamespaces();
+        this.update((s: HarnessState): void => {
+          s.settingsSchema = schema;
+        });
+      } catch (e) {
+        const status: number = e instanceof DshApiException ? e.status : 0;
+        if (isSilentSettingsNamespaceError(status)) {
+          // 老 bridge 无此端点 —— 静默，不画入口。
+          this.update((s: HarnessState): void => {
+            s.settingsSchema = null;
+          });
+          return;
+        }
+        throw e;
+      }
+    });
+  }
+
+  /**
+   * 提交设置改动。
+   *
+   * @param draft 用户编辑后的草稿（field key → 新值）。
+   */
+  async saveSettingsNamespace(draft: Map<string, Object>): Promise<void> {
+    await this.withClient(async (api: DshClient): Promise<void> => {
+      const schema: SettingsSchema | null = this.state.settingsSchema;
+      if (schema === null) {
+        return;
+      }
+      const ops: JsonMap | null = buildSettingsOps(schema, draft);
+      if (ops === null) {
+        // 没东西要改 —— 不发请求。
+        return;
+      }
+      const updated: SettingsSchema | null = await api.patchSettingsNamespace(schema.namespace, ops);
+      this.update((s: HarnessState): void => {
+        s.settingsSchema = updated;
+      });
+    });
   }
 }

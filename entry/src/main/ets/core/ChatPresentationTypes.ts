@@ -46,6 +46,16 @@ export enum ChatItemKind {
    * 渲染成黄色警示，文案对齐内核 `message.maxTokens` / `message.maxTokens.hint`。
    */
   TRUNCATED = 'TRUNCATED',
+  /**
+   * 内核 `deliverables/presented` 事件（present 工具触发）明说的**显式交付物卡片**。
+   *
+   * 为什么独立成 kind 而不是塞进 [ASSISTANT] 正文：它是「这是我给你的东西」的
+   * 结构化事实（绝对路径 + 人写的说明，见 [ChatDeliverable]），不是 prose，
+   * 点开要走「路径 → 授权根」的文件预览，与 Markdown 正文完全两回事。
+   * 与 [FAILURE]/[TRUNCATED] 一样是**消息类独立行** —— 折进过程组等于把交付藏了
+   * （桌面端也把这张卡钉在轮次收尾，对齐它）。
+   */
+  DELIVERABLE = 'DELIVERABLE',
 }
 
 /**
@@ -195,6 +205,15 @@ export class ChatDisplayItem {
    */
   failure: ChatTurnFailure | null;
   /**
+   * 这一项是不是一张**显式交付物卡片**（内核 `deliverables/presented` 事件）。
+   *
+   * 为什么单独一个字段而不是塞进 [body]/[title]：卡片有自己的一套版式
+   * （文档图标 + 文件名 + agent 写的说明），点开走文件预览面板，与 Markdown 正文
+   * 完全两回事 —— 与 [failure] 同一条纪律：给类型，不让渲染器反向嗅探。
+   * null = 不是卡片。
+   */
+  deliverable: ChatDeliverable | null;
+  /**
    * 这一条落盘的时刻（毫秒，取自服务端事件帧的 `time`）。
    *
    * **`0` 表示「没有时间」**，而不是「1970 年」：流式项还没落盘、以及任何服务端没给 `time`
@@ -209,7 +228,8 @@ export class ChatDisplayItem {
 
   constructor(id: string, seq: number, kind: ChatItemKind, title: string | null = null, body: string = '',
     streaming: boolean = false, attachments: ChatAttachment[] = [], actions: string[] = [],
-    tools: ToolCallDetail[] = [], failure: ChatTurnFailure | null = null, time: number = 0) {
+    tools: ToolCallDetail[] = [], failure: ChatTurnFailure | null = null, time: number = 0,
+    deliverable: ChatDeliverable | null = null) {
     this.id = id;
     this.seq = seq;
     this.kind = kind;
@@ -221,6 +241,7 @@ export class ChatDisplayItem {
     this.tools = tools;
     this.failure = failure;
     this.time = time;
+    this.deliverable = deliverable;
   }
 
   /**
@@ -232,7 +253,7 @@ export class ChatDisplayItem {
     // `time` 跟着第一条走（= 这一批调用的开始时刻）：合并后这一行代表的是整批，
     // 取第一条才与「什么时候开始干的」对得上。
     return new ChatDisplayItem(id, this.seq, this.kind, title, body, this.streaming,
-      this.attachments, actions, tools, this.failure, this.time);
+      this.attachments, actions, tools, this.failure, this.time, this.deliverable);
   }
 
   /**
@@ -245,7 +266,7 @@ export class ChatDisplayItem {
    */
   withBody(body: string): ChatDisplayItem {
     return new ChatDisplayItem(this.id, this.seq, this.kind, this.title, body, this.streaming,
-      this.attachments, this.actions, this.tools, this.failure, this.time);
+      this.attachments, this.actions, this.tools, this.failure, this.time, this.deliverable);
   }
 }
 

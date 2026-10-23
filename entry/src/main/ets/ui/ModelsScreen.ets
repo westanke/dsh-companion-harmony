@@ -50,6 +50,7 @@ import {
 import { HarnessState, HarnessViewModel } from '../core/HarnessViewModel';
 import { harnessState, harnessVm } from './AppRuntime';
 import { WarningBanner } from './Components';
+import { supportsModelCatalog, supportsProviderSettings } from '../core/BridgeCapabilities';
 
 /** 面板宿主的两态（`sheetKind` 只在本文件内使用，故用数字常量而非导出枚举）。 */
 const SHEET_EDIT_PROVIDER: number = 0;
@@ -219,6 +220,12 @@ struct ProviderEditor {
   onSubmit: (providerId: string, patch: ProviderPatch) => void = (): void => {};
   onDiscover: (providerId: string, baseURL: string, protocol: string, apiKey: string) => void =
     (): void => {};
+  onResetModels: (providerId: string) => void = (): void => {};
+  onDelete: (providerId: string) => void = (): void => {};
+  /** provider-settings-v1 能力位；false 时「重置模型列表 / 删除此供应商」入口隐藏。 */
+  providerWritable: boolean = false;
+  /** model-catalog-v1 能力位；false 时「发现模型」入口隐藏。 */
+  modelCatalog: boolean = false;
 
   @State formName: string = '';
   @State formBaseUrl: string = '';
@@ -343,29 +350,32 @@ struct ProviderEditor {
           this.formApiKey = value;
         })
 
-      Row() {
+      // 「发现模型」走 `POST .../discover`，按 model-catalog-v1 探测，老 bridge 不支持时隐藏。
+      if (this.modelCatalog) {
         Row() {
-          if (this.busy) {
-            LoadingProgress().width(18).height(18).margin({ right: 8 })
+          Row() {
+            if (this.busy) {
+              LoadingProgress().width(18).height(18).margin({ right: 8 })
+            }
+            Text('🧠').fontSize(14)
+            Text($r('app.string.discover_models'))
+              .fontSize(13)
+              .margin({ left: 7 })
           }
-          Text('🧠').fontSize(14)
-          Text($r('app.string.discover_models'))
-            .fontSize(13)
-            .margin({ left: 7 })
+          .padding({ left: 12, right: 12, top: 7, bottom: 7 })
+          .borderRadius(18)
+          .border({ width: 1, color: $r('sys.color.ohos_id_color_component_normal') })
+          .alignItems(VerticalAlign.Center)
+          .opacity(this.busy ? 0.4 : 1)
+          .enabled(!this.busy)
+          .onClick((): void => {
+            this.onDiscover(this.provider.id, this.formBaseUrl, this.formProtocol, this.formApiKey);
+          })
         }
-        .padding({ left: 12, right: 12, top: 7, bottom: 7 })
-        .borderRadius(18)
-        .border({ width: 1, color: $r('sys.color.ohos_id_color_component_normal') })
-        .alignItems(VerticalAlign.Center)
-        .opacity(this.busy ? 0.4 : 1)
-        .enabled(!this.busy)
-        .onClick((): void => {
-          this.onDiscover(this.provider.id, this.formBaseUrl, this.formProtocol, this.formApiKey);
-        })
+        .width('100%')
+        .justifyContent(FlexAlign.End)
+        .margin({ top: 13 })
       }
-      .width('100%')
-      .justifyContent(FlexAlign.End)
-      .margin({ top: 13 })
 
       // 发现结果：一句「已发现 N 个模型」+ 一个「使用发现结果」。
       // 这两行只在真的发现了模型时出现（空列表时按「使用」会把用户的模型列表清空）。
@@ -402,6 +412,27 @@ struct ProviderEditor {
         .width('100%')
         .margin({ top: 4 })
 
+      // 重置模型列表：把 `models` 恢复成供应商的默认集（服务端行为，本地不拼）。
+      // 走 `PATCH {"models": null}`（unset 覆盖、回落继承），按 provider-settings-v1 探测。
+      if (this.providerWritable) {
+        Button($r('app.string.reset_models'))
+          .width('100%')
+          .height(44)
+          .borderRadius(22)
+          .backgroundColor($r('sys.color.ohos_id_color_sub_background'))
+          .fontColor($r('sys.color.ohos_id_color_text_primary'))
+          .margin({ top: 18 })
+          .enabled(!this.busy)
+          .onClick((): void => {
+            this.onResetModels(this.provider.id);
+          })
+        Text($r('app.string.reset_models_hint'))
+          .fontSize(12)
+          .fontColor($r('sys.color.ohos_id_color_text_secondary'))
+          .width('100%')
+          .margin({ top: 4 })
+      }
+
       Button($r('app.string.save_provider'))
         .width('100%')
         .height(52)
@@ -411,6 +442,21 @@ struct ProviderEditor {
         .onClick((): void => {
           this.submit();
         })
+
+      // 仅自定义供应商（removable）可删，且需 provider-settings-v1 支持（DELETE 端点）。
+      if (this.provider.removable && this.providerWritable) {
+        Button($r('app.string.delete_provider'))
+          .width('100%')
+          .height(44)
+          .borderRadius(22)
+          .backgroundColor(Color.Transparent)
+          .fontColor($r('sys.color.ohos_id_color_warning'))
+          .margin({ top: 10 })
+          .enabled(!this.busy)
+          .onClick((): void => {
+            this.onDelete(this.provider.id);
+          })
+      }
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
@@ -651,6 +697,19 @@ export struct ModelsScreen {
     return this.scopes().includes('settings.write');
   }
 
+  /**
+   * 服务端是否支持供应商写操作（`provider-settings-v1`，bridge 2.5.2 真实声明）。
+   * 不支持时「重置模型列表 / 删除此供应商」入口隐藏 —— 老 bridge 上会 404。
+   */
+  private providerWritable(): boolean {
+    return supportsProviderSettings(this.st().bridgeCapabilities);
+  }
+
+  /** 服务端是否支持模型目录（`model-catalog-v1`），不支持时「发现模型」入口隐藏。 */
+  private modelCatalogSupported(): boolean {
+    return supportsModelCatalog(this.st().bridgeCapabilities);
+  }
+
   private hasSettings(): boolean {
     return this.st().providerSettings !== null;
   }
@@ -855,6 +914,21 @@ export struct ModelsScreen {
           onDiscover: (providerId: string, baseURL: string, protocol: string, apiKey: string): void => {
             this.discover(providerId, baseURL, protocol, apiKey);
           },
+          onResetModels: (providerId: string): void => {
+            const vm: HarnessViewModel | null = this.vm();
+            if (vm !== null) {
+              void vm.resetProviderModels(providerId);
+            }
+          },
+          onDelete: (providerId: string): void => {
+            const vm: HarnessViewModel | null = this.vm();
+            if (vm !== null) {
+              void vm.deleteProvider(providerId);
+              this.closeSheet();
+            }
+          },
+          providerWritable: this.providerWritable(),
+          modelCatalog: this.modelCatalogSupported(),
         })
       }
     }

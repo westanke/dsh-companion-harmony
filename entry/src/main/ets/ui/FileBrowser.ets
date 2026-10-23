@@ -38,7 +38,8 @@ import { common } from '@kit.AbilityKit';
 import { FileEntry, RootView } from '../core/Models';
 import { HarnessState, HarnessViewModel } from '../core/HarnessViewModel';
 import { formatBytes } from '../core/ChatContentParts';
-import { harnessState, harnessVm } from './AppRuntime';
+import { harnessState, harnessVm, themedPageBgColor } from './AppRuntime';
+import { THEME_PALETTE_PAPER } from '../core/ThemePalettes';
 import { EDITOR_FONT_VP, EDITOR_LINE_VP, EDITOR_PAD_VP, LONGEST_LINE_CHAR_CAP,
   MONO_CHAR_RATIO } from './FilesLayout';
 
@@ -82,6 +83,18 @@ export struct NumberedTextEditor {
   /** 文字缩放档位（不叫 `scale`：`scale` 是 ArkUI 通用属性方法名，见 PORT-MAP §1b 坑 7）。 */
   textScale: number = 1;
   onValueChange: (text: string) => void = (): void => {};
+
+  /**
+   * 订阅配色名 —— 编辑器底色跟随配色主题（方案 A）。直读键而不是隔函数读 revision，
+   * 理由见 `AppRuntime.PALETTE_KEY` 的注释。
+   */
+  @StorageLink('dshPaletteName') paletteName: string = THEME_PALETTE_PAPER;
+
+  /** 编辑器底色：跟随配色页面底色，PAPER 回落系统默认背景（零漂移）。 */
+  private pageBg(): ResourceColor {
+    return themedPageBgColor(this.getUIContext().getHostContext(), this.paletteName)
+      ?? $r('sys.color.ohos_id_color_background');
+  }
 
   private fontSize(): number {
     return EDITOR_FONT_VP * this.textScale;
@@ -181,7 +194,7 @@ export struct NumberedTextEditor {
     .width('100%')
     .height('100%')
     .align(Alignment.TopStart)
-    .backgroundColor($r('sys.color.ohos_id_color_background'))
+    .backgroundColor(this.pageBg())
   }
 }
 

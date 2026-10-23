@@ -18,6 +18,7 @@
 
 import { common, ConfigurationConstant } from '@kit.AbilityKit';
 import { util } from '@kit.ArkTS';
+import { deviceInfo } from '@kit.BasicServicesKit';
 import { i18n } from '@kit.LocalizationKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { CryptoBridge, HostStore, KeyValueStore, SecretBox } from '../core/HostStore';
@@ -52,6 +53,31 @@ const DOMAIN: number = 0x0000;
 const TAG: string = 'DSH';
 
 /**
+ * 上报设备型号的最大长度 —— 与桥的截断口径一致（桥会把 `model` 截到 60 字符）。
+ * 客户端先截一次，免得把一个超长的头交给网络层。
+ */
+const DEVICE_MODEL_MAX: number = 60;
+
+/**
+ * 机型名 —— 对位安卓的 `Build.MODEL`。
+ *
+ * `marketName` 是系统设置里显示的机型（如 `ICL-AL10`），个别设备为空，退到 `productModel`；
+ * 两者都空（模拟器 / 异常 ROM）才用 `'HarmonyOS'` 兜底 —— 宁可给一个泛称，
+ * 也不让设备身份彻底缺失。
+ *
+ * 两处消费方（配对时的默认设备名、每个鉴权请求的 `X-Dsh-Device`）共用本函数：
+ * 它们是同一件事「这台机器叫什么」，各写一份判空迟早会漂移。
+ */
+export function deviceModelName(): string {
+  const market: string = deviceInfo.marketName;
+  if (market.length > 0) {
+    return market;
+  }
+  const product: string = deviceInfo.productModel;
+  return product.length > 0 ? product : 'HarmonyOS';
+}
+
+/**
  * 客户端的外部依赖（时区 / 语言 / id / WS / 定时器）。
  *
  * 抽成类而不是对象字面量：`DshClientDeps` 里既有方法签名又有属性，类实现是最不容易
@@ -76,6 +102,18 @@ class PlatformClientDeps implements DshClientDeps {
 
   languageTag(): string {
     return systemLanguageTag();
+  }
+
+  /**
+   * 设备身份标签 `harmonyos/<model>`（见 `DshClientDeps.deviceTag`）。
+   *
+   * 控制字符**在这里就清掉**：HTTP 头里混进 CR/LF 会把一条请求劈成两条（头注入）。
+   * 桥那边虽然也会清洗，但脏值不该先离开客户端 —— 安全边界要留在自己这一侧。
+   * 型号可能含空格（如营销名），桥允许，不做替换。
+   */
+  deviceTag(): string {
+    const model: string = deviceModelName().replace(/[\r\n]+/g, ' ').trim().slice(0, DEVICE_MODEL_MAX);
+    return `harmonyos/${model.length > 0 ? model : 'HarmonyOS'}`;
   }
 }
 

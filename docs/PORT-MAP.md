@@ -3082,3 +3082,24 @@ ArkUI 单个 `Scroll` 只支持一个方向，所以纵向套横向：
 
 **顺带**：多行命令还要限高（180vp），否则一条 heredoc 脚本纵向铺开能把整屏顶掉
 （与会话文件卡撑满一屏是同一类病）。
+
+**坑 68：平台信息经 deps 注入，别把 `@ohos.deviceInfo` 引进 core**
+
+设备身份头 `X-Dsh-Device: harmonyos/ICL-AL10` 需要机型名，而机型名只存在于
+`@ohos.deviceInfo`。**不能**在 `core/DshClient.ts` 里直接 import 它 —— 本工程的硬规矩是
+「core 不碰任何 @ohos」，破了这条，`DshClient` 就无法在 node 下跑契约测试。
+
+走法：`DshClientDeps` 加一个 `deviceTag(): string`（与 `languageTag()` / `timeZoneId()`
+同一族），平台层 `PlatformClientDeps` 实现它，内部读 `deviceInfo.marketName`
+（空退 `productModel`，再空兜底 `'HarmonyOS'`）。这样 core 只看见「给我一个标签」，
+连 `harmonyos/` 这个前缀都是平台层拼的 —— core 连自己跑在哪个平台都不用知道。
+
+两个细节写在这里免得后人重踩：
+
+1. **头里必须清 CR/LF**。`deviceInfo` 的返回值理论上不会含换行，但头注入的代价是
+   请求被劈成两条，客户端这一侧就该拦住（桥也会清洗，但脏值不该先出门）。
+2. **截断口径跟桥对齐**（60 字符）。桥会截，客户端也截一次，免得把超长头交给网络层。
+
+顺带：这条头的格式契约是 `<platform>/<model>`，`model` 可省；`platform` 必须在桥的白名单里
+（`android` / `harmonyos` / `ios` / `ipados` / `web` / `windows` / `macos` / `linux`），
+不在白名单的值桥会**整条丢弃**——所以自造平台名等于没报，不如老实写 `harmonyos`。

@@ -116,6 +116,7 @@ const DEPS: DshClientDeps = {
   newId: (): string => 'probe-id',
   timeZoneId: (): string => 'UTC',
   languageTag: (): string => 'zh-CN',
+  deviceTag: (): string => 'harmonyos/ICL-AL10',
   socket: null,
   timers: null,
 };

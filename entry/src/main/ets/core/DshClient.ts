@@ -754,6 +754,11 @@ export class DshClient {
       throw new Error('DshClient: 该请求需要鉴权，但未提供设备令牌');
     }
     headers.set('Authorization', `Bearer ${this.token}`);
+    // 设备身份（`harmonyos/ICL-AL10`）：桥在**认证路径**上顺带解析这个头，把设备表里的
+    // 占位名「Mobile device」换成「平台 · 型号」，用户不必再手动改名。
+    // 为什么放在鉴权头里而不是手写各端点：桥的判据是「谁在认证」，WS 握手也走这里
+    // （见 `events()`），一处加等于 REST + WS 全带。老桥会忽略未知头，不会报错。
+    headers.set('X-Dsh-Device', this.deps.deviceTag());
     // 界面语言随每个请求出海：服务端的图片交接说明要说**用户看得懂**的语言
     // （拿不到就按中文，那是插件原本的口径）。App 的语言由设置页管理，这里如实转达，
     // 不在客户端另做翻译。

@@ -142,6 +142,15 @@ export interface DshClientDeps {
   /** 当前界面语言（BCP-47，如 `zh-CN` / `en`）。 */
   languageTag(): string;
 
+  /**
+   * 设备身份标签，形如 `harmonyos/ICL-AL10`（`platform/model`）。
+   *
+   * 由平台层拼好再注入：机型名要读 `@ohos.deviceInfo`，而本文件的规矩是
+   * 「core 不碰任何 @ohos」（见 `DshClient.ts` 文件头）。它随每个**鉴权**请求出海，
+   * 桥据此把设备表里的占位名换成「平台 · 型号」（`docs/inbox/2026-10-23-device-identity-header.md`）。
+   */
+  deviceTag(): string;
+
   /** 平台 WS 实现；不用事件推送时为 null。 */
   socket: WebSocketTransport | null;
 

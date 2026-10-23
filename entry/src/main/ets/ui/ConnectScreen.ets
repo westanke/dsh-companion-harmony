@@ -19,7 +19,7 @@
 import { promptAction } from '@kit.ArkUI';
 import { common } from '@kit.AbilityKit';
 import { i18n } from '@kit.LocalizationKit';
-import { deviceInfo } from '@kit.BasicServicesKit';
+import { deviceModelName } from '../platform/Platform';
 import { Endpoint, EndpointProbe, Host } from '../core/ConnectionModels';
 import { HarnessState, HarnessViewModel } from '../core/HarnessViewModel';
 import { harnessState, harnessVm, themedPageBgColor } from './AppRuntime';
@@ -144,10 +144,12 @@ export struct ConnectScreen {
    *
    * 这个名字会上报到服务端（配对时作为 `deviceName`），将来在「设备列表」里认自己靠它，
    * 所以取机型名（`deviceInfo.marketName`）比取包名有意义得多。
+   *
+   * 取值规则与每个鉴权请求的 `X-Dsh-Device` 头**共用** `deviceModelName()`：
+   * 配对时叫 `ICL-AL10`、之后上报也叫 `ICL-AL10`，用户才不会在设备表里看到两个自己。
    */
   private defaultDeviceName(): string {
-    const model: string = deviceInfo.marketName.length > 0 ? deviceInfo.marketName : deviceInfo.productModel;
-    return model.length > 0 ? model : 'HarmonyOS';
+    return deviceModelName();
   }
 
   /**

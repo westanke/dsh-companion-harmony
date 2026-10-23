@@ -486,3 +486,24 @@ bridge 2.5.2）。948 用例全绿（构建 + 单测 + 架构守卫）。逐条�
 **上机**：包 `dist/p4-bash-debugsigned.hap`，设备 `3AX0225103005398`。同一条 heredoc 首行在右边缘裁断、
 `remote-bridge` 未掉行，块高锁 180vp。950 用例全绿。证据见 `docs/TESTING.md` 2026-10-23 首行、
 截帧 `docs/screenshots/p4-bash/bash-block-fixed.jpeg`。
+
+## 2026-10-23 设备身份上报（接桥投单）
+
+**投单**：`docs/inbox/2026-10-23-device-identity-header.md` —— 桥要求所有鉴权请求带
+`X-Dsh-Device: <platform>/<model>`，桥据此把设备表里的占位名自动换成「平台 · 型号」。
+
+**客户端改动**（约一行逻辑 + 注入管道）：
+- `DshClient.authHeaders()` 加头，REST 与 WS 握手共用（一处覆盖全链路）；
+- `DshClientDeps.deviceTag()` 由平台层注入，core 不碰 `@ohos`（PORT-MAP 坑 68）；
+- `platform/Platform.deviceModelName()` 抽出机型名取值（`marketName` → `productModel` → `'HarmonyOS'`），
+  与配对时默认设备名共用；
+- 客户端自清 CR/LF 并按桥口径截断 60 字符。
+
+**状态**：客户端侧完成并上机（`p5-devid`，950 用例全绿）。**端到端未验** —— 运行中的桥启动于
+19:43，早于桥提交 `2c5893b`（22:34），数据库还没有 `platform` / `model` 列；旧桥忽略未知头，
+真机连接与会话列表正常、`last_seen_at` 刷新到 22:52:47。
+
+**下一步（桥侧重启后）**：App 连一次，查 `~/.dsh/dsh-workspace/workspace.sqlite` 的
+`devices.platform` / `devices.model` / `name_source`，或按投单「验收方式」第 3 条打
+`GET /api/v1/devices/self`。注意：**手工改过的名字不会被覆盖**（`name_source=declared`），
+本机那条 `HarmonyOS · ICL-AL10` 就是手工名，验自动识别需另建一条配对。

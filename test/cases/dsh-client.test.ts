@@ -92,6 +92,7 @@ function client(transport: HttpTransport, opts?: { token?: string | null; timers
       newId: (): string => `id-${++counter}`,
       timeZoneId: (): string => 'Asia/Shanghai',
       languageTag: (): string => DEFAULT_LANGUAGE_TAG,
+      deviceTag: (): string => 'harmonyos/ICL-AL10',
       socket: opts?.socket ?? null,
       timers: opts?.timers ?? null,
     },
@@ -131,12 +132,16 @@ test('DshClient：GET 绝不带 body；鉴权请求带 Bearer + Accept + Accept-
   assert.equal(auth.headers.get('Authorization'), 'Bearer device-token');
   assert.equal(auth.headers.get('Accept'), 'application/json');
   assert.equal(auth.headers.get('Accept-Language'), 'zh-CN', '界面语言随每个请求出海');
+  // 桥靠这个头把设备表里的占位名换成「平台 · 型号」（见 docs/inbox/2026-10-23-device-identity-header.md）。
+  // 它必须出现在**每一个鉴权请求**上：WS 握手也走 authHeaders，所以 REST 与实时通道一次覆盖。
+  assert.equal(auth.headers.get('X-Dsh-Device'), 'harmonyos/ICL-AL10', '设备身份随鉴权请求出海');
 });
 
 test('DshClient：接受 getJson 传入自定义 languageTag（给英文留的接口）', async () => {
   const t = new FakeTransport().reply(200, '{"id":"d","name":"n"}');
   const c = new DshClient('http://h:3090', 'tok', t, {
-    newId: () => 'x', timeZoneId: () => 'UTC', languageTag: () => 'en', socket: null, timers: null,
+    newId: () => 'x', timeZoneId: () => 'UTC', languageTag: () => 'en',
+    deviceTag: () => 'harmonyos/ICL-AL10', socket: null, timers: null,
   });
   await c.currentDevice();
   assert.equal(t.last().headers.get('Accept-Language'), 'en');

@@ -22,6 +22,25 @@
 
 > 下一版尚未定内容的改动写在这里。
 
+### 新增（feat）
+
+- **每个鉴权请求上报设备身份 `X-Dsh-Device: harmonyos/<型号>`**（2026-10-23）：接桥的投单
+  （`docs/inbox/2026-10-23-device-identity-header.md`）。桥在认证路径上解析这个头，把设备表里
+  配对时写入的占位名（`Mobile device` / 旧的 `Android 设备`）自动换成「平台 · 型号」，
+  用户不必再手动改名 —— 这正是「鸿蒙手机在桥里显示成 Android 设备」的正面解药。
+  实现要点：
+  - 加在 `DshClient.authHeaders()` 一处，REST 与 WS 握手共用（`events()` 也走它），全链路覆盖；
+  - core 不碰 `@ohos`：机型名经 `DshClientDeps.deviceTag()` 注入，平台层用 `deviceInfo.marketName`
+    （空则 `productModel`，再空兜底 `'HarmonyOS'`），并**在客户端清掉 CR/LF**（防头注入）、
+    按桥的口径截断 60 字符；
+  - 取值规则抽成 `platform/Platform.deviceModelName()`，与配对时的默认设备名共用一处，
+    避免「配对时叫 A、上报时叫 B」；
+  - 老桥（< 2.6.1）忽略未知头，真机实测连接与会话列表均不受影响。
+  验证：单测断言 `X-Dsh-Device` 出现在鉴权请求上（950 用例全绿）；真机（`p5-devid`）连接成功、
+  `devices.last_seen_at` 正常刷新。**端到端看到「自动识别」徽标需桥重启加载 2c5893b 后再验一次**
+  （投单原文：桥侧改动本地已提交、未发版未部署）。改动文件：`core/DshClient.ts`、
+  `core/DshTransport.ts`、`platform/Platform.ets`、`ui/ConnectScreen.ets`、测试两处 fake deps。
+
 ### 修复（fix）
 
 - **bash 命令行不再被硬折行，也不再一条命令顶掉半屏**（2026-10-23）：真机截图反馈
